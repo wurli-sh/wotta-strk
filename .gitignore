@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds / artifacts
+dist/
+build/
+target/
+artifacts/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Misc
+.DS_Store
+*.log
+coverage/
