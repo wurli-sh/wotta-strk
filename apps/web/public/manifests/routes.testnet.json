@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "environment": "testnet",
+  "routes": [
+    {
+      "schemaVersion": 1,
+      "environment": "testnet",
+      "routeId": "ethereum-sepolia-direct",
+      "family": "evm",
+      "network": "ethereum-sepolia",
+      "chainId": 11155111,
+      "cctpDomain": 0,
+      "canonicalUsdc": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "cctpMessengerOrProgram": "0x0000000000000000000000000000000000000000",
+      "messageTransmitter": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+      "minFinalityThreshold": 0,
+      "explorerOrigins": [
+        "https://sepolia.etherscan.io"
+      ],
+      "rpcEnvNames": [
+        "ETHEREUM_SEPOLIA_RPC_URL"
+      ],
+      "enabled": true,
+      "verifiedAt": "2026-07-30T21:30:52Z",
+      "expectedCodeHashes": {
+        "router": "0x4451611a8923b853ce9cadde88bb149e6578c84e1a4e97ac677ed9ba3720a32e",
+        "publicClaimEscrow": "0xac055014c43f446c14d2c946f2ffabbc183697342539d6b057e7d8d3a891ec9b",
+        "wrapper": "0x51a993adc3fe95543e0394107c0e307efdb4685cc2f08166b2d8caf67750e6cf"
+      },
+      "maxHookBytes": 2048,
+      "liveSmokeEvidencePath": "evidence/d0744642b8e1c9dfb809af65b4db53fd89f99a0a501fd26571922f373423fa82/ethereum-sepolia-direct/0x48f6a24c9069785a0c91878477c8b2aa13a8acfa30a178adae33152d4f3f2462"
+    },
+    {
+      "schemaVersion": 1,
+      "environment": "testnet",
+      "routeId": "base-sepolia-cctp",
+      "family": "evm",
+      "network": "base-sepolia",
+      "chainId": 84532,
+      "cctpDomain": 6,
+      "canonicalUsdc": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "cctpMessengerOrProgram": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+      "messageTransmitter": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+      "minFinalityThreshold": 1000,
+      "explorerOrigins": [
+        "https://sepolia.basescan.org"
+      ],
+      "rpcEnvNames": [
+        "BASE_SEPOLIA_RPC_URL"
+      ],
+      "enabled": true,
+      "verifiedAt": "2026-07-30T21:30:52Z",
+      "expectedCodeHashes": {
+        "router": "0x4451611a8923b853ce9cadde88bb149e6578c84e1a4e97ac677ed9ba3720a32e",
+        "publicClaimEscrow": "0xac055014c43f446c14d2c946f2ffabbc183697342539d6b057e7d8d3a891ec9b"
+      },
+      "maxHookBytes": 2048,
+      "liveSmokeEvidencePath": "evidence/d0744642b8e1c9dfb809af65b4db53fd89f99a0a501fd26571922f373423fa82/base-sepolia-cctp/0xe6e1210ae7195e4f637af80006c91b05b145bf1776b9dc4ce2da92cb4eb7a131"
+    },
+    {
+      "schemaVersion": 1,
+      "environment": "testnet",
+      "routeId": "ethereum-sepolia-nox-wcUSDC",
+      "family": "evm-nox",
+      "network": "ethereum-sepolia",
+      "chainId": 11155111,
+      "canonicalUsdc": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "cctpMessengerOrProgram": "0x0000000000000000000000000000000000000000",
+      "messageTransmitter": "0x0000000000000000000000000000000000000000",
+      "minFinalityThreshold": 0,
+      "explorerOrigins": [
+        "https://sepolia.etherscan.io"
+      ],
+      "rpcEnvNames": [
+        "ETHEREUM_SEPOLIA_RPC_URL"
+      ],
+      "enabled": true,
+      "verifiedAt": "2026-07-28T19:52:16Z",
+      "expectedCodeHashes": {
+        "wrapper": "0x51a993adc3fe95543e0394107c0e307efdb4685cc2f08166b2d8caf67750e6cf",
+        "confidentialClaimEscrow": "0x9038dcbbd4f6128f1f2b007005307580f97c9f0f5b7ecba9c0ba5bc84b2a61f1",
+        "noxCompute": "0x9051c2db7e8a643e765dbe24abc6661bcd78bcd849f9e1f83bf5a59e95dd7438"
+      },
+      "maxHookBytes": 2048,
+      "liveSmokeEvidencePath": "pending"
+    },
+    {
+      "schemaVersion": 1,
+      "environment": "testnet",
+      "routeId": "arbitrum-sepolia-cctp",
+      "family": "evm",
+      "network": "arbitrum-sepolia",
+      "chainId": 421614,
+      "cctpDomain": 3,
+      "canonicalUsdc": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+      "cctpMessengerOrProgram": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+      "messageTransmitter": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+      "tokenMinter": "0xb43db544E2c27092c107639Ad201b3dEfAbcF192",
+      "minFinalityThreshold": 1000,
+      "explorerOrigins": ["https://sepolia.arbiscan.io"],
+      "rpcEnvNames": ["ARBITRUM_SEPOLIA_RPC_URL"],
+      "enabled": true,
+      "verifiedAt": "2026-07-30T21:30:52Z",
+      "expectedCodeHashes": {
+        "router": "0x4451611a8923b853ce9cadde88bb149e6578c84e1a4e97ac677ed9ba3720a32e",
+        "publicClaimEscrow": "0xac055014c43f446c14d2c946f2ffabbc183697342539d6b057e7d8d3a891ec9b"
+      },
+      "maxHookBytes": 2048,
+      "liveSmokeEvidencePath": "evidence/d0744642b8e1c9dfb809af65b4db53fd89f99a0a501fd26571922f373423fa82/arbitrum-sepolia-cctp/0x706803d6cef08c3757ed02e6611130ed1418934e7b2480316cac4c15548d4ed8"
+    },
+    {
+      "schemaVersion": 1,
+      "environment": "testnet",
+      "routeId": "solana-devnet-cctp",
+      "family": "solana",
+      "network": "solana-devnet",
+      "cctpDomain": 5,
+      "canonicalUsdc": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "cctpMessengerOrProgram": "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
+      "messageTransmitter": "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC",
+      "minFinalityThreshold": 1000,
+      "explorerOrigins": ["https://explorer.solana.com/?cluster=devnet"],
+      "rpcEnvNames": ["SOLANA_DEVNET_RPC_URL"],
+      "enabled": true,
+      "verifiedAt": "2026-07-29T20:49:04Z",
+      "expectedCodeHashes": {
+        "tokenMessengerMinterV2": "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
+        "messageTransmitterV2": "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC"
+      },
+      "maxHookBytes": 796,
+      "liveSmokeEvidencePath": "evidence/d0744642b8e1c9dfb809af65b4db53fd89f99a0a501fd26571922f373423fa82/solana-devnet-cctp/0xdc0e93e82391936557368be4f9949d6c5ed455a95c778b509b5f8122ec4e5829"
+    },
+    {
+      "schemaVersion": 1,
+      "environment": "testnet",
+      "routeId": "stellar-testnet-cctp",
+      "family": "stellar",
+      "network": "stellar-testnet",
+      "networkPassphrase": "Test SDF Network ; September 2015",
+      "cctpDomain": 27,
+      "canonicalUsdc": "USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      "cctpMessengerOrProgram": "CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP",
+      "messageTransmitter": "CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY",
+      "minFinalityThreshold": 2000,
+      "explorerOrigins": ["https://stellar.expert/explorer/testnet"],
+      "rpcEnvNames": ["STELLAR_TESTNET_RPC_URL"],
+      "enabled": true,
+      "verifiedAt": "2026-07-29T20:30:16Z",
+      "expectedCodeHashes": {
+        "tokenMessengerMinter": "CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP",
+        "messageTransmitter": "CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY",
+        "cctpForwarder": "CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ"
+      },
+      "maxHookBytes": 2048,
+      "liveSmokeEvidencePath": "evidence/d0744642b8e1c9dfb809af65b4db53fd89f99a0a501fd26571922f373423fa82/stellar-testnet-cctp/0x02b3cb1362510156b1ad989f5e223baabd86832216d7332296255aeee3900e61"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "chainId": 11155111,
+  "cctpDomain": 0,
+  "canonicalUsdc": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  "messageTransmitterV2": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+  "tokenMessengerV2": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+  "router": "0x86B561727d0A884DCB0b594cc3db5Affc1839F07",
+  "legacyRouters": [
+    "0x03bebFe28fF0c73C28F1ef3D7968c39cF3e7A9eC"
+  ],
+  "publicClaimEscrow": "0x34CE5A5a8Ab35b17d368C6D67a0E2BA1E7258b12",
+  "legacyPublicClaimEscrows": [
+    "0x27233242F984367Cc748b7C3032898518642AfF5"
+  ],
+  "confidentialClaimEscrow": "0xd9B95A5879092c9B2246EefC7f85b64d3E4848f0",
+  "wrapper": "0x7Fb694f3bD3798d5A6Bfa55D94d4F6CC313E7937",
+  "wrapperUnderlying": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  "noxComputeContract": "0x24Ef36Ec5b626D7DCD09a98F3083c2758F0F77bF",
+  "noxGatewayUrlEnv": "NOX_GATEWAY_URL",
+  "noxSubgraphUrlEnv": "NOX_SUBGRAPH_URL",
+  "resolverSigner": "0x658d1744c94C743e7f759be8a2943a044CBC440B",
+  "operator": "0x658d1744c94C743e7f759be8a2943a044CBC440B",
+  "deploymentBlock": 11370663,
+  "sourceCommit": "e717304c1d12a3a811a4954fe13a2b8e2a147562-dirty",
+  "compiler": "0.8.35",
+  "dependencyVersions": {
+    "@iexec-nox/nox-confidential-contracts": "0.2.2",
+    "@iexec-nox/nox-protocol-contracts": "0.2.4",
+    "@iexec-nox/handle": "0.1.0-beta.13",
+    "hardhat": "3.11.1",
+    "solc": "0.8.35"
+  },
+  "bytecodeHashes": {
+    "wrapper": "0x51a993adc3fe95543e0394107c0e307efdb4685cc2f08166b2d8caf67750e6cf",
+    "publicClaimEscrow": "0xac055014c43f446c14d2c946f2ffabbc183697342539d6b057e7d8d3a891ec9b",
+    "router": "0x4451611a8923b853ce9cadde88bb149e6578c84e1a4e97ac677ed9ba3720a32e",
+    "confidentialClaimEscrow": "0x9038dcbbd4f6128f1f2b007005307580f97c9f0f5b7ecba9c0ba5bc84b2a61f1"
+  },
+  "explorerLinks": {
+    "etherscan": "https://sepolia.etherscan.io",
+    "wrapper": "https://sepolia.etherscan.io/address/0x7Fb694f3bD3798d5A6Bfa55D94d4F6CC313E7937",
+    "publicClaimEscrow": "https://sepolia.etherscan.io/address/0x34CE5A5a8Ab35b17d368C6D67a0E2BA1E7258b12",
+    "router": "https://sepolia.etherscan.io/address/0x86B561727d0A884DCB0b594cc3db5Affc1839F07",
+    "confidentialClaimEscrow": "https://sepolia.etherscan.io/address/0xd9B95A5879092c9B2246EefC7f85b64d3E4848f0"
+  }
+}

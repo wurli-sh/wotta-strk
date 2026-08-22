@@ -1,0 +1,268 @@
+@import "tailwindcss";
+
+@theme {
+  /* Cobalt is reserved for primary actions and keyboard focus. */
+  --color-brand: #2c5cc5;
+  --color-brand-dark: #244ca6;
+  --color-brand-soft: #e7eeff;
+  --color-brand-muted: #c8d8fb;
+  --color-brand-mist: #f3f6ff;
+  --color-brand-ink: #203d79;
+  --color-brand-lavender: #dce7ff;
+  --color-brand-sky: #4674d2;
+  --color-brand-foreground: #ffffff;
+  --color-primary: #171a20;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #e8ebf0;
+  --color-primary-dark: #101217;
+  --color-charcoal: #171a20;
+  --color-charcoal-soft: #292d35;
+  --color-charcoal-panel: #121419;
+  --color-charcoal-panel-soft: #1c1f26;
+  --color-background: #f6f7f9;
+  --color-foreground: #191c22;
+  --color-card: #ffffff;
+  --color-card-foreground: #191c22;
+  --color-border: #dce1e8;
+  --color-border-strong: #b7c0cd;
+  --color-muted: #eef1f5;
+  --color-muted-foreground: #586273;
+  --color-selection: #e5e9ef;
+  --color-selection-hover: #dce1e8;
+  --color-selection-foreground: #1b1e25;
+  --color-nav: #171a20;
+  --color-nav-foreground: #f7f8fa;
+  --color-nav-active: #363b45;
+  --color-nav-hover: #292e37;
+  --color-skeleton: #e4e9f1;
+  --color-skeleton-shine: #f7f9fc;
+  --color-destructive: #b93834;
+  --color-success: #14785f;
+  --color-warning: #805500;
+  --color-warning-surface: #fff6d9;
+  --color-warning-border: #eccb72;
+  --color-ring: #2c5cc5;
+  --color-ink: #171a20;
+  --color-paper: #ffffff;
+
+  --font-sans: var(--font-onest), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-onest), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-control: 9999px;
+  --radius-surface: 1.75rem;
+  --radius-surface-inner: 1.25rem;
+
+  --shadow-action:
+    inset 0 1px 0 oklch(1 0 0 / 0.2), inset 0 -1px 0 oklch(0 0 0 / 0.14),
+    0 2px 5px oklch(0.39 0.15 260 / 0.2);
+
+  --shadow-soft:
+    inset 0 1px 0 oklch(1 0 0 / 0.9), inset 0 -1px 0 oklch(0 0 0 / 0.04),
+    inset 0 0 0 1px oklch(0 0 0 / 0.03), 0 1px 2px oklch(0 0 0 / 0.05);
+
+  --shadow-card:
+    0 1px 2px oklch(0.2 0.02 260 / 0.05), 0 8px 20px oklch(0.2 0.02 260 / 0.06);
+
+  --animate-rise: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-drift: drift 36s linear infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes drift {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+}
+
+@keyframes image-skeleton-shimmer {
+  0% {
+    transform: translateX(-100%) skewX(-12deg);
+    opacity: 0.55;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(220%) skewX(-12deg);
+    opacity: 0.55;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes text-shimmer-sweep {
+  from {
+    background-position: 100% center;
+  }
+  to {
+    background-position: -100% center;
+  }
+}
+
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/Onest-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/Onest-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/Onest-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Onest";
+  src: url("/fonts/Onest-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --font-onest: "Onest";
+  }
+  html {
+    scrollbar-gutter: stable;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  main {
+    color: inherit;
+  }
+}
+
+button:not(:disabled):not([data-motion-button]) {
+  transition:
+    background-color 100ms ease-out,
+    border-color 100ms ease-out,
+    color 100ms ease-out,
+    box-shadow 100ms ease-out;
+}
+
+.shadow-action {
+  box-shadow: var(--shadow-action);
+}
+
+.shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+.shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+.radius-control {
+  border-radius: var(--radius-control);
+}
+
+.radius-surface {
+  border-radius: var(--radius-surface);
+}
+
+.radius-surface-inner {
+  border-radius: var(--radius-surface-inner);
+}
+
+.app-atmosphere {
+  background:
+    radial-gradient(
+      ellipse 70% 42% at 50% -14%,
+      oklch(0.82 0.05 260 / 0.16),
+      transparent
+    ),
+    var(--color-background);
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-skeleton) 88%, white) 0%,
+    var(--color-skeleton) 48%,
+    color-mix(in oklab, var(--color-skeleton) 92%, black) 100%
+  );
+  isolation: isolate;
+  animation: skeleton-pulse 1.8s ease-in-out infinite;
+}
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 48%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-skeleton-shine) 35%, transparent) 35%,
+    color-mix(in oklab, var(--color-skeleton-shine) 90%, white) 50%,
+    color-mix(in oklab, var(--color-skeleton-shine) 35%, transparent) 65%,
+    transparent 100%
+  );
+  animation: image-skeleton-shimmer 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+.animate-rise {
+  animation: var(--animate-rise);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+  }
+  .skeleton-shimmer::after {
+    animation: none;
+    opacity: 0;
+  }
+  .animate-rise,
+  .animate-drift {
+    animation: none !important;
+  }
+}
