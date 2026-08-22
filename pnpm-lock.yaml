@@ -115,6 +115,9 @@ importers:
       '@starkware-libs/starknet-privacy-sdk':
         specifier: file:../../vendor/starkware-libs-starknet-privacy-sdk-0.14.3-rc.2.tgz
         version: file:vendor/starkware-libs-starknet-privacy-sdk-0.14.3-rc.2.tgz(typescript@5.8.3)
+      '@stellar/freighter-api':
+        specifier: 6.0.1
+        version: 6.0.1
       '@supabase/ssr':
         specifier: 0.6.1
         version: 0.6.1(@supabase/supabase-js@2.49.4(bufferutil@4.1.0)(utf-8-validate@6.0.6))

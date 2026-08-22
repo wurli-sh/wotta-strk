@@ -17,6 +17,7 @@ import { stark, type TypedData, type WalletAccountV6 } from "starknet";
 import { connectReady } from "./ready.ts";
 import { executeStarknetPublicDeposit, isStarknetPublicDepositPlan, type StarknetPublicDepositPlan } from "./public-deposit.ts";
 import { oauthCallbackUrl, stashAuthNext } from "../app-origin.ts";
+import { requireSourceWallet } from "../wallet-install.ts";
 import {
   cleanOAuthCallbackUrl,
   describeOAuthCallbackFailure,
@@ -406,6 +407,7 @@ export class WottaProductSession {
     if (!recipientKey) throw new Error("Recipient inbox key is unavailable");
 
     input.onStage?.("connecting_source");
+    await requireSourceWallet(input.route);
     const sourceAccount = input.route === "solana"
       ? await connectSolanaSource()
       : input.route === "stellar"
