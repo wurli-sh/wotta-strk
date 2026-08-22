@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "notes": "Golden fixtures. Claim/refund hashes use canonical (unpadded) hex from Poseidon. Hook fields use 32-byte padded felts.",
+  "claim": {
+    "chainId": "SN_MAIN",
+    "poolAddress": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+    "claimSecret": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "refundSecret": "0x00f1e2d3c4b5a697887766554433221100ffeeddccbbaa998877665544332211",
+    "claimHash": "0x7167b153e302ba14eca3678aa94e9da73ef3fa2e9b99068a77e73f2bca8733b",
+    "refundHash": "0x783e9d40f2d134c1f9314b7369c8fde27d2bc015609f239bcc61c1592c0037"
+  },
+  "hook": {
+    "magic": "WOTT",
+    "version": 1,
+    "intentId": "123e4567-e89b-12d3-a456-426614174000",
+    "denomination": "1000000",
+    "denominationCode": 0,
+    "escrowPool": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+    "claimHash": "0x07167b153e302ba14eca3678aa94e9da73ef3fa2e9b99068a77e73f2bca8733b",
+    "publicRefundRecipient": "0x011122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000",
+    "expiresAt": "1735689600",
+    "manifestVersion": 1,
+    "encodedHex": "0x574f545401123e4567e89b12d3a4564266141740000000040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a07167b153e302ba14eca3678aa94e9da73ef3fa2e9b99068a77e73f2bca8733b011122223333444455556666777788889999aaaabbbbccccddddeeeeffff000000000000677485800001"
+  },
+  "cctp": {
+    "encodedHex": "0x43435450010081574f545401123e4567e89b12d3a4564266141740000000040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a07167b153e302ba14eca3678aa94e9da73ef3fa2e9b99068a77e73f2bca8733b011122223333444455556666777788889999aaaabbbbccccddddeeeeffff000000000000677485800001"
+  }
+}

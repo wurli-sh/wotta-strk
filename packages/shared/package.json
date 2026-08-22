@@ -1,0 +1,27 @@
+{
+  "name": "@wotta/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test src/**/*.test.ts test/**/*.test.ts",
+    "build": "pnpm run build:scaffold",
+    "build:scaffold": "tsc -p tsconfig.json --noEmit --pretty false",
+    "fixtures:generate": "node scripts/generate-fixtures.mjs"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@wotta/config": "workspace:*",
+    "@types/node": "24.0.15",
+    "starknet": "10.5.0",
+    "typescript": "5.8.3"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@wotta/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./solana": "./src/solana.ts",
+    "./stellar": "./src/stellar.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test src/**/*.test.ts",
+    "build": "pnpm run build:scaffold",
+    "build:scaffold": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@solana/web3.js": "1.98.4",
+    "@stellar/freighter-api": "6.0.1",
+    "@stellar/stellar-sdk": "16.1.0",
+    "@wotta/shared": "workspace:*",
+    "buffer": "6.0.3",
+    "starknet": "10.5.0",
+    "viem": "2.55.10",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@wotta/config": "workspace:*",
+    "@types/node": "24.0.15",
+    "typescript": "5.8.3"
+  }
+}
