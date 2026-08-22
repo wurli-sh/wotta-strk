@@ -6,13 +6,10 @@ import { toast } from "sonner";
 import { NoteVisaCard } from "@/components/NoteVisaCard";
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { Button } from "@/components/ui/Button";
-import {
-  Confetti,
-  fireClaimConfetti,
-  type ConfettiRef,
-} from "@/components/ui/confetti";
+import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { NoteCardSkeleton } from "@/components/ui/Skeleton";
 import { TextShimmer } from "@/components/ui/TextShimmer";
+import { fireClaimConfetti } from "@/features/claim/celebrateClaim";
 import { getAccessToken } from "@/lib/auth";
 import { userFacingError } from "@/lib/errors";
 import { withMinSkeleton } from "@/lib/skeleton-hold";
@@ -140,8 +137,9 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       );
       setTransactionHash(hash);
       setPhase("confirming");
-      fireClaimConfetti(confettiRef.current);
       toast.success("Claim submitted");
+      // Same as Swoop: celebrate immediately on successful submit.
+      fireClaimConfetti(confettiRef.current);
 
       const session = createBrowserProductSession();
       for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -243,7 +241,6 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       <Confetti
         ref={confettiRef}
         manualstart
-        className="fixed inset-0 z-[10000] size-full"
       />
       {body}
     </div>

@@ -136,6 +136,9 @@ importers:
       framer-motion:
         specifier: 12.40.0
         version: 12.40.0(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      glimm:
+        specifier: ^0.3.0
+        version: 0.3.0(next@15.5.21(@playwright/test@1.55.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0)
       lucide-react:
         specifier: 0.484.0
         version: 0.484.0(react@19.0.0)
@@ -1996,6 +1999,18 @@ packages:
 
   get-tsconfig@4.14.3:
     resolution: {integrity: sha512-++QEw4DIY7WGoukz+/+A/8dGYPT9l9yIadnmSgZ8Rjr3YVSVDipQSO9CdnJo9ePqFqUUqh+wk9uIaoiAwsiPkA==}
+
+  glimm@0.3.0:
+    resolution: {integrity: sha512-Maw5WJnUsgyfsHl7Vp95wa8G1uaFhUOSoQzAVPX1DxdHxmWNBa9VtDRNPplH1A+bIazn956ZP/wQvH4ZSxKN9Q==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      next: '>=14'
+      react: '>=18'
+    peerDependenciesMeta:
+      next:
+        optional: true
+      react:
+        optional: true
 
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
@@ -4515,6 +4530,11 @@ snapshots:
   get-tsconfig@4.14.3:
     dependencies:
       resolve-pkg-maps: 1.0.0
+
+  glimm@0.3.0(next@15.5.21(@playwright/test@1.55.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0):
+    optionalDependencies:
+      next: 15.5.21(@playwright/test@1.55.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      react: 19.0.0
 
   gopd@1.2.0: {}
 
