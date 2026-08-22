@@ -40,18 +40,18 @@ export function HandleRowSkeleton() {
   return (
     <div className="radius-surface-inner flex items-center justify-between gap-3 border border-border/70 px-4 py-3">
       <div className="flex min-w-0 flex-1 items-start gap-3">
-        <Skeleton className="size-8 shrink-0 rounded-lg" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <Skeleton className="h-4 w-40 max-w-[70%]" />
-          <Skeleton className="h-3 w-24" />
+        <Skeleton className="mt-0.5 size-8 shrink-0 rounded-lg" />
+        <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+          <Skeleton className="h-4 w-[11.5rem] max-w-[75%]" />
+          <Skeleton className="h-3 w-28" />
         </div>
       </div>
-      <Skeleton className="radius-control h-8 w-[4.5rem] shrink-0" />
+      <Skeleton className="radius-control h-9 w-[5.25rem] shrink-0" />
     </div>
   );
 }
 
-export function HandlesListSkeleton({ rows = 3 }: { rows?: number }) {
+export function HandlesListSkeleton({ rows = 2 }: { rows?: number }) {
   return (
     <div
       className="space-y-3"
@@ -66,7 +66,7 @@ export function HandlesListSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
-/** Full Handles tab card skeleton — header + rows + actions. */
+/** Full Handles tab card skeleton — matches Connected identities layout. */
 export function HandlesPanelSkeleton() {
   return (
     <section
@@ -75,13 +75,17 @@ export function HandlesPanelSkeleton() {
       aria-busy="true"
       aria-label="Loading handles"
     >
-      <PanelHeaderSkeleton />
-      <div className="space-y-4 p-5 sm:p-6">
-        <HandlesListSkeleton rows={3} />
-        <div className="flex flex-col gap-2 pt-0.5">
-          <Skeleton className="radius-control h-11 w-full" />
-          <Skeleton className="radius-control h-11 w-full" />
+      <div className="flex items-start gap-3 border-b border-brand-muted/70 bg-brand-mist px-5 py-4 sm:px-6">
+        <Skeleton className="size-9 shrink-0 rounded-xl" />
+        <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-3.5 w-full max-w-[20rem]" />
+          <Skeleton className="h-3.5 w-[85%] max-w-[17rem]" />
         </div>
+      </div>
+      <div className="space-y-4 p-5 sm:p-6">
+        <HandlesListSkeleton rows={2} />
+        <Skeleton className="radius-control h-11 w-full" />
       </div>
     </section>
   );
@@ -375,12 +379,12 @@ export function AccountSkeleton({
       aria-busy="true"
       aria-label="Loading account"
     >
-      <PageHeaderSkeleton titleW="w-32 sm:w-36" subW="w-56 sm:w-64" />
+      <PageHeaderSkeleton titleW="w-32 sm:w-36" subW="w-64 sm:w-80" />
       <div className="mt-8 text-left">
         <div className="mb-6 flex justify-center">
-          <div className="inline-flex gap-1 rounded-full border border-border/80 bg-muted/60 p-1">
-            <Skeleton className="radius-control h-9 w-[5.25rem]" />
+          <div className="radius-control inline-flex items-center border border-border bg-card p-1 shadow-soft">
             <Skeleton className="radius-control h-9 w-[4.75rem]" />
+            <Skeleton className="radius-control h-9 w-[4.25rem]" />
           </div>
         </div>
         {tab === "wallet" ? (
