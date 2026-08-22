@@ -6,8 +6,14 @@ node_modules/
 dist/
 build/
 target/
+.next/
 artifacts/
 *.tsbuildinfo
+
+# Internal planning docs
+implementation-plan.md
+strk-hk.md
+wotta-idea.md
 
 # Environment and secrets
 .env
