@@ -2,9 +2,14 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ExternalLink, Send } from "lucide-react";
+import { ExternalLink, Send, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import type { WottaSourceRoute } from "@wotta/adapters";
+import {
+  connectEvmSource,
+  connectSolanaSource,
+  connectStellarSource,
+  type WottaSourceRoute,
+} from "@wotta/adapters";
 import type { Denomination } from "@wotta/shared";
 import { ClaimView } from "@/components/claim/ClaimView";
 import { DenomChips } from "@/components/DenomChips";
@@ -18,7 +23,10 @@ import {
   type SourceRail,
 } from "@/components/SourceChips";
 import { SignInModal } from "@/components/SignInModal";
-import { useSourceWallet } from "@/components/SourceWalletProvider";
+import {
+  familyForRoute,
+  useSourceWallet,
+} from "@/components/SourceWalletProvider";
 import { Button } from "@/components/ui/Button";
 import { MotionPillButton } from "@/components/ui/MotionLink";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
@@ -30,12 +38,17 @@ import {
 import { TextShimmer } from "@/components/ui/TextShimmer";
 import { ConfidentialToggle } from "@/features/send/ConfidentialToggle";
 import { NOX_ROUTE_ID, PUBLIC_DEFAULT_ROUTE_ID } from "@/features/send/routeIds";
+import {
+  sourceTxExplorerLabel,
+  sourceTxExplorerUrl,
+} from "@/features/send/sourceExplorer";
 import { useRoutesHealth } from "@/features/send/useRoutesHealth";
 import { apiFetch } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { type Dens } from "@/lib/denoms";
 import { userFacingError } from "@/lib/errors";
+import { requireSourceWallet } from "@/lib/wallet-install";
 import { createPrivacyClient, isIdentityRegistered } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateTransfer } from "@/lib/wotta/privacy-flow";
@@ -154,7 +167,7 @@ function preferredPublicRoute(routes: RouteRow[]): SourceRail | null {
 }
 
 function SendForm() {
-  const { setSource: rememberSource } = useSourceWallet();
+  const { setSource: rememberSource, matchesRoute } = useSourceWallet();
   const { routes, routesHealth, routesReady, retryRoutesHealth } = useRoutesHealth();
   const [denom, setDenom] = useState<Dens>(1n);
   const [recipient, setRecipient] = useState("");
@@ -164,12 +177,29 @@ function SendForm() {
   const [lookupRetry, setLookupRetry] = useState(0);
   const [stage, setStage] = useState<SendStage>("idle");
   const [busy, setBusy] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [delivery, setDelivery] = useState<DeliveryMode | null>(null);
   const [successRecipient, setSuccessRecipient] = useState("");
   const [successTx, setSuccessTx] = useState<string | null>(null);
   const [successRoute, setSuccessRoute] = useState<SourceRail | null>(null);
   const lookupRequest = useRef(0);
+
+  const walletConnected = matchesRoute(source);
+  const CONNECT_CHAIN_LABEL: Record<SourceRail, string> = {
+    ethereum: "Ethereum",
+    arbitrum: "Arbitrum",
+    base: "Base",
+    solana: "Solana",
+    stellar: "Stellar",
+    "starknet-public": "Starknet",
+    "starknet-private": "Ready",
+  };
+  const connectLabel = isStarknetSource(source) || confidentialMode
+    ? "Connect Ready wallet"
+    : `Connect ${CONNECT_CHAIN_LABEL[source]}`;
+  const sourceLabel = routes.find((route) => route.key === source)?.label
+    ?? CONNECT_CHAIN_LABEL[source];
 
   useEffect(() => {
     const to = new URLSearchParams(window.location.search).get("to");
@@ -257,10 +287,53 @@ function SendForm() {
     };
   }, [recipient, lookupRetry]);
 
+  async function connectSourceWallet() {
+    if (connecting || busy) return;
+    setConnecting(true);
+    try {
+      if (isStarknetSource(source)) {
+        const connected = await connectReady();
+        rememberSource({
+          routeKey: source,
+          family: "starknet",
+          address: connected.address,
+          label: confidentialMode ? "Private Starknet" : "Starknet",
+        });
+        toast.success("Ready wallet connected");
+        return;
+      }
+      if (!CROSS_CHAIN_ROUTES.has(source as WottaSourceRoute)) {
+        throw new Error("This source is not available yet");
+      }
+      const route = source as WottaSourceRoute;
+      await requireSourceWallet(route);
+      const address = route === "solana"
+        ? await connectSolanaSource()
+        : route === "stellar"
+          ? await connectStellarSource()
+          : await connectEvmSource(route);
+      rememberSource({
+        routeKey: source,
+        family: familyForRoute(source),
+        address,
+        label: sourceLabel,
+      });
+      toast.success(`${sourceLabel} wallet connected`);
+    } catch (error) {
+      toast.error(userFacingError(error, "Wallet connect failed"));
+    } finally {
+      setConnecting(false);
+    }
+  }
+
   async function run() {
     const parsed = parseRecipient(recipient);
     if (!parsed) {
       toast.error("Enter a valid @handle or email");
+      return;
+    }
+    if (!walletConnected) {
+      await connectSourceWallet();
       return;
     }
     setBusy(true);
@@ -390,11 +463,11 @@ function SendForm() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  href={successRoute === "starknet-private" || successRoute === "starknet-public" ? `https://sepolia.voyager.online/tx/${successTx}` : `https://testnet.circle.com/en/transactions/${successTx}`}
+                  href={sourceTxExplorerUrl(successRoute, successTx)}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <ExternalLink className="size-4" /> {successRoute === "starknet-private" || successRoute === "starknet-public" ? "Starknet transaction" : "Source transaction"}
+                  <ExternalLink className="size-4" /> {sourceTxExplorerLabel(successRoute)}
                 </Button>
               ) : null}
             </div>
@@ -478,16 +551,25 @@ function SendForm() {
             data-testid="send-submit"
             className="w-full min-h-12 text-base"
             disabled={
-              busy
+              connecting
+              || busy
               || !routesReady
               || !privateReady
               || !sourceReady
-              || !["registered", "pending"].includes(lookup.status)
+              || (walletConnected && !["registered", "pending"].includes(lookup.status))
             }
-            aria-busy={busy}
-            onClick={() => void run()}
+            aria-busy={busy || connecting}
+            onClick={() => void (walletConnected ? run() : connectSourceWallet())}
           >
-            {busy ? <TextShimmer className="text-base font-semibold">{stageLabel(stage, denom)}</TextShimmer> : <><Send className="size-4" />{stageLabel("idle", denom)}</>}
+            {connecting ? (
+              <TextShimmer className="text-base font-semibold">Connecting…</TextShimmer>
+            ) : busy ? (
+              <TextShimmer className="text-base font-semibold">{stageLabel(stage, denom)}</TextShimmer>
+            ) : walletConnected ? (
+              <><Send className="size-4" />{stageLabel("idle", denom)}</>
+            ) : (
+              <><Wallet className="size-4" />{connectLabel}</>
+            )}
           </MotionPillButton>
         </div>
       </div>

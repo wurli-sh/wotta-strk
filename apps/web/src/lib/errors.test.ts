@@ -43,12 +43,24 @@ Version: viem@2.55.10`;
     ).toBe("Transaction simulation failed — try again");
   });
 
-  it("falls back for unknown giant dumps", () => {
+  it("maps source-wallet install and network errors before Ready copy", () => {
     expect(
-      userFacingError(
-        new Error("x".repeat(300) + "\nContract Call:\nDocs:\nVersion: viem"),
-        "Couldn’t send",
-      ),
-    ).toBe("Couldn’t send");
+      userFacingError(new Error("Install or unlock Phantom to pay from Solana")),
+    ).toBe("Install or unlock Phantom to pay from Solana");
+    expect(
+      userFacingError(new Error("Install or unlock Freighter to pay from Stellar")),
+    ).toBe("Install or unlock Freighter to pay from Stellar");
+    expect(
+      userFacingError(new Error("Install or unlock an EVM wallet")),
+    ).toBe("Install or unlock an EVM wallet");
+    expect(
+      userFacingError(new Error("Switch Freighter to Stellar Testnet")),
+    ).toBe("Switch Freighter to Stellar Testnet");
+    expect(
+      userFacingError(new Error("Insufficient source-chain USDC balance")),
+    ).toBe("Insufficient source-chain USDC");
+    expect(
+      userFacingError(new Error("Unsupported EVM source chain")),
+    ).toBe("Switch MetaMask to Ethereum, Base, or Arbitrum Sepolia");
   });
 });

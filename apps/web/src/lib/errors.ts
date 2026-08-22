@@ -130,19 +130,56 @@ function mapKnownPhrase(raw: string): string | null {
   }
 
   if (
-    m.includes("insufficient_testusdt0") ||
-    m.includes("insufficient usdt") ||
-    m.includes("insufficient_usdt")
+    m.includes("insufficient source-chain usdc")
+    || m.includes("insufficient usdc")
+  ) {
+    return "Insufficient source-chain USDC";
+  }
+
+  if (
+    m.includes("insufficient_testusdt0")
+    || m.includes("insufficient usdt")
+    || m.includes("insufficient_usdt")
   ) {
     return "Insufficient USDC balance";
   }
 
+  if (m.includes("install or unlock phantom") || m.includes("phantom to pay")) {
+    return "Install or unlock Phantom to pay from Solana";
+  }
+
+  if (m.includes("install or unlock freighter") || m.includes("freighter to pay")) {
+    return "Install or unlock Freighter to pay from Stellar";
+  }
+
   if (
-    m.includes("chain mismatch") ||
-    m.includes("wrong network") ||
-    m.includes("switch chain") ||
-    m.includes("unrecognized chain") ||
-    m.includes("not configured for chain")
+    m.includes("install or unlock an evm wallet")
+    || m.includes("install or unlock an ethereum wallet")
+  ) {
+    return "Install or unlock an EVM wallet";
+  }
+
+  if (m.includes("switch freighter") || m.includes("freighter to stellar")) {
+    return "Switch Freighter to Stellar Testnet";
+  }
+
+  if (
+    m.includes("wallet_switchethereumchain")
+    || m.includes("wallet_addethereumchain")
+    || m.includes("ethereum sepolia")
+    || m.includes("base sepolia")
+    || m.includes("arbitrum sepolia")
+    || (m.includes("unsupported evm source") && m.includes("chain"))
+  ) {
+    return "Switch MetaMask to Ethereum, Base, or Arbitrum Sepolia";
+  }
+
+  if (
+    m.includes("chain mismatch")
+    || m.includes("wrong network")
+    || m.includes("switch chain")
+    || m.includes("unrecognized chain")
+    || m.includes("not configured for chain")
   ) {
     return "Switch Ready to Starknet Sepolia";
   }
