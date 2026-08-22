@@ -159,5 +159,7 @@ name = "wotta_contracts"
 version = "0.1.0"
 dependencies = [
  "openzeppelin",
+ "openzeppelin_access",
+ "openzeppelin_interfaces",
  "snforge_std",
 ]

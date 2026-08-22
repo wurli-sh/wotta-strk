@@ -2,6 +2,7 @@ pub mod interfaces {
     pub mod erc20;
     pub mod cctp;
     pub mod privacy;
+    pub mod privacy_identity;
 }
 
 pub mod libraries {
@@ -23,4 +24,8 @@ pub mod escrow {
 
 pub mod router {
     pub mod wotta_cctp_router;
+}
+
+pub mod identity {
+    pub mod wotta_privacy_identity;
 }
