@@ -1,0 +1,29 @@
+{
+  "name": "@wotta/wallet-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "tsc -p tsconfig.json --noEmit --pretty false && vite build",
+    "lint": "tsc -p tsconfig.json --noEmit --pretty false",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test": "node --experimental-strip-types --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "@starknet-io/get-starknet-discovery": "6.0.2",
+    "@starkware-libs/starknet-privacy-sdk": "file:../../vendor/starkware-libs-starknet-privacy-sdk-0.14.3-rc.2.tgz",
+    "@supabase/supabase-js": "2.112.3",
+    "@wotta/adapters": "workspace:*",
+    "@wotta/crypto": "workspace:*",
+    "@wotta/shared": "workspace:*",
+    "starknet": "10.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.0.15",
+    "@wotta/config": "workspace:*",
+    "typescript": "5.8.3",
+    "vite": "8.1.5"
+  }
+}
