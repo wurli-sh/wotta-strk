@@ -1,10 +1,11 @@
-import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "viem";
+import { decodeFunctionData, decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "viem";
 import type { EvmCctpBurnPlan } from "./index.ts";
 
 type Eip1193 = { request(input: { method: string; params?: unknown[] }): Promise<unknown> };
 const erc20 = parseAbi([
   "function allowance(address owner,address spender) view returns (uint256)",
   "function balanceOf(address owner) view returns (uint256)",
+  "function approve(address spender,uint256 amount) returns (bool)",
 ]);
 const CHAINS: Record<number, { chainName: string; nativeCurrency: { name: string; symbol: string; decimals: number }; rpcUrls: string[]; blockExplorerUrls: string[] }> = {
   11155111: { chainName: "Ethereum Sepolia", nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com"], blockExplorerUrls: ["https://sepolia.etherscan.io"] },
@@ -33,15 +34,29 @@ export async function executeEvmCctpBurn(input: {
   const amount = decodeApproveAmount(input.plan.calls[0].data);
   const sourceAddress = sourceAccount as `0x${string}`;
   const messengerAddress = input.plan.route.tokenMessenger as `0x${string}`;
-  const balance = await readUint(provider, input.plan.route.usdc, "balanceOf", [sourceAddress]);
+  const usdc = input.plan.route.usdc as `0x${string}`;
+  const balance = await readUint(provider, usdc, "balanceOf", [sourceAddress]);
   if (balance < amount) throw new Error("Insufficient source-chain USDC balance");
-  const allowance = await readUint(provider, input.plan.route.usdc, "allowance", [sourceAddress, messengerAddress]);
+  let allowance = await readUint(provider, usdc, "allowance", [sourceAddress, messengerAddress]);
   let approvalTxHash: string | undefined;
   if (allowance < amount) {
     input.onStage?.("approving");
+    // Circle FiatToken V2.1 rejects non-zero→non-zero approve; reset first when needed.
+    if (allowance > 0n) {
+      await simulateSendWait(provider, sourceAccount, {
+        to: usdc,
+        value: "0x0",
+        data: encodeFunctionData({ abi: erc20, functionName: "approve", args: [messengerAddress, 0n] }),
+      });
+      allowance = await waitForAllowance(provider, usdc, sourceAddress, messengerAddress, (value) => value === 0n);
+    }
     approvalTxHash = await simulateSendWait(provider, sourceAccount, input.plan.calls[0]);
-    const refreshed = await readUint(provider, input.plan.route.usdc, "allowance", [sourceAddress, messengerAddress]);
-    if (refreshed < amount) throw new Error("USDC approval did not cover the CCTP burn");
+    const refreshed = await waitForAllowance(provider, usdc, sourceAddress, messengerAddress, (value) => value >= amount);
+    if (refreshed < amount) {
+      throw new Error(
+        "USDC approval did not cover the CCTP burn. In MetaMask, set the spending cap to the full quoted amount (or Max), then try again.",
+      );
+    }
   }
   input.onStage?.("burning");
   const txHash = await simulateSendWait(provider, sourceAccount, input.plan.calls[1], () => input.onStage?.("confirming"));
@@ -83,8 +98,26 @@ async function readUint(provider: Eip1193, token: string, functionName: "balance
 }
 
 function decodeApproveAmount(data: Hex): bigint {
-  if (data.length < 138) throw new Error("Invalid approval calldata");
-  return BigInt(`0x${data.slice(-64)}`);
+  const decoded = decodeFunctionData({ abi: erc20, data });
+  if (decoded.functionName !== "approve") throw new Error("Invalid approval calldata");
+  const amount = decoded.args[1];
+  if (typeof amount !== "bigint" || amount <= 0n) throw new Error("Invalid approval amount");
+  return amount;
+}
+
+async function waitForAllowance(
+  provider: Eip1193,
+  token: `0x${string}`,
+  owner: `0x${string}`,
+  spender: `0x${string}`,
+  ready: (value: bigint) => boolean,
+) {
+  let latest = await readUint(provider, token, "allowance", [owner, spender]);
+  for (let attempt = 0; attempt < 15 && !ready(latest); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    latest = await readUint(provider, token, "allowance", [owner, spender]);
+  }
+  return latest;
 }
 
 async function simulateSendWait(provider: Eip1193, from: string, call: { to: string; data: string; value: string }, beforeWait?: () => void) {

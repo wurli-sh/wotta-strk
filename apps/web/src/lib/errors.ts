@@ -136,6 +136,10 @@ function mapKnownPhrase(raw: string): string | null {
     return "Insufficient source-chain USDC";
   }
 
+  if (m.includes("usdc approval did not cover")) {
+    return "USDC approval too low — in MetaMask set the spending cap to the full amount (or Max), then retry";
+  }
+
   if (
     m.includes("insufficient_testusdt0")
     || m.includes("insufficient usdt")
@@ -202,6 +206,10 @@ function mapKnownPhrase(raw: string): string | null {
 
   if (m.startsWith("api_") && /^api_\d+$/.test(m.trim())) {
     return "Request failed — try again";
+  }
+
+  if (m.includes("source burn succeeded")) {
+    return "Source burn confirmed — Starknet settlement is still finishing in the background";
   }
 
   if (

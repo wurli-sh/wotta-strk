@@ -191,11 +191,11 @@ export function HowItWorks() {
                 <img
                   src={routeLogoPath(PICKED)}
                   alt=""
-                  width={16}
-                  height={16}
-                  className="size-4"
+                  width={24}
+                  height={24}
+                  className="size-6"
                 />
-                USDC
+                ETH
               </span>
               <span
                 className={`radius-control inline-flex items-center gap-1.5 border px-3 py-2 text-sm font-medium transition-all duration-300 ${

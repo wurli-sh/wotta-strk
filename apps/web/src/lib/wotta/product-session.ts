@@ -86,7 +86,7 @@ export function createBrowserProductSession(): ProductSession {
   return browserProductSession;
 }
 
-export type FundingStage = "resolving" | "quoting" | "delivering" | "connecting_source" | "approving" | "depositing" | "burning" | "confirming" | "settling";
+export type FundingStage = "resolving" | "quoting" | "delivering" | "connecting_source" | "approving" | "depositing" | "burning" | "confirming" | "attesting" | "settling";
 export type RouteManifest = {
   routes: Array<{ id: string; enabled: boolean; reason?: string }>;
   manifestHash: string;
@@ -493,8 +493,8 @@ export class WottaProductSession {
       headers: { "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({ expectedVersion: 1, txHash: result.txHash }),
     });
-    input.onStage?.("settling");
-    await this.waitForEscrow(intentId);
+    input.onStage?.("attesting");
+    await this.waitForEscrow(intentId, undefined, input.onStage);
     return { intentId, sourceTxHash: result.txHash, sourceAccount, claimSecret, escrow: escrow.address, expiresAt, escrowed: true };
   }
 
@@ -508,12 +508,28 @@ export class WottaProductSession {
     }>(`/v1/intents/${encodeURIComponent(intentId)}`);
   }
 
-  async waitForEscrow(intentId: string, timeoutMs = 15 * 60 * 1_000) {
+  async waitForEscrow(intentId: string, timeoutMs = 15 * 60 * 1_000, onStage?: (stage: FundingStage) => void) {
     const deadline = Date.now() + timeoutMs;
+    let consecutiveNetworkErrors = 0;
     while (Date.now() < deadline) {
-      const intent = await this.intent(intentId);
-      if (intent.onchain_state === "funded" || intent.state === "funded" || intent.state === "delivered" || intent.state === "claimable" || intent.state === "completed") return intent;
-      if (intent.onchain_state === "refunded" || intent.state === "failed_terminal" || intent.state === "refunded") throw new Error(`Cross-chain payment ended in ${intent.onchain_state ?? intent.state}`);
+      try {
+        const intent = await this.intent(intentId);
+        consecutiveNetworkErrors = 0;
+        if (intent.onchain_state === "funded" || intent.state === "funded" || intent.state === "delivered" || intent.state === "claimable" || intent.state === "completed") return intent;
+        if (intent.onchain_state === "refunded" || intent.state === "failed_terminal" || intent.state === "refunded") {
+          throw new Error(`Cross-chain payment ended in ${intent.onchain_state ?? intent.state}`);
+        }
+        if (intent.state === "destination_submitted" || intent.state === "attestation_ready") onStage?.("settling");
+        else onStage?.("attesting");
+      } catch (error) {
+        if (!isTransientNetworkError(error)) throw error;
+        consecutiveNetworkErrors += 1;
+        onStage?.("attesting");
+        // Brief API restarts during `pnpm dev` should not abort a completed source burn.
+        if (consecutiveNetworkErrors >= 20) {
+          throw new Error("Source burn succeeded, but the API was unreachable while waiting for Starknet settlement. Settlement continues in the background — check Inbox shortly.");
+        }
+      }
       await new Promise((resolve) => window.setTimeout(resolve, 3_000));
     }
     throw new Error("Source burn succeeded, but Starknet escrow confirmation is still pending. It will continue in the background.");
@@ -613,6 +629,21 @@ function recipientIdentifier(input: string): { provider: "email" | "x"; identifi
   if (value.startsWith("@")) return { provider: "x", identifier: value };
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { provider: "email", identifier: value };
   throw new Error("Cross-chain recipient must be an email or @handle");
+}
+
+function isTransientNetworkError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("failed to fetch")
+    || normalized.includes("networkerror")
+    || normalized.includes("network request failed")
+    || normalized.includes("load failed")
+    || normalized.includes("fetch failed")
+    || normalized.includes("econnrefused")
+    || normalized.includes("econnreset")
+    || /wotta api (502|503|504)\b/.test(normalized)
+  );
 }
 
 function randomFelt(): string {

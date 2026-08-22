@@ -100,15 +100,22 @@ export async function signQuote(db: Db, config: Config, ownerId: string, input: 
   }
 
   if (route.domain === null) throw new Error("route_disabled:not_cctp");
-  const exactNet = await quoteCircleExactNet({ irisBaseUrl: config.env.CIRCLE_IRIS_BASE_URL, sourceDomain: route.domain, destinationDomain: 25, requestedReceive: BigInt(String(input.denomination)), minFinalityThreshold: 2000 });
-  const sourcePlan = buildSourcePlan(config, input, exactNet.grossDebit, exactNet.maxFee);
-  const quote = { version: 1, quoteId, intentId: input.id, routeId: input.routeId, sourceAccount: input.sourceAccount, denomination: input.denomination, requestedReceive: input.denomination, grossDebit: exactNet.grossDebit.toString(), maxFee: exactNet.maxFee.toString(), minFinalityThreshold: 2000, claimHash: input.claimHash, refundRecipient: input.publicRefundRecipient, manifestHash: config.manifestHash, sourcePlan, issuedAt: Math.floor(Date.now() / 1000), expiresAt };
+  const routeId = String(input.routeId);
+  const minFinalityThreshold = cctpFinalityThreshold(routeId);
+  const exactNet = await quoteCircleExactNet({ irisBaseUrl: config.env.CIRCLE_IRIS_BASE_URL, sourceDomain: route.domain, destinationDomain: 25, requestedReceive: BigInt(String(input.denomination)), minFinalityThreshold });
+  const sourcePlan = buildSourcePlan(config, input, exactNet.grossDebit, exactNet.maxFee, minFinalityThreshold);
+  const quote = { version: 1, quoteId, intentId: input.id, routeId: input.routeId, sourceAccount: input.sourceAccount, denomination: input.denomination, requestedReceive: input.denomination, grossDebit: exactNet.grossDebit.toString(), maxFee: exactNet.maxFee.toString(), minFinalityThreshold, claimHash: input.claimHash, refundRecipient: input.publicRefundRecipient, manifestHash: config.manifestHash, sourcePlan, issuedAt: Math.floor(Date.now() / 1000), expiresAt };
   const signature = await new SignJWT(quote).setProtectedHeader({ alg: "HS256", typ: "wotta+quote" }).setIssuedAt().setExpirationTime(expiresAt).sign(new TextEncoder().encode(config.env.RESOLVER_SIGNING_KEY));
   const { data: updated, error } = await db.from("intents").update({ quote: { quote, signature }, state: "quoted", version: 1, updated_at: new Date().toISOString() }).eq("id", intent.id).eq("owner_id", ownerId).eq("state", "draft").eq("version", 0).select("id").maybeSingle(); if (error) throw error; if (!updated) throw new Error("version_conflict");
   await appendEvent(db, intent.id, "draft", "quoted", 1, {}, { quoteId }); return { quote, signature };
 }
 
-function buildSourcePlan(config: Config, input: Record<string, unknown>, grossDebit: bigint, maxFee: bigint) {
+/** Soft finality (1000) settles much faster on EVM/Solana testnets. Stellar CCTP requires 2000. */
+function cctpFinalityThreshold(routeId: string): 1000 | 2000 {
+  return routeId === "stellar" ? 2000 : 1000;
+}
+
+function buildSourcePlan(config: Config, input: Record<string, unknown>, grossDebit: bigint, maxFee: bigint, minFinalityThreshold: 1000 | 2000) {
   const routeId = String(input.routeId) as "ethereum" | "arbitrum" | "base" | "solana" | "stellar";
   const denomination = String(input.denomination) as keyof typeof DENOMINATION_CODES;
   const escrow = config.manifest.pools.find((pool) => pool.denomination === denomination);
@@ -119,7 +126,7 @@ function buildSourcePlan(config: Config, input: Record<string, unknown>, grossDe
     claimHash: String(input.claimHash), publicRefundRecipient: String(input.publicRefundRecipient),
     expiresAt: BigInt(Math.floor(Date.parse(String(input.expiresAt)) / 1000)), manifestVersion: 1,
   };
-  const common = { router: config.manifest.router.address as `0x${string}`, amount: grossDebit, hook, maxFee, minFinalityThreshold: 2000 as const };
+  const common = { router: config.manifest.router.address as `0x${string}`, amount: grossDebit, hook, maxFee, minFinalityThreshold };
   return routeId === "solana" || routeId === "stellar"
     ? buildNonEvmCctpBurnPlan({ ...common, route: routeId })
     : buildEvmCctpBurnCalls({ ...common, route: routeId });

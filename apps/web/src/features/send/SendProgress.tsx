@@ -16,11 +16,12 @@ const LABELS: Partial<Record<SendStage, string>> = {
   connecting_source: "Connecting source wallet…",
   burning: "Confirm source burn…",
   confirming: "Confirming source transaction…",
+  attesting: "Waiting for Circle attestation…",
   settling: "Settling on Starknet…",
   unlocking_private: "Unlocking private balance…",
   waiting_confirmations: "Waiting for a proof-safe block…",
   building_proof: "Building private transfer…",
-  signing_message: "Authorize in Ready…",
+  signing_message: "Authorize in wallet…",
   generating_proof: "Generating privacy proof…",
 };
 

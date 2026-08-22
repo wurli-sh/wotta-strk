@@ -236,6 +236,14 @@ export function IslandNav() {
     (sum, group) => sum + group.chains.length,
     0,
   );
+  const linkedReadyAddress = me?.wallet?.address ?? null;
+  const linkedReadyAlreadyListed = Boolean(
+    linkedReadyAddress
+      && walletGroups.some(
+        (group) => group.address.toLowerCase() === linkedReadyAddress.toLowerCase(),
+      ),
+  );
+  const showLinkedReadyRow = Boolean(linkedReadyAddress && !linkedReadyAlreadyListed);
 
   const xHandle =
     (session?.user.user_metadata?.user_name as string | undefined) ??
@@ -375,12 +383,51 @@ export function IslandNav() {
                             .join(", ")}
                         </p>
                       ) : null}
-                      {me?.wallet?.address ? (
-                        <p className="mt-2 truncate text-xs text-muted-foreground">
-                          Linked Ready · {truncateAddress(me.wallet.address)}
-                        </p>
-                      ) : null}
                     </div>
+
+                    {showLinkedReadyRow && linkedReadyAddress ? (
+                      <div className="border-t border-border/60 px-3 py-3">
+                        <div className="mb-2 flex items-center justify-between px-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            Linked Ready
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 p-2.5">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={routeLogoPath("starknet")}
+                            alt="Ready"
+                            width={20}
+                            height={20}
+                            className="size-5 shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-medium text-foreground">
+                              Ready
+                            </p>
+                            <p className="truncate text-[11px] tabular-nums text-muted-foreground">
+                              {truncateAddress(linkedReadyAddress)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void copyAddress(linkedReadyAddress)}
+                            className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            aria-label={
+                              copiedAddress === linkedReadyAddress
+                                ? "Ready address copied"
+                                : "Copy Ready wallet address"
+                            }
+                          >
+                            {copiedAddress === linkedReadyAddress ? (
+                              <Check className="size-4 text-success" aria-hidden />
+                            ) : (
+                              <Copy className="size-4" aria-hidden />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
 
                     {walletGroups.length > 0 ? (
                       <div className="border-t border-border/60 px-3 py-3">

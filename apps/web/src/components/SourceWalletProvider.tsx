@@ -164,15 +164,7 @@ export function SourceWalletProvider({ children }: { children: ReactNode }) {
   );
 
   const matchesRoute = useCallback(
-    (routeKey: SourceRail) => {
-      const wallet = getSource(routeKey);
-      if (!wallet) return false;
-      const chain = chainKeyForRoute(routeKey);
-      // Starknet public/private share one Ready wallet slot.
-      if (chain === "starknet") return wallet.family === "starknet";
-      // Exact rail only — connecting Base must not unlock Ethereum Send.
-      return wallet.chainKey === chain && wallet.routeKey === routeKey;
-    },
+    (routeKey: SourceRail) => getSource(routeKey)?.routeKey === routeKey,
     [getSource],
   );
 

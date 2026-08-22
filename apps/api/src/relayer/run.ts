@@ -74,7 +74,10 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
   const route = routeById(job.intent.route_id, deps.config);
   if (!route?.enabled || route.domain === null || !job.intent.source_tx_hash) throw new Error("relayer_route_invalid");
   const iris = await fetchAttestation(deps.config, route.domain, job.intent.source_tx_hash);
-  if (!iris) return false;
+  if (!iris) {
+    deps.log.info({ intentId: job.intent.id, sourceTxHash: job.intent.source_tx_hash, route: job.intent.route_id }, "Waiting for Circle Iris attestation");
+    return false;
+  }
   validateSettlement(deps.config, job, iris.message);
 
   if (job.intent.state === "source_submitted") await advance(deps.db, job, "source_confirmed", { sourceTxHash: job.intent.source_tx_hash });

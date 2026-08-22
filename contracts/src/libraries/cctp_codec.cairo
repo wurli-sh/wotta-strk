@@ -9,7 +9,7 @@ pub const BURN_HOOK_OFFSET: usize = 228;
 pub const HOOK_WRAPPER_LENGTH: usize = 136;
 pub const MESSAGE_LENGTH: usize = MESSAGE_BODY_OFFSET + BURN_HOOK_OFFSET + HOOK_WRAPPER_LENGTH;
 pub const STARKNET_DOMAIN: u32 = 25;
-const CCTP_WRAPPER_MAGIC: u32 = 0x43535450; // "CCTP"
+const CCTP_WRAPPER_MAGIC: u32 = 0x43435450; // "CCTP"
 const WOTTA_HOOK_MAGIC: u32 = 0x574f5454; // "WOTT"
 
 pub fn decode(message: @ByteArray) -> CctpMessageV2 {

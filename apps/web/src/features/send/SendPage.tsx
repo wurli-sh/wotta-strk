@@ -101,15 +101,16 @@ function stageLabel(stage: SendStage, denom: Dens): string {
     quoting: "Verifying quote…",
     delivering: "Encrypting delivery…",
     connecting_source: "Connecting source wallet…",
-    approving: "Approve USDC in Ready…",
+    approving: "Approve USDC…",
     depositing: "Deposit to Wotta escrow…",
     burning: "Confirm CCTP burn…",
     confirming: "Confirming source transaction…",
+    attesting: "Waiting for Circle attestation…",
     settling: "Settling privately on Starknet…",
     unlocking_private: "Unlocking private balance…",
     waiting_confirmations: "Waiting for a proof-safe block…",
     building_proof: "Building private transfer…",
-    signing_message: "Authorize in Ready…",
+    signing_message: "Authorize in wallet…",
     generating_proof: "Generating privacy proof…",
     submitting: "Submitting proof…",
     complete: "Escrowed",
@@ -167,7 +168,11 @@ function preferredPublicRoute(routes: RouteRow[]): SourceRail | null {
 }
 
 function SendForm() {
-  const { setSource: rememberSource, matchesRoute } = useSourceWallet();
+  const {
+    setSource: rememberSource,
+    getSource,
+    matchesRoute,
+  } = useSourceWallet();
   const { routes, routesHealth, routesReady, retryRoutesHealth } = useRoutesHealth();
   const [denom, setDenom] = useState<Dens>(1n);
   const [recipient, setRecipient] = useState("");
@@ -195,11 +200,12 @@ function SendForm() {
     "starknet-public": "Starknet",
     "starknet-private": "Ready",
   };
-  const connectLabel = isStarknetSource(source) || confidentialMode
-    ? "Connect Ready wallet"
-    : `Connect ${CONNECT_CHAIN_LABEL[source]}`;
   const sourceLabel = routes.find((route) => route.key === source)?.label
     ?? CONNECT_CHAIN_LABEL[source];
+  // Swoop: `Connect ${routeLabel(routeId)} wallet` — always include "wallet".
+  const connectLabel = isStarknetSource(source) || confidentialMode
+    ? "Connect Ready wallet"
+    : `Connect ${sourceLabel} wallet`;
 
   useEffect(() => {
     const to = new URLSearchParams(window.location.search).get("to");
@@ -230,8 +236,25 @@ function SendForm() {
   function onConfidentialModeChange(enabled: boolean) {
     setConfidentialMode(enabled);
     if (enabled) {
+      // Same Ready wallet serves public + private; retag so matchesRoute passes.
+      const starknet = getSource("starknet-public") ?? getSource(NOX_ROUTE_ID);
+      if (starknet) {
+        rememberSource({
+          ...starknet,
+          routeKey: NOX_ROUTE_ID,
+          label: "Private Starknet",
+        });
+      }
       setSource(NOX_ROUTE_ID);
       return;
+    }
+    const starknet = getSource(NOX_ROUTE_ID) ?? getSource("starknet-public");
+    if (starknet) {
+      rememberSource({
+        ...starknet,
+        routeKey: "starknet-public",
+        label: "Starknet",
+      });
     }
     if (isStarknetSource(source)) {
       setSource("starknet-public");
@@ -245,6 +268,8 @@ function SendForm() {
     !confidentialMode
     || routes.some((route) => route.key === NOX_ROUTE_ID && route.selectable);
   const sourceReady = routes.some((route) => route.key === source && route.selectable);
+  const recipientReady = lookup.status === "registered" || lookup.status === "pending";
+  const formLocked = busy || stage === "complete";
 
   useEffect(() => {
     const request = ++lookupRequest.current;
@@ -330,10 +355,6 @@ function SendForm() {
     const parsed = parseRecipient(recipient);
     if (!parsed) {
       toast.error("Enter a valid @handle or email");
-      return;
-    }
-    if (!walletConnected) {
-      await connectSourceWallet();
       return;
     }
     setBusy(true);
@@ -437,7 +458,11 @@ function SendForm() {
     } catch (error) {
       const message = userFacingError(error, "Couldn’t send");
       if (/sign in/i.test(message)) setAuthOpen(true);
-      toast.error(message);
+      if (/settlement is still finishing|continues in the background|still pending/i.test(message)) {
+        toast.message(message);
+      } else {
+        toast.error(message);
+      }
       setStage("idle");
     } finally {
       setBusy(false);
@@ -481,12 +506,12 @@ function SendForm() {
     <div className="mx-auto max-w-lg space-y-4">
       <div className="radius-surface overflow-hidden border border-border/80 bg-card p-2 shadow-card">
         <div className="radius-surface-inner border border-brand/15 bg-brand-mist px-6 py-6 sm:px-8 sm:py-7">
-          <DenomChips value={denom} onChange={setDenom} disabled={busy} />
+          <DenomChips value={denom} onChange={setDenom} disabled={formLocked} />
         </div>
         <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
           <ConfidentialToggle
             enabled={confidentialMode}
-            disabled={busy || !routesReady}
+            disabled={formLocked || !routesReady}
             onChange={onConfidentialModeChange}
           />
 
@@ -495,7 +520,7 @@ function SendForm() {
               routes={routes}
               value={source}
               onChange={setSource}
-              disabled={busy}
+              disabled={formLocked}
               privateMode={confidentialMode}
             />
           ) : (
@@ -538,7 +563,7 @@ function SendForm() {
               className="radius-control w-full border border-border/70 bg-muted px-5 py-3.5 text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-100 ease-out placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 aria-[invalid=true]:border-destructive"
               value={recipient}
               onChange={(event) => setRecipient(event.target.value)}
-              disabled={busy}
+              disabled={formLocked}
               placeholder="@handle or you@example.com"
               autoComplete="off"
               spellCheck={false}
@@ -547,30 +572,49 @@ function SendForm() {
             />
             <LookupStatus lookup={lookup} onRetry={() => setLookupRetry((value) => value + 1)} />
           </div>
-          <MotionPillButton
-            data-testid="send-submit"
-            className="w-full min-h-12 text-base"
-            disabled={
-              connecting
-              || busy
-              || !routesReady
-              || !privateReady
-              || !sourceReady
-              || (walletConnected && !["registered", "pending"].includes(lookup.status))
-            }
-            aria-busy={busy || connecting}
-            onClick={() => void (walletConnected ? run() : connectSourceWallet())}
-          >
-            {connecting ? (
-              <TextShimmer className="text-base font-semibold">Connecting…</TextShimmer>
-            ) : busy ? (
-              <TextShimmer className="text-base font-semibold">{stageLabel(stage, denom)}</TextShimmer>
-            ) : walletConnected ? (
-              <><Send className="size-4" />{stageLabel("idle", denom)}</>
+          {stage !== "complete" ? (
+            walletConnected ? (
+              <MotionPillButton
+                data-testid="send-submit"
+                className="w-full min-h-12 text-base"
+                disabled={
+                  busy
+                  || !routesReady
+                  || !privateReady
+                  || !sourceReady
+                  || !recipientReady
+                }
+                aria-busy={busy || lookup.status === "checking"}
+                onClick={() => void run()}
+              >
+                {busy ? (
+                  <TextShimmer className="text-base font-semibold">{stageLabel(stage, denom)}</TextShimmer>
+                ) : (
+                  <><Send className="size-4" aria-hidden />{stageLabel("idle", denom)}</>
+                )}
+              </MotionPillButton>
             ) : (
-              <><Wallet className="size-4" />{connectLabel}</>
-            )}
-          </MotionPillButton>
+              <MotionPillButton
+                data-testid="connect-source"
+                className="w-full min-h-12 text-base"
+                disabled={
+                  connecting
+                  || busy
+                  || !routesReady
+                  || !privateReady
+                  || !sourceReady
+                }
+                aria-busy={connecting}
+                onClick={() => void connectSourceWallet()}
+              >
+                {connecting ? (
+                  <TextShimmer className="text-base font-semibold">Connecting…</TextShimmer>
+                ) : (
+                  <><Wallet className="size-4" aria-hidden />{connectLabel}</>
+                )}
+              </MotionPillButton>
+            )
+          ) : null}
         </div>
       </div>
       <SignInModal open={authOpen} onClose={() => setAuthOpen(false)} />
