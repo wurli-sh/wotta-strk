@@ -1,0 +1,45 @@
+{
+  "name": "wotta",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --experimental-strip-types scripts/dev.ts",
+    "build": "pnpm -r --filter '!@wotta/contracts' --if-present run build",
+    "lint": "pnpm -r --if-present run lint",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --no-bail --filter @wotta/shared --filter @wotta/crypto --filter @wotta/adapters --filter @wotta/wallet-smoke --filter @wotta/api --filter @wotta/web run test",
+    "contracts:build": "pnpm --filter @wotta/contracts build",
+    "contracts:declare": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/declare.ts",
+    "test:contracts": "pnpm --filter @wotta/contracts test",
+    "smoke:wallet-api": "bash scripts/e2e/wallet-api-smoke.sh",
+    "smoke:phase1-live": "node --experimental-strip-types scripts/smoke/phase1-live-smoke.ts",
+    "evidence:wallet-api": "node packages/shared/scripts/materialize-wallet-api-evidence.mjs",
+    "dev:wallet-smoke": "pnpm --filter @wotta/wallet-smoke dev",
+    "dev:web": "pnpm --filter @wotta/web dev",
+    "dev:api": "pnpm --filter @wotta/api dev",
+    "dev:indexer": "pnpm --filter @wotta/api dev:indexer",
+    "dev:relayer": "pnpm --filter @wotta/api dev:relayer",
+    "test:api": "pnpm --filter @wotta/api test",
+    "test:web": "pnpm --filter @wotta/web test",
+    "openapi:generate": "pnpm --filter @wotta/api openapi:generate",
+    "db:migrate": "bash scripts/db/migrate.sh",
+    "keys:sepolia-privacy": "node --experimental-strip-types scripts/ops/init-sepolia-privacy-keys.ts",
+    "account:sepolia-promote": "node --experimental-strip-types scripts/ops/promote-sepolia-account.ts",
+    "deploy:sepolia-direct-escrow": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/deploy-direct-privacy-escrow.ts",
+    "deploy:sepolia-cctp": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/deploy-sepolia-cctp.ts",
+    "deploy:mainnet": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/deploy.ts",
+    "deployment:verify": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/verify.ts",
+    "check:phase1": "node --experimental-strip-types scripts/gates/phase1-check.ts",
+    "check:phase1:sepolia": "node --experimental-strip-types scripts/gates/phase1-check.ts --sepolia",
+    "check:phase2:sepolia": "node --experimental-strip-types scripts/gates/phase2-check.ts",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "starknet": "10.5.0",
+    "typescript": "5.8.3"
+  }
+}
