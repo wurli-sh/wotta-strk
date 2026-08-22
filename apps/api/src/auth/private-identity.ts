@@ -37,6 +37,16 @@ export async function bindPrivateIdentity(
   if (BigInt(owner) !== BigInt(wallet.address)) throw new Error("private_identity_owner_mismatch");
   if (BigInt(publicKey) === 0n) throw new Error("private_identity_not_registered");
 
+  let classHash: string;
+  try {
+    classHash = await provider.getClassHashAt(identityAddress);
+  } catch {
+    throw new Error("private_identity_verification_failed");
+  }
+  if (BigInt(classHash) !== BigInt(direct.identityClassHash)) {
+    throw new Error("private_identity_class_mismatch");
+  }
+
   const verifiedAt = new Date().toISOString();
   const { data, error: updateError } = await db
     .from("wallet_bindings")

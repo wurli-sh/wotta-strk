@@ -6,7 +6,7 @@ import { constants, RpcProvider } from "starknet";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"), PORT: z.coerce.number().int().min(1).max(65535).default(8787),
-  API_ORIGIN: z.string().url().default("http://localhost:8787"), CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"), LOG_LEVEL: z.string().default("info"),
+  API_ORIGIN: z.string().url().default("http://127.0.0.1:8787"), CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"), LOG_LEVEL: z.string().default("info"),
   SUPABASE_URL: z.string().url(), SUPABASE_SECRET_KEY: z.string().min(20), STARKNET_RPC_URL: z.string().url(), STARKNET_NETWORK: z.enum(["mainnet", "sepolia"]).default("mainnet"),
   RESOLVER_SIGNING_KEY: z.string().min(32), IDENTITY_LOOKUP_KEY: z.string().min(32), PENDING_DELIVERY_PRIVATE_KEY: z.string().min(32),
   CIRCLE_IRIS_BASE_URL: z.string().url().optional(), STARKNET_RELAYER_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_RELAYER_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_RELAYER_KEY_OR_KEYSTORE: z.string().min(1).optional(),
