@@ -13,7 +13,7 @@ import { PageShell } from "@/components/PageShell";
 import { TabContentShimmer } from "@/components/PageShimmer";
 import {
   SourceChips,
-  buildSourceRoutes,
+  isStarknetSource,
   type RouteRow,
   type SourceRail,
 } from "@/components/SourceChips";
@@ -28,6 +28,9 @@ import {
   SendPageSkeleton,
 } from "@/components/ui/Skeleton";
 import { TextShimmer } from "@/components/ui/TextShimmer";
+import { ConfidentialToggle } from "@/features/send/ConfidentialToggle";
+import { NOX_ROUTE_ID, PUBLIC_DEFAULT_ROUTE_ID } from "@/features/send/routeIds";
+import { useRoutesHealth } from "@/features/send/useRoutesHealth";
 import { apiFetch } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -41,7 +44,6 @@ import { unlockPrivacyVault } from "@/lib/wotta/privacy-state";
 import {
   createBrowserProductSession,
   type FundingStage,
-  type RouteManifest,
 } from "@/lib/wotta/product-session";
 import { connectReady } from "@/lib/wotta/ready";
 
@@ -145,12 +147,19 @@ function LookupStatus({ lookup, onRetry }: { lookup: Lookup; onRetry: () => void
   );
 }
 
+function preferredPublicRoute(routes: RouteRow[]): SourceRail | null {
+  return routes.find((route) => route.key === "starknet-public" && route.selectable)?.key
+    ?? routes.find((route) => route.key !== NOX_ROUTE_ID && route.selectable)?.key
+    ?? null;
+}
+
 function SendForm() {
   const { setSource: rememberSource } = useSourceWallet();
+  const { routes, routesHealth, routesReady, retryRoutesHealth } = useRoutesHealth();
   const [denom, setDenom] = useState<Dens>(1n);
   const [recipient, setRecipient] = useState("");
-  const [source, setSource] = useState<SourceRail>("base");
-  const [routes, setRoutes] = useState<RouteRow[]>(() => buildSourceRoutes());
+  const [confidentialMode, setConfidentialMode] = useState(false);
+  const [source, setSource] = useState<SourceRail>(PUBLIC_DEFAULT_ROUTE_ID);
   const [lookup, setLookup] = useState<Lookup>({ status: "idle" });
   const [lookupRetry, setLookupRetry] = useState(0);
   const [stage, setStage] = useState<SendStage>("idle");
@@ -165,16 +174,47 @@ function SendForm() {
   useEffect(() => {
     const to = new URLSearchParams(window.location.search).get("to");
     if (to) setRecipient(to);
-    void apiFetch<RouteManifest>("/v1/routes", { suppressServiceStatus: true })
-      .then((manifest) => {
-        const next = buildSourceRoutes(manifest.routes);
-        setRoutes(next);
-        const preferred = next.find((route) => route.key === "starknet-public" && route.selectable)
-          ?? next.find((route) => route.selectable);
-        if (preferred) setSource(preferred.key);
-      })
-      .catch(() => setRoutes(buildSourceRoutes()));
   }, []);
+
+  useEffect(() => {
+    if (!routesReady) return;
+    if (confidentialMode) {
+      setSource(NOX_ROUTE_ID);
+      return;
+    }
+    setSource((current) => {
+      if (!isStarknetSource(current)) return current;
+      return "starknet-public";
+    });
+  }, [routes, routesReady, confidentialMode]);
+
+  useEffect(() => {
+    if (!routesReady || confidentialMode) return;
+    setSource((current) => {
+      const selected = routes.find((route) => route.key === current);
+      if (selected?.selectable) return current;
+      return preferredPublicRoute(routes) ?? current;
+    });
+  }, [routes, routesReady, confidentialMode]);
+
+  function onConfidentialModeChange(enabled: boolean) {
+    setConfidentialMode(enabled);
+    if (enabled) {
+      setSource(NOX_ROUTE_ID);
+      return;
+    }
+    if (isStarknetSource(source)) {
+      setSource("starknet-public");
+      return;
+    }
+    const next = preferredPublicRoute(routes);
+    if (next) setSource(next);
+  }
+
+  const privateReady =
+    !confidentialMode
+    || routes.some((route) => route.key === NOX_ROUTE_ID && route.selectable);
+  const sourceReady = routes.some((route) => route.key === source && route.selectable);
 
   useEffect(() => {
     const request = ++lookupRequest.current;
@@ -371,7 +411,51 @@ function SendForm() {
           <DenomChips value={denom} onChange={setDenom} disabled={busy} />
         </div>
         <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
-          <SourceChips routes={routes} value={source} onChange={setSource} disabled={busy} />
+          <ConfidentialToggle
+            enabled={confidentialMode}
+            disabled={busy || !routesReady}
+            onChange={onConfidentialModeChange}
+          />
+
+          {routesReady ? (
+            <SourceChips
+              routes={routes}
+              value={source}
+              onChange={setSource}
+              disabled={busy}
+              privateMode={confidentialMode}
+            />
+          ) : (
+            <div
+              className="radius-surface-inner space-y-2 border border-warning-border bg-warning-surface px-4 py-3 text-xs text-warning-foreground"
+              role="status"
+            >
+              <p>
+                {routesHealth === "loading"
+                  ? "Checking route health — hold on a sec."
+                  : "API is waking up — chain selection unlocks once route health is back."}
+              </p>
+              {routesHealth === "waking" ? (
+                <button
+                  type="button"
+                  onClick={retryRoutesHealth}
+                  className="text-xs font-medium text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          )}
+
+          {confidentialMode && routesReady && !privateReady ? (
+            <div
+              className="radius-surface-inner border border-warning-border bg-warning-surface px-4 py-3 text-xs text-warning-foreground"
+              role="status"
+            >
+              Private route is unavailable — register your private identity from Account first.
+            </div>
+          ) : null}
+
           <div className="space-y-3">
             <label htmlFor="send-recipient" className="block text-sm font-semibold text-foreground">Recipient</label>
             <input
@@ -393,7 +477,13 @@ function SendForm() {
           <MotionPillButton
             data-testid="send-submit"
             className="w-full min-h-12 text-base"
-            disabled={busy || !["registered", "pending"].includes(lookup.status) || !routes.some((route) => route.key === source && route.selectable)}
+            disabled={
+              busy
+              || !routesReady
+              || !privateReady
+              || !sourceReady
+              || !["registered", "pending"].includes(lookup.status)
+            }
             aria-busy={busy}
             onClick={() => void run()}
           >
