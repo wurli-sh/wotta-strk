@@ -6,10 +6,10 @@ note discovery, and proof construction. This route exists because a fresh Ready
 Sepolia account cannot initialize privacy through Wallet API `0.10.3` alone.
 The mainnet product route remains wallet-managed.
 
-Wotta does not call any external payroll app or third-party product API. It pins
-the **Wotta Sepolia direct privacy row**: shared Starknet STRK20 pool, borrowed
-privacy identity class, StarkWare hosted prover/discovery, and Wotta-deployed
-escrows. Upstream reference integrations are documentation provenance only.
+Wotta pins the **Wotta Sepolia direct privacy row**: shared Starknet STRK20 pool,
+Wotta-declared privacy identity class, StarkWare hosted prover/discovery, and
+Wotta-deployed escrows. The SDK row was validated against upstream reference
+integration commit `4e4e9ac2ea70c625a6b0a52a69f85a2cddf5e3ec`.
 
 ## Pinned components
 
@@ -17,7 +17,7 @@ escrows. Upstream reference integrations are documentation provenance only.
 | --- | --- |
 | Privacy pool | `0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91` |
 | Pool class hash | `0x056ab118a8a6e38efc93ad758cefe909fee421fa931ce3cf72df624d345623b2` |
-| Privacy identity class | `0x017be2d66359f439b734eafce8eb23df46e2baaa937aa7f67d5ffd2ebf000af6` |
+| Privacy identity class | pinned in `deployments/sepolia.json` (`directPrivacy.identityClassHash`) |
 | Native test USDC | `0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343` |
 | Proof-aware RPC | `https://starknet-sepolia-rpc.publicnode.com` (RPC `0.10.2`) |
 | Prover | `https://transaction-prover.alpha-sepolia.sw-dev.io` |
@@ -40,18 +40,18 @@ approval for the pinned pool before sending the first proof transaction.
 ## Identity and key custody
 
 Ready's injected account cannot sign the raw proof invocation expected by the
-direct SDK. Wotta therefore deploys the already-declared borrowed privacy
-identity class with the Ready address as owner. The identity contract verifies
-the owner's Ready signature. Ready's connected-wallet API cannot forward an
+direct SDK. Wotta deploys the declared Wotta privacy identity class with the
+Ready address as owner. The identity contract verifies the owner's Ready
+signature. Ready's connected-wallet API cannot forward an
 externally generated V3 `proofFacts` envelope, so the local Vite server submits
 that outer transaction with the testnet deployer account. The submit endpoint
 accepts only `apply_actions` calls to the pinned Sepolia privacy pool; the
 private key never enters the browser bundle. Production must replace this local
 submitter with a rate-limited AVNU SponsoredPrivate or equivalent paymaster.
 
-Proof authorization uses the on-chain SNIP-12 domain literal embedded in that
-borrowed class (`SEPOLIA_BORROWED_IDENTITY_SNIP12_DOMAIN` in `@wotta/shared`).
-Vault unlock uses a separate Wotta-branded SNIP-12 domain in local storage.
+Proof authorization uses the Wotta SNIP-12 domain
+(`SEPOLIA_PRIVACY_IDENTITY_SNIP12_DOMAIN` in `@wotta/shared`), matching the
+declared identity class. Vault unlock uses the same domain in local storage.
 
 Wotta generates a nonzero 200-bit viewing key in the browser. It is encrypted
 with AES-GCM using a key derived from a deterministic Ready-signed SNIP-12
