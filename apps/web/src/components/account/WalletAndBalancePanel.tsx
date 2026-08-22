@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { createPrivacyClient } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateBalance } from "@/lib/wotta/privacy-flow";
-import { unlockPrivacyVault } from "@/lib/wotta/privacy-state";
+import { unlockPrivacyVault, clearAllPrivacyVaultLocalState } from "@/lib/wotta/privacy-state";
 import { connectReady } from "@/lib/wotta/ready";
 
 type Props = {
@@ -70,6 +70,7 @@ export function WalletAndBalancePanel({
         method: "POST",
         body: {},
       });
+      clearAllPrivacyVaultLocalState();
       toast.success("Ready wallet unlinked");
       await onLinked({
         profile: me?.profile ?? null,

@@ -14,7 +14,7 @@ warnStaleWalletSmoke();
 assertProductWebPort();
 
 process.stdout.write(
-  "[dev] product web http://localhost:3000 · api http://localhost:8787\n",
+  "[dev] product web http://localhost:3000 · api http://127.0.0.1:8787\n",
 );
 process.stdout.write(
   "[dev] wallet-smoke is NOT started (optional: pnpm dev:wallet-smoke on :5173)\n",

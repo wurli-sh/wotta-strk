@@ -10,6 +10,7 @@ import { apiFetch, type MeResponse } from "@/lib/api/client";
 import { userFacingError } from "@/lib/errors";
 import { routeLogoPath } from "@/lib/crypto-icons";
 import { createClient } from "@/lib/supabase/client";
+import { clearAllPrivacyVaultLocalState } from "@/lib/wotta/privacy-state";
 
 type Props = {
   me: MeResponse | null;
@@ -52,6 +53,7 @@ export function WalletPanel({
         method: "POST",
         body: {},
       });
+      clearAllPrivacyVaultLocalState();
       toast.success("Ready wallet unlinked");
       await onLinked({
         profile: me?.profile ?? null,

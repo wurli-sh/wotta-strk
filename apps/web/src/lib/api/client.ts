@@ -4,7 +4,7 @@ import { withServiceStatusToast } from "@/lib/service-status-toast";
 export function apiBase(): string {
   return (
     process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-    "http://localhost:8787"
+    "http://127.0.0.1:8787"
   );
 }
 

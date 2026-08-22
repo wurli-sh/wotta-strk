@@ -2,6 +2,14 @@ import { stark, type TypedData, type WalletAccountV6 } from "starknet";
 import type { DirectPrivacyConfig } from "./privacy-config.ts";
 
 export type PrivacyState = {
+  version: 2;
+  viewingKey: string;
+  identityClassHash?: string;
+  identityAddress?: string;
+  inboxSecretKey?: string;
+};
+
+type LegacyPrivacyState = {
   version: 1;
   viewingKey: string;
   identityAddress?: string;
@@ -29,8 +37,9 @@ export class PrivacyVault {
     this.state = state;
   }
 
-  async setIdentityAddress(identityAddress: string): Promise<void> {
+  async setIdentityAddress(identityAddress: string, identityClassHash: string): Promise<void> {
     this.state.identityAddress = identityAddress;
+    this.state.identityClassHash = identityClassHash;
     await this.save();
   }
 
@@ -76,11 +85,60 @@ export async function restorePrivacyVaultFromSession(
   const storageKey = stateStorageKey(wallet, config.poolAddress);
   if (!localStorage.getItem(storageKey)) return null;
   try {
-    return await vaultFromSignature(wallet, config.poolAddress, signature);
+    const vault = await vaultFromSignature(wallet, config.poolAddress, signature);
+    if (isStalePrivacyState(vault.state, config)) {
+      clearPrivacyVaultLocalState(wallet, config.poolAddress);
+      return null;
+    }
+    return vault;
   } catch {
-    clearUnlockSession(wallet, config.poolAddress);
+    clearPrivacyVaultLocalState(wallet, config.poolAddress);
     return null;
   }
+}
+
+export function clearPrivacyVaultLocalState(wallet: string, pool: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(stateStorageKey(wallet, pool));
+  clearUnlockSession(wallet, pool);
+}
+
+export function clearAllPrivacyVaultLocalState(): void {
+  if (typeof window === "undefined") return;
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith("wotta:privacy:v")) localStorage.removeItem(key);
+  }
+  clearAllUnlockSessions();
+}
+
+export function isStalePrivacyState(
+  state: PrivacyState | LegacyPrivacyState,
+  config: DirectPrivacyConfig,
+): boolean {
+  if (state.version !== 2) return true;
+  if (!state.identityAddress) return false;
+  return state.identityClassHash !== config.identityClassHash;
+}
+
+export async function ensureCurrentIdentityClass(
+  account: WalletAccountV6,
+  vault: PrivacyVault,
+  config: DirectPrivacyConfig,
+): Promise<boolean> {
+  if (!isStalePrivacyState(vault.state, config)) {
+    if (!vault.state.identityAddress) return false;
+    try {
+      const onChain = await account.provider.getClassHashAt(vault.state.identityAddress);
+      if (BigInt(onChain) === BigInt(config.identityClassHash)) return false;
+    } catch {
+      // Fall through to reset when the contract is missing or unreadable.
+    }
+  }
+  vault.state.identityAddress = undefined;
+  vault.state.identityClassHash = undefined;
+  await vault.save();
+  return true;
 }
 
 export function clearAllUnlockSessions(): void {
@@ -112,10 +170,13 @@ async function vaultFromSignature(
   );
   const storageKey = stateStorageKey(wallet, pool);
   const stored = localStorage.getItem(storageKey);
-  const state = stored ? await decryptState(stored, key) : {
-    version: 1 as const,
-    viewingKey: `0x${generateViewingKey().toString(16)}`,
-  };
+  const rawState = stored ? await decryptState(stored, key) : null;
+  const state: PrivacyState = rawState?.version === 2
+    ? rawState
+    : {
+      version: 2,
+      viewingKey: rawState?.viewingKey ?? `0x${generateViewingKey().toString(16)}`,
+    };
   const vault = new PrivacyVault(storageKey, key, state);
   if (!stored) await vault.save();
   return vault;
@@ -174,7 +235,7 @@ function unlockTypedData(wallet: string, pool: string): TypedData {
   };
 }
 
-async function decryptState(raw: string, key: CryptoKey): Promise<PrivacyState> {
+async function decryptState(raw: string, key: CryptoKey): Promise<PrivacyState | LegacyPrivacyState> {
   try {
     const record = JSON.parse(raw) as EncryptedState;
     const plaintext = await crypto.subtle.decrypt(
@@ -182,8 +243,8 @@ async function decryptState(raw: string, key: CryptoKey): Promise<PrivacyState> 
       key,
       fromBase64(record.ciphertext),
     );
-    const state = JSON.parse(new TextDecoder().decode(plaintext)) as PrivacyState;
-    if (state.version !== 1 || !/^0x[0-9a-f]+$/i.test(state.viewingKey)) {
+    const state = JSON.parse(new TextDecoder().decode(plaintext)) as PrivacyState | LegacyPrivacyState;
+    if ((state.version !== 1 && state.version !== 2) || !/^0x[0-9a-f]+$/i.test(state.viewingKey)) {
       throw new Error("invalid state payload");
     }
     return state;

@@ -76,7 +76,7 @@ export function createBrowserProductSession(): ProductSession {
   }
 
   browserProductSession = new WottaProductSession(createAppSupabaseClient(), {
-    apiUrl: (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787").replace(/\/$/, ""),
+    apiUrl: (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8787").replace(/\/$/, ""),
     supabaseUrl,
     supabasePublishableKey,
     solanaRpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
@@ -222,8 +222,25 @@ export class WottaProductSession {
 
   async bindReadyAndIdentity(account: WalletAccountV6, vault: PrivacyVault, identityAddress?: string) {
     await this.syncSession();
-    const me = await this.request<{ wallet: { address: string; inbox_pubkey: string } | null }>("/v1/me");
+    let me = await this.request<{ wallet: { address: string; inbox_pubkey: string } | null }>("/v1/me");
     let inboxSecretKey = vault.state.inboxSecretKey;
+
+    if (me.wallet) {
+      if (BigInt(me.wallet.address) !== BigInt(account.address)) {
+        throw new Error("This handle is linked to a different Ready account");
+      }
+      const localMatches =
+        inboxSecretKey !== undefined &&
+        publicKeyFromSecret(inboxSecretKey) === me.wallet.inbox_pubkey;
+      if (!localMatches) {
+        // Server still has the wallet row but this browser lost the inbox secret
+        // (privacy reset, site-data clear, or stale encrypted vault). Re-link.
+        await this.request("/v1/wallet/unlink", { method: "POST" });
+        me = { wallet: null };
+        inboxSecretKey = undefined;
+      }
+    }
+
     if (!me.wallet) {
       if (!inboxSecretKey) {
         inboxSecretKey = generateInboxKeyPair().secretKey;
@@ -233,10 +250,8 @@ export class WottaProductSession {
       const challenge = await this.request<{ typedData: TypedData }>("/v1/wallet/challenge", { method: "POST", body: JSON.stringify({ address: account.address }) });
       const signature = stark.formatSignature(await account.signMessage(challenge.typedData));
       await this.request("/v1/wallet/link", { method: "POST", body: JSON.stringify({ challenge: JSON.stringify(challenge.typedData), signature, inboxPublicKey }) });
-    } else {
-      if (BigInt(me.wallet.address) !== BigInt(account.address)) throw new Error("This handle is linked to a different Ready account");
-      if (!inboxSecretKey || publicKeyFromSecret(inboxSecretKey) !== me.wallet.inbox_pubkey) throw new Error("This browser does not hold the inbox key for the linked handle");
     }
+
     if (identityAddress) await this.publishPrivateIdentity(identityAddress);
     // A pending payment cannot be delivered until the inbox key is bound.
     // Re-sync after wallet/private-identity binding so first-time onboarding
@@ -557,14 +572,20 @@ export class WottaProductSession {
     if (!data.session) throw new Error("Sign in with Google or X first");
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${data.session.access_token}`);
+    let requestBody = init.body;
     // Fastify rejects content-type: application/json with an empty body
     // (FST_ERR_CTP_EMPTY_JSON_BODY). Only advertise JSON when we send a body.
-    // credentials:omit avoids the API's cookie_auth_forbidden guard on POSTs.
-    if (init.body != null && init.body !== "" && !headers.has("content-type")) {
-      headers.set("content-type", "application/json");
+    if (requestBody != null && requestBody !== "") {
+      if (typeof requestBody === "object" && !(requestBody instanceof Blob) && !(requestBody instanceof FormData) && !(requestBody instanceof URLSearchParams)) {
+        requestBody = JSON.stringify(requestBody);
+      }
+      if (!headers.has("content-type")) headers.set("content-type", "application/json");
+    } else {
+      requestBody = undefined;
     }
     const response = await fetch(`${this.config.apiUrl}${path}`, {
       ...init,
+      body: requestBody,
       credentials: "omit",
       headers,
     });

@@ -1,4 +1,4 @@
-import { SEPOLIA_BORROWED_IDENTITY_SNIP12_DOMAIN } from "@wotta/shared";
+import { SEPOLIA_PRIVACY_IDENTITY_SNIP12_DOMAIN } from "@wotta/shared";
 import {
   CallData,
   hash,
@@ -196,8 +196,8 @@ function authTypedData(invocationHash: string): TypedData {
       Message: [{ name: "hash", type: "felt" }],
     },
     primaryType: "Message",
-    // Borrowed Sepolia identity class; on-chain domain literal is fixed.
-    domain: { ...SEPOLIA_BORROWED_IDENTITY_SNIP12_DOMAIN },
+    // Must match the declared Wotta privacy identity class on Sepolia.
+    domain: { ...SEPOLIA_PRIVACY_IDENTITY_SNIP12_DOMAIN },
     message: { hash: invocationHash },
   };
 }

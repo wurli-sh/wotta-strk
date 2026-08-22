@@ -13,7 +13,7 @@ import { apiFetch, type MeResponse } from "@/lib/api/client";
 import { createClient } from "@/lib/supabase/client";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import {
-  clearAllUnlockSessions,
+  clearAllPrivacyVaultLocalState,
   restorePrivacyVaultFromSession,
   unlockPrivacyVault,
   type PrivacyVault,
@@ -71,7 +71,7 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
 
   const clearVault = useCallback(() => {
     setVault(null);
-    clearAllUnlockSessions();
+    clearAllPrivacyVaultLocalState();
   }, []);
 
   const value = useMemo(

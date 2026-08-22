@@ -15,7 +15,11 @@ import {
 } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { registerIdentity } from "@/lib/wotta/privacy-flow";
-import { unlockPrivacyVault, type PrivacyVault } from "@/lib/wotta/privacy-state";
+import {
+  ensureCurrentIdentityClass,
+  unlockPrivacyVault,
+  type PrivacyVault,
+} from "@/lib/wotta/privacy-state";
 import { createBrowserProductSession } from "@/lib/wotta/product-session";
 import { connectReady } from "@/lib/wotta/ready";
 
@@ -115,6 +119,10 @@ export function WalletConnectModal({ open, onClose, onLinked }: Props) {
       setPhase("binding");
       await session.bindReadyAndIdentity(account, vault);
 
+      if (await ensureCurrentIdentityClass(account, vault, config)) {
+        toast.message("Private identity upgraded for Wotta — redeploying…");
+      }
+
       let identityAddress = vault.state.identityAddress;
       let minimumStateBlock: number | undefined;
       if (!identityAddress) {
@@ -122,7 +130,7 @@ export function WalletConnectModal({ open, onClose, onLinked }: Props) {
         const deployed = await deployPrivacyIdentity(account, config);
         identityAddress = deployed.address;
         minimumStateBlock = deployed.blockNumber;
-        await vault.setIdentityAddress(identityAddress);
+        await vault.setIdentityAddress(identityAddress, config.identityClassHash);
       }
 
       const transfers = createPrivacyClient(identityAddress, BigInt(vault.state.viewingKey), config);
