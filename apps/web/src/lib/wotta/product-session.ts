@@ -14,6 +14,8 @@ import {
 import { decryptEnvelope, encryptEnvelope, generateInboxKeyPair, publicKeyFromSecret } from "@wotta/crypto";
 import { computeClaimHash, type Denomination } from "@wotta/shared";
 import { stark, type TypedData, type WalletAccountV6 } from "starknet";
+import { connectReady } from "./ready.ts";
+import { executeStarknetPublicDeposit, isStarknetPublicDepositPlan, type StarknetPublicDepositPlan } from "./public-deposit.ts";
 import { oauthCallbackUrl, stashAuthNext } from "../app-origin.ts";
 import {
   cleanOAuthCallbackUrl,
@@ -83,7 +85,7 @@ export function createBrowserProductSession(): ProductSession {
   return browserProductSession;
 }
 
-export type FundingStage = "resolving" | "quoting" | "delivering" | "connecting_source" | "approving" | "burning" | "confirming" | "settling";
+export type FundingStage = "resolving" | "quoting" | "delivering" | "connecting_source" | "approving" | "depositing" | "burning" | "confirming" | "settling";
 export type RouteManifest = {
   routes: Array<{ id: string; enabled: boolean; reason?: string }>;
   manifestHash: string;
@@ -97,7 +99,7 @@ type RecipientDescriptor = {
   inboxEncryptionPublicKey?: string;
 };
 type SignedQuote = {
-  quote: { sourcePlan: EvmCctpBurnPlan | NonEvmCctpBurnPlan };
+  quote: { sourcePlan: EvmCctpBurnPlan | NonEvmCctpBurnPlan | StarknetPublicDepositPlan };
   signature: string;
 };
 type ClaimEnvelope = {
@@ -256,6 +258,112 @@ export class WottaProductSession {
     if (!descriptor.privateReady || !descriptor.recipientPrivateIdentityAddress) throw new Error("Recipient has not registered a private identity");
     if (!descriptor.privacyPoolAddress || BigInt(descriptor.privacyPoolAddress) !== BigInt(expectedPool)) throw new Error("Recipient private identity uses an incompatible pool");
     return descriptor.recipientPrivateIdentityAddress;
+  }
+
+  async fundFromStarknetPublic(input: {
+    denomination: Denomination;
+    recipient: string;
+    publicRefundRecipient: string;
+    linkedReadyAddress: string;
+    onStage?: (stage: FundingStage) => void;
+    onRecovery?: (recovery: { claimSecret: string; escrow: string; expiresAt: string }) => void;
+  }): Promise<{ intentId: string; sourceTxHash: string; sourceAccount: string; claimSecret: string; escrow: string; expiresAt: string; escrowed: true }> {
+    const recipient = recipientIdentifier(input.recipient);
+    input.onStage?.("resolving");
+    const routes = await this.request<RouteManifest>("/v1/routes");
+    const route = routes.routes.find((candidate) => candidate.id === "starknet-public");
+    if (!route?.enabled) throw new Error(`Cross-chain route unavailable: ${route?.reason ?? "not configured"}`);
+    const escrow = routes.escrows.find((candidate) => candidate.denomination === input.denomination);
+    if (!escrow) throw new Error("Verified denomination escrow is unavailable");
+    const resolved = await this.request<{ descriptor: RecipientDescriptor }>("/v1/resolve", {
+      method: "POST",
+      body: JSON.stringify(recipient),
+    });
+    const recipientKey = resolved.descriptor.registered
+      ? resolved.descriptor.inboxEncryptionPublicKey
+      : routes.pendingDeliveryPublicKey;
+    if (!recipientKey) throw new Error("Recipient inbox key is unavailable");
+
+    input.onStage?.("connecting_source");
+    const connected = await connectReady();
+    if (BigInt(connected.address) !== BigInt(input.linkedReadyAddress)) {
+      throw new Error("Connect the Ready account linked to this Wotta profile");
+    }
+
+    const intentId = crypto.randomUUID();
+    const claimSecret = randomFelt();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString();
+    const claimHash = computeClaimHash({ chainId: "SN_SEPOLIA", poolAddress: escrow.address, secret: claimSecret });
+    const intent = {
+      id: intentId,
+      mode: "standard" as const,
+      deliveryKind: resolved.descriptor.registered ? "registered" as const : "pending" as const,
+      denomination: input.denomination,
+      routeId: "starknet-public" as const,
+      claimHash,
+      publicRefundRecipient: input.publicRefundRecipient,
+      expiresAt,
+    };
+    await this.request("/v1/intents", {
+      method: "POST",
+      headers: { "idempotency-key": crypto.randomUUID() },
+      body: JSON.stringify(intent),
+    });
+    input.onStage?.("quoting");
+    const signed = await this.request<SignedQuote>("/v1/quotes", {
+      method: "POST",
+      body: JSON.stringify({ ...intent, sourceAccount: connected.address }),
+    });
+
+    input.onStage?.("delivering");
+    const envelope = encryptEnvelope({
+      v: 1,
+      intentId,
+      claimSecret,
+      escrow: escrow.address,
+      denomination: input.denomination,
+      expiresAt,
+      chainId: "SN_SEPOLIA",
+    } satisfies ClaimEnvelope, recipientKey);
+    await this.request(`/v1/intents/${intentId}/delivery`, {
+      method: "POST",
+      headers: { "idempotency-key": crypto.randomUUID() },
+      body: JSON.stringify({
+        expectedVersion: 1,
+        expiresAt,
+        recipient,
+        ciphertext: envelope.ciphertext,
+        nonce: envelope.nonce,
+        ephemeralPublicKey: envelope.ephemeralPublicKey,
+        algorithm: envelope.algorithm,
+      }),
+    });
+    input.onRecovery?.({ claimSecret, escrow: escrow.address, expiresAt });
+
+    const sourcePlan = signed.quote.sourcePlan;
+    if (!isStarknetPublicDepositPlan(sourcePlan)) throw new Error("Starknet public deposit plan is unavailable");
+    const deposit = await executeStarknetPublicDeposit({
+      account: connected.account,
+      plan: sourcePlan,
+      amount: BigInt(input.denomination),
+      onStage: (stage) => input.onStage?.(stage),
+    });
+    await this.request(`/v1/intents/${intentId}/source-submitted`, {
+      method: "POST",
+      headers: { "idempotency-key": crypto.randomUUID() },
+      body: JSON.stringify({ expectedVersion: 1, txHash: deposit.txHash }),
+    });
+    input.onStage?.("settling");
+    await this.waitForEscrow(intentId);
+    return {
+      intentId,
+      sourceTxHash: deposit.txHash,
+      sourceAccount: connected.address,
+      claimSecret,
+      escrow: escrow.address,
+      expiresAt,
+      escrowed: true,
+    };
   }
 
   async fundFromCircleSource(input: {

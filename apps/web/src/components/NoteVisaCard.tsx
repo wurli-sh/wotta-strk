@@ -164,7 +164,7 @@ export function NoteVisaCard({
         </div>
 
         {footer ? (
-          <div className="space-y-3 px-1 pb-1 pt-3">{footer}</div>
+          <div className="space-y-2 px-1 pb-1 pt-2">{footer}</div>
         ) : null}
       </div>
     </div>

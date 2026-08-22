@@ -29,12 +29,10 @@ import {
 } from "@/components/ui/Skeleton";
 import { TextShimmer } from "@/components/ui/TextShimmer";
 import { apiFetch } from "@/lib/api/client";
-import { AUTH_SESSION_EVENT, getAccessToken } from "@/lib/auth";
+import { getAccessToken } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { type Dens } from "@/lib/denoms";
 import { userFacingError } from "@/lib/errors";
-import { QuoteCard } from "@/features/send/QuoteCard";
-import { SendProgress } from "@/features/send/SendProgress";
 import { createPrivacyClient, isIdentityRegistered } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateTransfer } from "@/lib/wotta/privacy-flow";
@@ -88,7 +86,8 @@ function stageLabel(stage: SendStage, denom: Dens): string {
     quoting: "Verifying quote…",
     delivering: "Encrypting delivery…",
     connecting_source: "Connecting source wallet…",
-    approving: "Approve USDC in wallet…",
+    approving: "Approve USDC in Ready…",
+    depositing: "Deposit to Wotta escrow…",
     burning: "Confirm CCTP burn…",
     confirming: "Confirming source transaction…",
     settling: "Settling privately on Starknet…",
@@ -161,11 +160,6 @@ function SendForm() {
   const [successRecipient, setSuccessRecipient] = useState("");
   const [successTx, setSuccessTx] = useState<string | null>(null);
   const [successRoute, setSuccessRoute] = useState<SourceRail | null>(null);
-  const [recovery, setRecovery] = useState<{
-    claimSecret: string;
-    escrow: string;
-    expiresAt: string;
-  } | null>(null);
   const lookupRequest = useRef(0);
 
   useEffect(() => {
@@ -173,14 +167,11 @@ function SendForm() {
     if (to) setRecipient(to);
     void apiFetch<RouteManifest>("/v1/routes", { suppressServiceStatus: true })
       .then((manifest) => {
-        const next = buildSourceRoutes(manifest.routes).map((route) =>
-          route.key === "starknet-public"
-            ? { ...route, selectable: false, status: "soon" as const, reason: "Public Starknet deposit UI is not wired yet" }
-            : route,
-        );
+        const next = buildSourceRoutes(manifest.routes);
         setRoutes(next);
-        const first = next.find((route) => route.selectable);
-        if (first) setSource(first.key);
+        const preferred = next.find((route) => route.key === "starknet-public" && route.selectable)
+          ?? next.find((route) => route.selectable);
+        if (preferred) setSource(preferred.key);
       })
       .catch(() => setRoutes(buildSourceRoutes()));
   }, []);
@@ -203,7 +194,11 @@ function SendForm() {
             setLookup({ status: "idle" });
             return;
           }
-          const result = await createBrowserProductSession().resolveRecipient(parsed);
+          const result = await apiFetch<{ descriptor: { registered: boolean } }>("/v1/resolve", {
+            token,
+            method: "POST",
+            body: parsed,
+          });
           if (controller.signal.aborted || request !== lookupRequest.current) return;
           setLookup({ status: result.descriptor.registered ? "registered" : "pending" });
         } catch (error) {
@@ -222,14 +217,6 @@ function SendForm() {
     };
   }, [recipient, lookupRetry]);
 
-  useEffect(() => {
-    function onSession() {
-      setLookupRetry((value) => value + 1);
-    }
-    window.addEventListener(AUTH_SESSION_EVENT, onSession);
-    return () => window.removeEventListener(AUTH_SESSION_EVENT, onSession);
-  }, []);
-
   async function run() {
     const parsed = parseRecipient(recipient);
     if (!parsed) {
@@ -238,7 +225,6 @@ function SendForm() {
     }
     setBusy(true);
     setDelivery(null);
-    setRecovery(null);
     try {
       const session = createBrowserProductSession();
       await session.syncSession();
@@ -291,8 +277,30 @@ function SendForm() {
         toast.success("Private transfer confirmed");
         return;
       }
+      if (source === "starknet-public") {
+        const result = await session.fundFromStarknetPublic({
+          denomination: denominationBaseUnits(denom),
+          recipient: parsed.identifier,
+          publicRefundRecipient: me.wallet.address,
+          linkedReadyAddress: me.wallet.address,
+          onStage: setStage,
+        });
+        setDelivery(lookup.status === "registered" ? "inbox" : "pending");
+        setSuccessRecipient(parsed.identifier);
+        setSuccessTx(result.sourceTxHash);
+        setSuccessRoute(source);
+        rememberSource({
+          routeKey: source,
+          family: "starknet",
+          address: result.sourceAccount,
+          label: routes.find((route) => route.key === source)?.label,
+        });
+        setStage("complete");
+        toast.success("Escrowed on Starknet");
+        return;
+      }
       if (!CROSS_CHAIN_ROUTES.has(source as WottaSourceRoute)) {
-        throw new Error("This Starknet source is not available yet");
+        throw new Error("This source is not available yet");
       }
       const result = await session.fundFromCircleSource({
         route: source as WottaSourceRoute,
@@ -300,7 +308,6 @@ function SendForm() {
         recipient: parsed.identifier,
         publicRefundRecipient: me.wallet.address,
         onStage: setStage,
-        onRecovery: setRecovery,
       });
       setDelivery(lookup.status === "registered" ? "inbox" : "pending");
       setSuccessRecipient(parsed.identifier);
@@ -336,24 +343,18 @@ function SendForm() {
           note={delivery === "pending" ? `Held until ${heldUntil.toLocaleDateString()}` : delivery === "direct" ? "Private balance → private balance" : "Claim → private Starknet balance"}
           footer={
             <div className="space-y-2">
-              <MotionPillButton className="w-full" onClick={() => { setStage("idle"); setDelivery(null); setSuccessTx(null); setSuccessRoute(null); setRecovery(null); }}>
+              <MotionPillButton className="w-full" onClick={() => { setStage("idle"); setDelivery(null); setSuccessTx(null); setSuccessRoute(null); }}>
                 Send another
               </MotionPillButton>
-              {recovery ? (
-                <p className="rounded-xl border border-warning-border bg-warning-surface px-4 py-3 text-left text-xs text-warning">
-                  Recovery claim secret saved locally for this session. Share only with the intended recipient if inbox delivery fails.
-                  <span className="mt-2 block break-all font-mono text-[11px] text-foreground">{recovery.claimSecret}</span>
-                </p>
-              ) : null}
               {successTx ? (
                 <Button
                   variant="outline"
                   className="w-full"
-                  href={successRoute === "starknet-private" ? `https://sepolia.voyager.online/tx/${successTx}` : `https://testnet.circle.com/en/transactions/${successTx}`}
+                  href={successRoute === "starknet-private" || successRoute === "starknet-public" ? `https://sepolia.voyager.online/tx/${successTx}` : `https://testnet.circle.com/en/transactions/${successTx}`}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <ExternalLink className="size-4" /> {successRoute === "starknet-private" ? "Private transfer transaction" : "Source transaction"}
+                  <ExternalLink className="size-4" /> {successRoute === "starknet-private" || successRoute === "starknet-public" ? "Starknet transaction" : "Source transaction"}
                 </Button>
               ) : null}
             </div>
@@ -389,17 +390,6 @@ function SendForm() {
             />
             <LookupStatus lookup={lookup} onRetry={() => setLookupRetry((value) => value + 1)} />
           </div>
-          <QuoteCard
-            grossDebit={denom * 1_000_000n}
-            privacyNote="The source burn and escrow amount are public. Recipient ownership and the claimed balance remain private."
-          />
-          <SendProgress stage={stage} />
-          {recovery && busy ? (
-            <p className="rounded-xl border border-brand-muted bg-brand-mist px-4 py-3 text-left text-xs text-muted-foreground">
-              Claim package encrypted. Approve the source wallet when prompted.
-              <span className="mt-2 block break-all font-mono text-[11px] text-foreground">{recovery.claimSecret}</span>
-            </p>
-          ) : null}
           <MotionPillButton
             data-testid="send-submit"
             className="w-full min-h-12 text-base"

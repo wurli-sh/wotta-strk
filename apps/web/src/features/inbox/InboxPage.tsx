@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { Inbox, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/PageShell";
 import { TabContentShimmer } from "@/components/PageShimmer";
+import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { Button } from "@/components/ui/Button";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { UsdcIcon } from "@/components/UsdcIcon";
@@ -122,13 +123,13 @@ function TableShell({
 
 export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const router = useRouter();
+  const { vault, unlocking, unlock, sessionReady } = usePrivacyVault();
   const [tab, setTab] = useState<Tab>("incoming");
   const [incoming, setIncoming] = useState<Row[]>([]);
   const [sent, setSent] = useState<Row[]>([]);
   const [history, setHistory] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const initialRefresh = useRef(false);
 
   const refresh = useCallback(async (hold = true) => {
     setBusy(true);
@@ -177,10 +178,25 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   }, []);
 
   useEffect(() => {
-    if (initialRefresh.current) return;
-    initialRefresh.current = true;
+    void (async () => {
+      const { data } = await createClient().auth.getSession();
+      setSignedIn(Boolean(data.session?.access_token));
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!signedIn || !vault) return;
     void refresh(false);
-  }, [refresh]);
+  }, [signedIn, vault, refresh]);
+
+  async function unlockInbox() {
+    try {
+      await unlock();
+      await refresh();
+    } catch (error) {
+      toast.error(userFacingError(error, "Couldn't unlock inbox"));
+    }
+  }
 
   if (signedIn === false) {
     const signedOut = (
@@ -188,7 +204,54 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
         Sign in from Account, then return here.
       </div>
     );
-    return embedded ? signedOut : <PageShell title="Inbox" subtitle="Sign in to see what’s waiting." maxWidth="lg">{signedOut}</PageShell>;
+    return embedded ? signedOut : <PageShell title="Inbox" subtitle="Sign in to see what's waiting." maxWidth="lg">{signedOut}</PageShell>;
+  }
+
+  if (signedIn === null || !sessionReady) {
+    const waiting = (
+      <TableShell
+        columns={["Amount", "Expires at", "Status", ""]}
+        loading
+        empty={false}
+        emptyMessage=""
+        mobile={<InboxMobileRowsSkeleton rows={2} />}
+      >
+        {null}
+      </TableShell>
+    );
+    return embedded ? waiting : (
+      <PageShell title="Inbox" subtitle="Payments waiting for a private Starknet claim." maxWidth="lg">
+        {waiting}
+      </PageShell>
+    );
+  }
+
+  if (signedIn && !vault) {
+    const locked = (
+      <div className="flex flex-col items-center gap-4 overflow-hidden rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center shadow-card">
+        <Inbox className="size-10 text-muted-foreground" aria-hidden />
+        <div className="space-y-2">
+          <h2 className="text-base font-semibold text-foreground">Unlock your inbox</h2>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+            Authorize Ready once to decrypt payments and browse incoming, sent, and history.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          className="min-w-[10rem]"
+          disabled={unlocking}
+          aria-busy={unlocking}
+          onClick={() => void unlockInbox()}
+        >
+          {unlocking ? "Unlocking…" : "Unlock inbox"}
+        </Button>
+      </div>
+    );
+    return embedded ? locked : (
+      <PageShell title="Inbox" subtitle="Unlock with Ready to view your payments." maxWidth="lg">
+        {locked}
+      </PageShell>
+    );
   }
 
   const loading = signedIn === null || busy;

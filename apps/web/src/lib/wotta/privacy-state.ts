@@ -62,6 +62,45 @@ export async function unlockPrivacyVault(
 ): Promise<PrivacyVault> {
   const typedData = unlockTypedData(account.address, config.poolAddress);
   const signature = stark.formatSignature(await account.signMessage(typedData));
+  persistUnlockSession(account.address, config.poolAddress, signature);
+  return vaultFromSignature(account.address, config.poolAddress, signature);
+}
+
+/** Restore an inbox unlock from this browser tab without re-signing Ready. */
+export async function restorePrivacyVaultFromSession(
+  wallet: string,
+  config: DirectPrivacyConfig,
+): Promise<PrivacyVault | null> {
+  const signature = readUnlockSession(wallet, config.poolAddress);
+  if (!signature) return null;
+  const storageKey = stateStorageKey(wallet, config.poolAddress);
+  if (!localStorage.getItem(storageKey)) return null;
+  try {
+    return await vaultFromSignature(wallet, config.poolAddress, signature);
+  } catch {
+    clearUnlockSession(wallet, config.poolAddress);
+    return null;
+  }
+}
+
+export function clearAllUnlockSessions(): void {
+  if (typeof window === "undefined") return;
+  for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+    const key = sessionStorage.key(index);
+    if (key?.startsWith(UNLOCK_SESSION_PREFIX)) sessionStorage.removeItem(key);
+  }
+}
+
+export function clearUnlockSession(wallet: string, pool: string): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(unlockSessionKey(wallet, pool));
+}
+
+async function vaultFromSignature(
+  wallet: string,
+  pool: string,
+  signature: string[],
+): Promise<PrivacyVault> {
   const material = new TextEncoder().encode(signature.join(":"));
   const digest = await crypto.subtle.digest("SHA-256", material);
   const key = await crypto.subtle.importKey(
@@ -71,7 +110,7 @@ export async function unlockPrivacyVault(
     false,
     ["encrypt", "decrypt"],
   );
-  const storageKey = stateStorageKey(account.address, config.poolAddress);
+  const storageKey = stateStorageKey(wallet, pool);
   const stored = localStorage.getItem(storageKey);
   const state = stored ? await decryptState(stored, key) : {
     version: 1 as const,
@@ -80,6 +119,29 @@ export async function unlockPrivacyVault(
   const vault = new PrivacyVault(storageKey, key, state);
   if (!stored) await vault.save();
   return vault;
+}
+
+const UNLOCK_SESSION_PREFIX = "wotta:privacy-unlock-session:v1:";
+
+function persistUnlockSession(wallet: string, pool: string, signature: string[]): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(unlockSessionKey(wallet, pool), JSON.stringify(signature));
+}
+
+function readUnlockSession(wallet: string, pool: string): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(unlockSessionKey(wallet, pool));
+    if (!raw) return null;
+    const signature = JSON.parse(raw) as string[];
+    return Array.isArray(signature) && signature.length > 0 ? signature : null;
+  } catch {
+    return null;
+  }
+}
+
+function unlockSessionKey(wallet: string, pool: string): string {
+  return `${UNLOCK_SESSION_PREFIX}${BigInt(wallet).toString(16)}:${BigInt(pool).toString(16)}`;
 }
 
 export function generateViewingKey(): bigint {

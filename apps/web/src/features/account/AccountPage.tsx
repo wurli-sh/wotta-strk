@@ -5,11 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import type { Session } from "@supabase/supabase-js";
 import { PageShell } from "@/components/PageShell";
-import { TabContentShimmer } from "@/components/PageShimmer";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { HandlesPanel } from "@/components/account/HandlesPanel";
-import { WalletPanel } from "@/components/account/WalletPanel";
-import { PrivateBalancePanel } from "@/features/account/PrivateBalancePanel";
+import { WalletAndBalancePanel } from "@/components/account/WalletAndBalancePanel";
 import type { MeResponse } from "@/lib/api/client";
 import { fetchMe, mergeMeResponse, notifySessionChanged, refreshSupabaseSession, syncWottaSession } from "@/lib/auth";
 import { userFacingError } from "@/lib/errors";
@@ -181,13 +179,7 @@ function AccountContent() {
               items={tabs}
             />
           </div>
-          <TabContentShimmer
-            holdKey={tab}
-            skeleton={
-              tab === "wallet" ? <WalletPanelSkeleton /> : <HandlesPanelSkeleton />
-            }
-          >
-            {tab === "handles" ? (
+          {tab === "handles" ? (
               <HandlesPanel
                 me={me}
                 session={session}
@@ -195,44 +187,39 @@ function AccountContent() {
                   void refreshAccount({ hold: true });
                 }}
               />
-            ) : null}
-            {tab === "wallet" ? (
-              <div className="space-y-4">
-                <WalletPanel
-                  me={me}
-                  autoOpenConnect={autoOpenWallet}
-                  onLinked={async (linkedMe) => {
-                    const nextMe: MeResponse = {
-                      profile: linkedMe.profile ?? me?.profile ?? null,
-                      identities: linkedMe.identities.length ? linkedMe.identities : me?.identities ?? [],
-                      wallet: linkedMe.wallet
-                        ? {
-                            address: linkedMe.wallet.address,
-                            inbox_pubkey: linkedMe.wallet.inbox_pubkey,
-                            chain_id: me?.wallet?.chain_id ?? "SN_SEPOLIA",
-                            key_version: me?.wallet?.key_version ?? 1,
-                            private_identity_address:
-                              linkedMe.wallet.private_identity_address ?? me?.wallet?.private_identity_address,
-                            privacy_pool_address:
-                              linkedMe.wallet.privacy_pool_address ?? me?.wallet?.privacy_pool_address,
-                            private_identity_verified_at:
-                              me?.wallet?.private_identity_verified_at ?? new Date().toISOString(),
-                          }
-                        : null,
-                    };
-                    if (linkedMe.wallet) {
-                      setMe((prev) => mergeMeResponse(prev, nextMe));
-                      notifySessionChanged();
-                      return;
-                    }
-                    setMe((prev) => (prev ? { ...prev, wallet: null } : nextMe));
-                    void refreshAccount({ hold: true });
-                  }}
-                />
-                <PrivateBalancePanel wallet={me?.wallet ?? null} />
-              </div>
-            ) : null}
-          </TabContentShimmer>
+            ) : (
+              <WalletAndBalancePanel
+                me={me}
+                autoOpenConnect={autoOpenWallet}
+                onLinked={async (linkedMe) => {
+                  const nextMe: MeResponse = {
+                    profile: linkedMe.profile ?? me?.profile ?? null,
+                    identities: linkedMe.identities.length ? linkedMe.identities : me?.identities ?? [],
+                    wallet: linkedMe.wallet
+                      ? {
+                          address: linkedMe.wallet.address,
+                          inbox_pubkey: linkedMe.wallet.inbox_pubkey,
+                          chain_id: me?.wallet?.chain_id ?? "SN_SEPOLIA",
+                          key_version: me?.wallet?.key_version ?? 1,
+                          private_identity_address:
+                            linkedMe.wallet.private_identity_address ?? me?.wallet?.private_identity_address,
+                          privacy_pool_address:
+                            linkedMe.wallet.privacy_pool_address ?? me?.wallet?.privacy_pool_address,
+                          private_identity_verified_at:
+                            me?.wallet?.private_identity_verified_at ?? new Date().toISOString(),
+                        }
+                      : null,
+                  };
+                  if (linkedMe.wallet) {
+                    setMe((prev) => mergeMeResponse(prev, nextMe));
+                    notifySessionChanged();
+                    return;
+                  }
+                  setMe((prev) => (prev ? { ...prev, wallet: null } : nextMe));
+                  void refreshAccount({ hold: true });
+                }}
+              />
+            )}
         </>
       ) : null}
     </PageShell>

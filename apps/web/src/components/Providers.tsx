@@ -3,13 +3,15 @@
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 import { SessionSync } from "@/components/SessionSync";
+import { PrivacyVaultProvider } from "@/components/PrivacyVaultProvider";
 import { SourceWalletProvider } from "@/components/SourceWalletProvider";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <SourceWalletProvider>
-      <SessionSync />
-      {children}
+      <PrivacyVaultProvider>
+        <SessionSync />
+        {children}
       <Toaster
         position="top-right"
         richColors
@@ -23,6 +25,7 @@ export function Providers({ children }: { children: ReactNode }) {
           duration: 4500,
         }}
       />
+      </PrivacyVaultProvider>
     </SourceWalletProvider>
   );
 }

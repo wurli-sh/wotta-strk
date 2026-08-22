@@ -11,7 +11,6 @@ import { buttonTap } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 import {
   fetchMe,
-  notifySessionChanged,
   signOutSupabase,
   syncWottaSession,
   type MeResponse,
@@ -22,6 +21,7 @@ import { SignInModal } from "@/components/SignInModal";
 import { GoogleIcon, XBrandIcon } from "@/components/icons";
 import { routeLogoPath } from "@/lib/crypto-icons";
 import { useSourceWallet } from "@/components/SourceWalletProvider";
+import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { apiFetch } from "@/lib/api/client";
 
 const NAV_LINKS = [
@@ -84,6 +84,7 @@ export function IslandNav() {
   const menuRef = useRef<HTMLDivElement>(null);
   const lastSessionToken = useRef<string | null | undefined>(undefined);
   const { sources, clearSources } = useSourceWallet();
+  const { clearVault } = usePrivacyVault();
 
   function prefetchInbox() {
     if (!session?.access_token) return;
@@ -118,7 +119,6 @@ export function IslandNav() {
         if (lastSessionToken.current === token) return;
         lastSessionToken.current = token;
         setSession(s);
-        notifySessionChanged();
       });
       return () => sub.subscription.unsubscribe();
     } catch {
@@ -129,11 +129,11 @@ export function IslandNav() {
   useEffect(() => {
     if (session) void onSessionEstablished();
     else setMe(null);
-  }, [session, pathname]);
+  }, [session]);
 
   useEffect(() => {
     function onSession() {
-      if (session) void onSessionEstablished();
+      if (session) void refreshMe();
     }
     window.addEventListener(AUTH_SESSION_EVENT, onSession);
     return () => window.removeEventListener(AUTH_SESSION_EVENT, onSession);
@@ -160,6 +160,7 @@ export function IslandNav() {
     setMenuOpen(false);
     try {
       await signOutSupabase();
+      clearVault();
       setMe(null);
       setSession(null);
       toast.success("Signed out");

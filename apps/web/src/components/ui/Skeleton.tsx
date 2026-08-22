@@ -38,13 +38,15 @@ function PageHeaderSkeleton({
 
 export function HandleRowSkeleton() {
   return (
-    <div className="radius-surface-inner flex items-center gap-3 border border-border/70 px-4 py-3">
-      <Skeleton className="size-8 shrink-0 rounded-lg" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <Skeleton className="h-4 w-40 max-w-[70%]" />
-        <Skeleton className="h-3 w-24" />
+    <div className="radius-surface-inner flex items-center justify-between gap-3 border border-border/70 px-4 py-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <Skeleton className="size-8 shrink-0 rounded-lg" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-40 max-w-[70%]" />
+          <Skeleton className="h-3 w-24" />
+        </div>
       </div>
-      <Skeleton className="radius-control h-8 w-16 shrink-0" />
+      <Skeleton className="radius-control h-8 w-[4.5rem] shrink-0" />
     </div>
   );
 }
@@ -85,7 +87,7 @@ export function HandlesPanelSkeleton() {
   );
 }
 
-/** Full Wallet tab card skeleton — header + address + action. */
+/** Full Wallet tab card skeleton — wallet address + private balance. */
 export function WalletPanelSkeleton() {
   return (
     <section
@@ -95,7 +97,7 @@ export function WalletPanelSkeleton() {
       aria-label="Loading wallet"
     >
       <PanelHeaderSkeleton />
-      <div className="space-y-3 p-5 sm:p-6">
+      <div className="space-y-5 p-5 sm:p-6">
         <div className="radius-surface-inner flex items-center gap-3 border border-brand-muted/40 bg-brand-mist/60 px-4 py-3">
           <Skeleton className="size-5 shrink-0 rounded-full" />
           <Skeleton className="h-4 flex-1" />
@@ -103,6 +105,12 @@ export function WalletPanelSkeleton() {
         <div className="flex flex-wrap gap-2">
           <Skeleton className="radius-control h-9 w-28" />
           <Skeleton className="radius-control h-9 w-24" />
+        </div>
+        <div className="border-t border-border/70 pt-5">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="mt-3 h-10 w-32" />
+          <Skeleton className="mt-3 h-3 w-44 max-w-full" />
+          <Skeleton className="radius-control mt-4 h-10 w-36" />
         </div>
       </div>
     </section>
@@ -112,25 +120,32 @@ export function WalletPanelSkeleton() {
 export function NoteCardSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn(
-        "radius-surface mx-auto w-full max-w-xl border border-border/80 bg-card p-2.5 shadow-card sm:p-3",
-        className,
-      )}
+      className={cn("relative z-0 mx-auto w-full max-w-[420px]", className)}
       role="status"
       aria-busy="true"
       aria-label="Loading note"
     >
-      <div className="radius-surface-inner relative overflow-hidden border border-brand-dark/25 bg-brand-mist p-5 sm:p-6">
-        <div className="flex justify-end">
-          <Skeleton className="radius-control h-6 w-24" />
+      <div className="radius-surface overflow-hidden border border-border/70 bg-card p-2 shadow-card">
+        <div className="relative isolate overflow-hidden rounded-[calc(var(--radius-surface)-0.35rem)] border border-border/60 bg-muted p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="size-5 rounded-md" />
+              <div className="space-y-2">
+                <Skeleton className="h-3.5 w-12" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <Skeleton className="radius-control h-6 w-[4.75rem]" />
+          </div>
+          <Skeleton className="mt-4 h-9 w-11 rounded-md" />
+          <div className="mt-5 space-y-3">
+            <Skeleton className="h-10 w-40" />
+            <Skeleton className="h-5 w-52 max-w-full" />
+          </div>
         </div>
-        <Skeleton className="radius-control mt-6 h-10 w-28" />
-        <Skeleton className="mt-3 h-4 w-36" />
-        <Skeleton className="mt-5 h-4 w-full max-w-xs" />
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 px-1">
-        <Skeleton className="radius-control col-span-1 h-12 w-full" />
-        <Skeleton className="radius-control col-span-2 h-12 w-full" />
+        <div className="px-1 pb-1 pt-2">
+          <Skeleton className="radius-surface-inner h-12 w-full" />
+        </div>
       </div>
     </div>
   );

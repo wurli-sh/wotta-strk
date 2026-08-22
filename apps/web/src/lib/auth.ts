@@ -127,13 +127,24 @@ export async function signOutSupabase() {
   notifySessionChanged();
 }
 
+let syncInFlight: Promise<void> | undefined;
+
+async function runSessionSync(): Promise<void> {
+  const token = await getAccessToken();
+  if (!token) return;
+  await apiFetch("/v1/session/sync", { token, method: "POST", body: {} });
+}
+
 /** Reconcile OAuth identities and deliver pending inbox items after sign-in or link. */
 export async function syncWottaSession(options?: { notify?: boolean }): Promise<void> {
   try {
-    const token = await getAccessToken();
-    if (!token) return;
-    await apiFetch("/v1/session/sync", { token, method: "POST", body: {} });
-    if (options?.notify !== false) notifySessionChanged();
+    if (!syncInFlight) {
+      syncInFlight = runSessionSync().finally(() => {
+        syncInFlight = undefined;
+      });
+    }
+    await syncInFlight;
+    if (options?.notify) notifySessionChanged();
   } catch {
     /* sync is best-effort; pages still load me from /v1/me */
   }

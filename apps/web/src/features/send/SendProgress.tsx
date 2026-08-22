@@ -10,6 +10,7 @@ const LABELS: Partial<Record<SendStage, string>> = {
   resolving: "Looking up recipient…",
   quoting: "Fetching quote…",
   approving: "Waiting for approval…",
+  depositing: "Depositing to escrow…",
   submitting: "Confirm source payment…",
   delivering: "Saving encrypted delivery…",
   connecting_source: "Connecting source wallet…",

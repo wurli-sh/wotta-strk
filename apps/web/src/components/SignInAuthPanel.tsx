@@ -12,7 +12,7 @@ import {
   toSupabaseProvider,
   type WottaOAuthProvider,
 } from "@/lib/supabase/providers";
-import { notifySessionChanged, syncWottaSession } from "@/lib/auth";
+import { syncWottaSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -93,8 +93,7 @@ export function SignInAuthPanel({
         return;
       }
       toast.success("Signed in");
-      await syncWottaSession();
-      notifySessionChanged();
+      await syncWottaSession({ notify: true });
       onAuthenticated?.();
     } catch (e) {
       toast.error(userFacingError(e, "Could not verify code"));
