@@ -1,0 +1,484 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Wotta API",
+    "version": "1.0.0",
+    "description": "Phase 2 API. Routes require bearer authentication except health, routes, and OpenAPI."
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Health"
+          }
+        }
+      }
+    },
+    "/v1/routes": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Route manifest"
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Profile, active OAuth identities, Ready binding, and private identity"
+          }
+        }
+      }
+    },
+    "/v1/session/sync": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Reconcile verified Supabase identities and deliver eligible pending claims"
+          },
+          "409": {
+            "description": "Identity belongs to another profile"
+          }
+        }
+      }
+    },
+    "/v1/resolve": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "google",
+                      "x"
+                    ]
+                  },
+                  "identifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 320
+                  }
+                },
+                "required": [
+                  "provider",
+                  "identifier"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed public/private recipient descriptor"
+          }
+        }
+      }
+    },
+    "/v1/wallet/challenge": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  }
+                },
+                "required": [
+                  "address"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SNIP-12 challenge"
+          }
+        }
+      }
+    },
+    "/v1/wallet/link": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "challenge": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16384
+                  },
+                  "signature": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "inboxPublicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  }
+                },
+                "required": [
+                  "challenge",
+                  "signature",
+                  "inboxPublicKey"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Wallet binding"
+          }
+        }
+      }
+    },
+    "/v1/wallet/private-identity": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "identityAddress": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  }
+                },
+                "required": [
+                  "identityAddress"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "On-chain verified private identity binding"
+          }
+        }
+      }
+    },
+    "/v1/quotes": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "private"
+                    ]
+                  },
+                  "deliveryKind": {
+                    "type": "string",
+                    "enum": [
+                      "registered",
+                      "pending",
+                      "direct"
+                    ]
+                  },
+                  "denomination": {
+                    "type": "string",
+                    "enum": [
+                      "1000000",
+                      "10000000",
+                      "50000000",
+                      "100000000"
+                    ]
+                  },
+                  "routeId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "claimHash": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  },
+                  "refundHash": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  },
+                  "publicRefundRecipient": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "sourceAccount": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "id",
+                  "mode",
+                  "deliveryKind",
+                  "denomination",
+                  "routeId",
+                  "claimHash",
+                  "expiresAt",
+                  "sourceAccount"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed quote"
+          }
+        }
+      }
+    },
+    "/v1/intents": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Current user's payment activity including chain-derived escrow status"
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "private"
+                    ]
+                  },
+                  "deliveryKind": {
+                    "type": "string",
+                    "enum": [
+                      "registered",
+                      "pending",
+                      "direct"
+                    ]
+                  },
+                  "denomination": {
+                    "type": "string",
+                    "enum": [
+                      "1000000",
+                      "10000000",
+                      "50000000",
+                      "100000000"
+                    ]
+                  },
+                  "routeId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "claimHash": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  },
+                  "refundHash": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  },
+                  "publicRefundRecipient": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]+$"
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "id",
+                  "mode",
+                  "deliveryKind",
+                  "denomination",
+                  "routeId",
+                  "claimHash",
+                  "expiresAt"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Intent"
+          }
+        }
+      }
+    },
+    "/v1/intents/{id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Owned payment intent and chain-derived escrow status"
+          }
+        }
+      }
+    },
+    "/v1/intents/{id}/source-submitted": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "txHash": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 512
+                  }
+                },
+                "required": [
+                  "txHash"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated intent"
+          }
+        }
+      }
+    },
+    "/v1/intents/{id}/delivery": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ciphertext": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 262144
+                  },
+                  "nonce": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{32}$"
+                  },
+                  "ephemeralPublicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "algorithm": {
+                    "type": "string",
+                    "const": "x25519-xsalsa20-poly1305"
+                  },
+                  "recipient": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "email",
+                          "google",
+                          "x"
+                        ]
+                      },
+                      "identifier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 320
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "identifier"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "ciphertext",
+                  "nonce",
+                  "ephemeralPublicKey",
+                  "algorithm",
+                  "recipient"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Encrypted delivery stored"
+          }
+        }
+      }
+    },
+    "/v1/notes": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Encrypted recipient inbox notes"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
