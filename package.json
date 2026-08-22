@@ -29,6 +29,8 @@
     "db:migrate": "bash scripts/db/migrate.sh",
     "keys:sepolia-privacy": "node --experimental-strip-types scripts/ops/init-sepolia-privacy-keys.ts",
     "account:sepolia-promote": "node --experimental-strip-types scripts/ops/promote-sepolia-account.ts",
+    "reset:sepolia-privacy-dev": "bash scripts/ops/reset-sepolia-privacy-dev.sh",
+    "declare:sepolia-privacy-identity": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/declare-privacy-identity.ts",
     "deploy:sepolia-direct-escrow": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/deploy-direct-privacy-escrow.ts",
     "deploy:sepolia-cctp": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/deploy-sepolia-cctp.ts",
     "deploy:mainnet": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/deploy.ts",
