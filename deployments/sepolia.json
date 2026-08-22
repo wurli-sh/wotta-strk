@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "chainId": "SN_SEPOLIA",
+  "network": "sepolia",
+  "rpcUrlEnv": "STARKNET_RPC_URL",
+  "manifestHash": "debaf151ff7840cd9c2df97a29506c95054bc03186d36fc79516fe2f16d7c52d",
+  "generatedAt": "2026-08-21T17:09:28.189Z",
+  "verified": false,
+  "verificationNotes": "Direct privacy and destination CCTP contracts are deployed on Sepolia. Source-chain live burns remain route-specific smoke evidence.",
+  "usdc": "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
+  "strk20Pool": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+  "strk20ClassHash": "0x056ab118a8a6e38efc93ad758cefe909fee421fa931ce3cf72df624d345623b2",
+  "directPrivacy": {
+    "status": "verified",
+    "source": "starkware-industries/pripay@4e4e9ac2ea70c625a6b0a52a69f85a2cddf5e3ec",
+    "poolAddress": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+    "poolClassHash": "0x056ab118a8a6e38efc93ad758cefe909fee421fa931ce3cf72df624d345623b2",
+    "identityClassHash": "0x017be2d66359f439b734eafce8eb23df46e2baaa937aa7f67d5ffd2ebf000af6",
+    "usdc": "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
+    "proverUpstream": "https://transaction-prover.alpha-sepolia.sw-dev.io",
+    "discoveryUpstream": "https://discovery-service.alpha-sepolia.sw-dev.io",
+    "verificationNotes": "PriPay-compatible Sepolia pool, privacy identity class, hosted prover, discovery service, Circle CCTP router, and four fixed-denomination Wotta escrows are getter-verified.",
+    "escrow": {
+      "status": "verified",
+      "address": "0x7e5b61d637f7c5c557ac4814202a7c922ebfe3233d51c9ec266a6c3c3826e8c",
+      "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "denomination": "1000000",
+      "deploymentTxHash": "0x1a0db591c7e327dc1da08f2df16d9bf760d072f7d1723adfd17f32499bf3a04",
+      "deployedBlock": 13818143,
+      "verificationNotes": "Wotta 1-USDC escrow deployed and getter-verified against the compatible PriPay Sepolia pool and native test USDC."
+    }
+  },
+  "deployer": {
+    "address": "0x7b54db60f62d919197e17347f0e05e0dfc2ba1ce6cd5e5f992b4d95690c90d0",
+    "keySource": "env:STARKNET_DEPLOYER_PRIVATE_KEY"
+  },
+  "tooling": {
+    "starknetJs": "10.5.0",
+    "walletApiSchema": "0.10.3",
+    "scarb": "2.17.0",
+    "snforge": "0.59.0"
+  },
+  "router": {
+    "classHash": "0x3e6e71a9f2384f46e596e9842b620f8badcecaaf1ab9e19270ebc8f03f2bd6",
+    "address": "0x65cfc439d65bf223bd0b7568de12c8af2e6060daf8f9fd6a4bbe56c4984b8b8",
+    "declareTxHash": "0x1265ae07a79ac72c82222d618707013607eece4261076149697d780dd3c8dc9",
+    "deployTxHash": "0x1f587edf99ca8271c661111c5de1fcaf00dd0fa009aa12bef4b6f953fb02d0d",
+    "deployedBlock": 13827147,
+    "constructorCalldata": [
+      "0x04db7926C64f1f32a840F3Fa95cB551f3801a3600Bae87aF87807A54DCE12Fe8",
+      "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
+      "0x04bDdE1E09a4B09a2F95d893D94a967b7717eB85A3f6dEcA8c080Ee01fBc3370"
+    ],
+    "verification": {
+      "status": "verified",
+      "checkedAt": "2026-08-21T17:09:28.189Z",
+      "notes": "Getter-verified Circle CCTP V2 MessageTransmitter, TokenMessengerMinter, and Starknet Sepolia USDC bindings."
+    }
+  },
+  "pools": [
+    {
+      "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "address": "0x757814eddbd5359de1fc8ec01f7b29a38ef6602e35a2acf6f6d2915954f3d89",
+      "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "deployTxHash": "0x2233a2dd3bb65f024bafb91dd4f8a60479d0da6a5e018a9116f2f84f34151f1",
+      "deployedBlock": 13827162,
+      "constructorCalldata": [
+        "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+        "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
+        "0x65cfc439d65bf223bd0b7568de12c8af2e6060daf8f9fd6a4bbe56c4984b8b8",
+        "1000000",
+        "0x534e5f5345504f4c4941"
+      ],
+      "verification": {
+        "status": "verified",
+        "checkedAt": "2026-08-21T17:08:07.252Z",
+        "notes": "Getter-verified against Circle Sepolia USDC, the compatible private pool, and Wotta CCTP router."
+      },
+      "key": "pool1",
+      "denomination": "1000000"
+    },
+    {
+      "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "address": "0x254a29ce9e19fc5fe5fce0cf55a67e4d6a067645cf74443cdffbdfcfade7c7a",
+      "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "deployTxHash": "0x247412ceecf5d495582ea87f41d8e48757107413cc247f918e1be3c8cafae01",
+      "deployedBlock": 13827177,
+      "constructorCalldata": [
+        "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+        "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
+        "0x65cfc439d65bf223bd0b7568de12c8af2e6060daf8f9fd6a4bbe56c4984b8b8",
+        "10000000",
+        "0x534e5f5345504f4c4941"
+      ],
+      "verification": {
+        "status": "verified",
+        "checkedAt": "2026-08-21T17:08:35.902Z",
+        "notes": "Getter-verified against Circle Sepolia USDC, the compatible private pool, and Wotta CCTP router."
+      },
+      "key": "pool10",
+      "denomination": "10000000"
+    },
+    {
+      "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "address": "0x5c5c6f230c248c66429c85df4dd82dc77153f497552c0c8ddaa07a87ffcc2af",
+      "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "deployTxHash": "0x387b48c3d1876da15a102cb1eb0cc43cbef665cc554f6d621081edaced8d44",
+      "deployedBlock": 13827194,
+      "constructorCalldata": [
+        "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+        "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
+        "0x65cfc439d65bf223bd0b7568de12c8af2e6060daf8f9fd6a4bbe56c4984b8b8",
+        "50000000",
+        "0x534e5f5345504f4c4941"
+      ],
+      "verification": {
+        "status": "verified",
+        "checkedAt": "2026-08-21T17:09:02.239Z",
+        "notes": "Getter-verified against Circle Sepolia USDC, the compatible private pool, and Wotta CCTP router."
+      },
+      "key": "pool50",
+      "denomination": "50000000"
+    },
+    {
+      "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "address": "0x3a3015d814efdeeed31f1cfb7e34bd76e060e74a6252e852f1d7240b19a1a53",
+      "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "deployTxHash": "0x525f878818fb4a8c1ffee96187b0246f246adb8e41de8c76d77b7824dccb89a",
+      "deployedBlock": 13827210,
+      "constructorCalldata": [
+        "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+        "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
+        "0x65cfc439d65bf223bd0b7568de12c8af2e6060daf8f9fd6a4bbe56c4984b8b8",
+        "100000000",
+        "0x534e5f5345504f4c4941"
+      ],
+      "verification": {
+        "status": "verified",
+        "checkedAt": "2026-08-21T17:09:27.462Z",
+        "notes": "Getter-verified against Circle Sepolia USDC, the compatible private pool, and Wotta CCTP router."
+      },
+      "key": "pool100",
+      "denomination": "100000000"
+    }
+  ],
+  "evidence": {
+    "root": "evidence",
+    "walletSmokeFlow": "phase1-wallet-api",
+    "liveSmokeFlow": "phase1-live-smoke"
+  }
+}

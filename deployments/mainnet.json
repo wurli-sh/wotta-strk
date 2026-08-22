@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "chainId": "SN_MAIN",
+  "network": "mainnet",
+  "rpcUrlEnv": "STARKNET_RPC_URL",
+  "manifestHash": "5ab89dedf05bb46e2dedd0a126fdf1685e7b226bd279c031010e01d41d27fe8d",
+  "generatedAt": "2026-08-20T08:16:53.788Z",
+  "verified": false,
+  "verificationNotes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded.",
+  "usdc": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
+  "strk20Pool": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+  "strk20ClassHash": "UNKNOWN",
+  "deployer": {
+    "address": "0xFbc83d9aDA8F06242a528b62A63728e1EF7DE066",
+    "keySource": "env:STARKNET_DEPLOYER_PRIVATE_KEY"
+  },
+  "tooling": {
+    "starknetJs": "10.5.0",
+    "walletApiSchema": "0.10.3",
+    "scarb": "2.17.0",
+    "snforge": "0.59.0"
+  },
+  "router": {
+    "classHash": "UNDECLARED",
+    "address": "UNDEPLOYED",
+    "declareTxHash": "PENDING",
+    "deployTxHash": "PENDING",
+    "deployedBlock": "PENDING",
+    "constructorCalldata": [],
+    "verification": {
+      "status": "pending",
+      "checkedAt": "2026-08-21T17:09:37.088Z",
+      "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+    }
+  },
+  "pools": [
+    {
+      "classHash": "UNDECLARED",
+      "address": "UNDEPLOYED",
+      "declareTxHash": "PENDING",
+      "deployTxHash": "PENDING",
+      "deployedBlock": "PENDING",
+      "constructorCalldata": [],
+      "verification": {
+        "status": "pending",
+        "checkedAt": "2026-08-21T17:09:37.088Z",
+        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+      },
+      "key": "pool1",
+      "denomination": "1000000"
+    },
+    {
+      "classHash": "UNDECLARED",
+      "address": "UNDEPLOYED",
+      "declareTxHash": "PENDING",
+      "deployTxHash": "PENDING",
+      "deployedBlock": "PENDING",
+      "constructorCalldata": [],
+      "verification": {
+        "status": "pending",
+        "checkedAt": "2026-08-21T17:09:37.088Z",
+        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+      },
+      "key": "pool10",
+      "denomination": "10000000"
+    },
+    {
+      "classHash": "UNDECLARED",
+      "address": "UNDEPLOYED",
+      "declareTxHash": "PENDING",
+      "deployTxHash": "PENDING",
+      "deployedBlock": "PENDING",
+      "constructorCalldata": [],
+      "verification": {
+        "status": "pending",
+        "checkedAt": "2026-08-21T17:09:37.088Z",
+        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+      },
+      "key": "pool50",
+      "denomination": "50000000"
+    },
+    {
+      "classHash": "UNDECLARED",
+      "address": "UNDEPLOYED",
+      "declareTxHash": "PENDING",
+      "deployTxHash": "PENDING",
+      "deployedBlock": "PENDING",
+      "constructorCalldata": [],
+      "verification": {
+        "status": "pending",
+        "checkedAt": "2026-08-21T17:09:37.088Z",
+        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+      },
+      "key": "pool100",
+      "denomination": "100000000"
+    }
+  ],
+  "evidence": {
+    "root": "evidence",
+    "walletSmokeFlow": "phase1-wallet-api",
+    "liveSmokeFlow": "phase1-live-smoke"
+  }
+}
