@@ -9,6 +9,14 @@ export const SN_MAIN_FELT = shortString.encodeShortString(SN_MAIN);
 export const SN_SEPOLIA = "SN_SEPOLIA" as const;
 export const SN_SEPOLIA_FELT = shortString.encodeShortString(SN_SEPOLIA);
 
+/** On-chain SNIP-12 domain baked into the borrowed Sepolia privacy identity class. */
+export const SEPOLIA_BORROWED_IDENTITY_SNIP12_DOMAIN = {
+  name: "PriPay",
+  version: "1",
+  chainId: SN_SEPOLIA,
+  revision: "1",
+} as const;
+
 export const USDC_MAINNET_ADDRESS = mainnetDeployment.usdc;
 export const MAINNET_ESCROW_POOL_ADDRESS = mainnetDeployment.strk20Pool;
 

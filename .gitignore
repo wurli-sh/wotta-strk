@@ -10,11 +10,6 @@ target/
 artifacts/
 *.tsbuildinfo
 
-# Internal planning docs
-implementation-plan.md
-strk-hk.md
-wotta-idea.md
-
 # Environment and secrets
 .env
 .env.*

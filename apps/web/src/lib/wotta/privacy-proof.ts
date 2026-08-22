@@ -1,3 +1,4 @@
+import { SEPOLIA_BORROWED_IDENTITY_SNIP12_DOMAIN } from "@wotta/shared";
 import {
   CallData,
   hash,
@@ -195,9 +196,8 @@ function authTypedData(invocationHash: string): TypedData {
       Message: [{ name: "hash", type: "felt" }],
     },
     primaryType: "Message",
-    // The deployed compatibility identity is PriPay's audited-by-example class,
-    // so its on-chain SNIP-12 domain is intentionally retained here.
-    domain: { name: "PriPay", version: "1", chainId: "SN_SEPOLIA", revision: "1" },
+    // Borrowed Sepolia identity class; on-chain domain literal is fixed.
+    domain: { ...SEPOLIA_BORROWED_IDENTITY_SNIP12_DOMAIN },
     message: { hash: invocationHash },
   };
 }

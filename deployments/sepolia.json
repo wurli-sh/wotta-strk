@@ -3,7 +3,7 @@
   "chainId": "SN_SEPOLIA",
   "network": "sepolia",
   "rpcUrlEnv": "STARKNET_RPC_URL",
-  "manifestHash": "debaf151ff7840cd9c2df97a29506c95054bc03186d36fc79516fe2f16d7c52d",
+  "manifestHash": "e80af24128b156fdb05bbf9e5f8c4ea215f6f522d326c493290cb0fd8cf3a60e",
   "generatedAt": "2026-08-21T17:09:28.189Z",
   "verified": false,
   "verificationNotes": "Direct privacy and destination CCTP contracts are deployed on Sepolia. Source-chain live burns remain route-specific smoke evidence.",
@@ -12,14 +12,14 @@
   "strk20ClassHash": "0x056ab118a8a6e38efc93ad758cefe909fee421fa931ce3cf72df624d345623b2",
   "directPrivacy": {
     "status": "verified",
-    "source": "starkware-industries/pripay@4e4e9ac2ea70c625a6b0a52a69f85a2cddf5e3ec",
+    "source": "wotta/sepolia-direct-privacy@4e4e9ac2ea70c625a6b0a52a69f85a2cddf5e3ec",
     "poolAddress": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
     "poolClassHash": "0x056ab118a8a6e38efc93ad758cefe909fee421fa931ce3cf72df624d345623b2",
     "identityClassHash": "0x017be2d66359f439b734eafce8eb23df46e2baaa937aa7f67d5ffd2ebf000af6",
     "usdc": "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
     "proverUpstream": "https://transaction-prover.alpha-sepolia.sw-dev.io",
     "discoveryUpstream": "https://discovery-service.alpha-sepolia.sw-dev.io",
-    "verificationNotes": "PriPay-compatible Sepolia pool, privacy identity class, hosted prover, discovery service, Circle CCTP router, and four fixed-denomination Wotta escrows are getter-verified.",
+    "verificationNotes": "Wotta Sepolia direct privacy row: STRK20 pool, privacy identity class, hosted prover, discovery service, Circle CCTP router, and four fixed-denomination Wotta escrows are getter-verified.",
     "escrow": {
       "status": "verified",
       "address": "0x7e5b61d637f7c5c557ac4814202a7c922ebfe3233d51c9ec266a6c3c3826e8c",
@@ -27,7 +27,7 @@
       "denomination": "1000000",
       "deploymentTxHash": "0x1a0db591c7e327dc1da08f2df16d9bf760d072f7d1723adfd17f32499bf3a04",
       "deployedBlock": 13818143,
-      "verificationNotes": "Wotta 1-USDC escrow deployed and getter-verified against the compatible PriPay Sepolia pool and native test USDC."
+      "verificationNotes": "Wotta 1-USDC escrow deployed and getter-verified against the pinned Sepolia STRK20 pool and native test USDC."
     }
   },
   "deployer": {

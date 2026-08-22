@@ -2,7 +2,7 @@
 
 **Status:** implementation underway; the first Sepolia product slice is implemented locally, while live gate evidence remains operator-dependent.
 **Scope:** close Hard Gates 1 and 2 on Sepolia, then ship the Wotta web send flow with the sable-flare visual system and Swoop-only logic/panels.
-**Canonical long-form architecture:** [`../implementation-plan.md`](../implementation-plan.md). This document is the active, testable Sepolia delivery plan and takes precedence where the older mainnet-first plan differs.
+**Note:** this document is the active, testable Sepolia delivery plan.
 
 ## Locked outcome
 

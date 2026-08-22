@@ -72,7 +72,7 @@ async function main(): Promise<void> {
       denomination: DENOMINATION,
       deploymentTxHash: deployment.transaction_hash,
       deployedBlock,
-      verificationNotes: "Wotta 1-USDC escrow deployed and getter-verified against the compatible PriPay Sepolia pool and native test USDC.",
+      verificationNotes: "Wotta 1-USDC escrow deployed and getter-verified against the pinned Sepolia STRK20 pool and native test USDC.",
     },
   };
   manifest.generatedAt = new Date().toISOString();

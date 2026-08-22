@@ -6,7 +6,12 @@ note discovery, and proof construction. This route exists because a fresh Ready
 Sepolia account cannot initialize privacy through Wallet API `0.10.3` alone.
 The mainnet product route remains wallet-managed.
 
-## Compatible components
+Wotta does not call any external payroll app or third-party product API. It pins
+the **Wotta Sepolia direct privacy row**: shared Starknet STRK20 pool, borrowed
+privacy identity class, StarkWare hosted prover/discovery, and Wotta-deployed
+escrows. Upstream reference integrations are documentation provenance only.
+
+## Pinned components
 
 | Component | Sepolia value |
 | --- | --- |
@@ -35,7 +40,7 @@ approval for the pinned pool before sending the first proof transaction.
 ## Identity and key custody
 
 Ready's injected account cannot sign the raw proof invocation expected by the
-direct SDK. Wotta therefore deploys the already-declared PriPay compatibility
+direct SDK. Wotta therefore deploys the already-declared borrowed privacy
 identity class with the Ready address as owner. The identity contract verifies
 the owner's Ready signature. Ready's connected-wallet API cannot forward an
 externally generated V3 `proofFacts` envelope, so the local Vite server submits
@@ -43,6 +48,10 @@ that outer transaction with the testnet deployer account. The submit endpoint
 accepts only `apply_actions` calls to the pinned Sepolia privacy pool; the
 private key never enters the browser bundle. Production must replace this local
 submitter with a rate-limited AVNU SponsoredPrivate or equivalent paymaster.
+
+Proof authorization uses the on-chain SNIP-12 domain literal embedded in that
+borrowed class (`SEPOLIA_BORROWED_IDENTITY_SNIP12_DOMAIN` in `@wotta/shared`).
+Vault unlock uses a separate Wotta-branded SNIP-12 domain in local storage.
 
 Wotta generates a nonzero 200-bit viewing key in the browser. It is encrypted
 with AES-GCM using a key derived from a deterministic Ready-signed SNIP-12
@@ -64,7 +73,7 @@ uses the separately deployed 1-USDC escrow below:
 | Deployment transaction | `0x1a0db591c7e327dc1da08f2df16d9bf760d072f7d1723adfd17f32499bf3a04` |
 | Denomination | `1_000_000` native test-USDC base units (1 USDC) |
 
-It is constructor-bound to the compatible PriPay pool and its native test
+It is constructor-bound to the pinned Sepolia STRK20 pool and its native test
 USDC, with the router deliberately set to zero. The `Stateful private fund`
 flow withdraws a private note to this escrow and invokes its `privacy_invoke`
 entrypoint atomically. It creates a claim secret for the recipient and a

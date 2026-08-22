@@ -21,7 +21,7 @@ Pinned toolchain for Phase 1. Update this file whenever a protocol pin changes.
 | Cairo edition | 2024_07 | Wotta implementation plan section 3 |
 | OpenZeppelin Cairo | 3.0.0 | Wotta implementation plan section 3 |
 | starknet-privacy tag | PRIVACY-0.14.3-RC.0 (`fe52334...`) | Wotta implementation plan section 3 |
-| direct Privacy SDK smoke | `0.14.3-rc.2` (vendored tarball) | PriPay-compatible Sepolia prover/discovery row; see `docs/third-party-privacy-sdk.md` |
+| direct Privacy SDK smoke | `0.14.3-rc.2` (vendored tarball) | Wotta Sepolia direct privacy row; see `docs/third-party-privacy-sdk.md` |
 
 Record live wallet version, STRK20 pool address/class hash, and smoke outcomes here after Task 1A / Task 2.
 
