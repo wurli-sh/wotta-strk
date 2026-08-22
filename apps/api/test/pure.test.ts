@@ -80,9 +80,18 @@ test("verified Sepolia destination admits Starknet publicly but CCTP per route",
   assert.equal(closed.find((route) => route.id === "starknet-public")?.enabled, true);
   assert.equal(closed.find((route) => route.id === "starknet-private")?.enabled, true);
   assert.equal(closed.find((route) => route.id === "base")?.enabled, false);
+  assert.equal(closed.find((route) => route.id === "ethereum")?.enabled, false);
+  assert.equal(closed.find((route) => route.id === "solana")?.enabled, false);
   const baseOnly = routesForConfig(loadConfig({ ...base, CCTP_ADMITTED_ROUTES: "base" }));
   assert.equal(baseOnly.find((route) => route.id === "base")?.enabled, true);
   assert.equal(baseOnly.find((route) => route.id === "ethereum")?.enabled, false);
+  const allCctp = routesForConfig(loadConfig({
+    ...base,
+    CCTP_ADMITTED_ROUTES: "ethereum,arbitrum,base,solana,stellar",
+  }));
+  for (const id of ["ethereum", "arbitrum", "base", "solana", "stellar"] as const) {
+    assert.equal(allCctp.find((route) => route.id === id)?.enabled, true, id);
+  }
   assert.throws(() => loadConfig({ ...base, CCTP_ADMITTED_ROUTES: "unknown" }), /unsupported_admitted_route/);
 });
 test("API errors preserve safe provider/database reasons without exposing hashes", () => {
