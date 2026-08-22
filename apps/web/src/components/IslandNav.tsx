@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { ChevronDown, LogOut, Mail, Wallet } from "lucide-react";
+import { Check, ChevronDown, Copy, LogOut, Mail, Wallet } from "lucide-react";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import { buttonTap } from "@/lib/motion";
@@ -20,7 +20,11 @@ import { createClient } from "@/lib/supabase/client";
 import { SignInModal } from "@/components/SignInModal";
 import { GoogleIcon, XBrandIcon } from "@/components/icons";
 import { routeLogoPath } from "@/lib/crypto-icons";
-import { useSourceWallet } from "@/components/SourceWalletProvider";
+import type { SourceChipKey } from "@/components/SourceChips";
+import {
+  useSourceWallet,
+  type ConnectedSourceWallet,
+} from "@/components/SourceWalletProvider";
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { apiFetch } from "@/lib/api/client";
 
@@ -72,6 +76,37 @@ function truncateAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
+function chainLabel(chain: SourceChipKey): string {
+  const labels: Record<SourceChipKey, string> = {
+    ethereum: "Ethereum",
+    arbitrum: "Arbitrum",
+    base: "Base",
+    solana: "Solana",
+    stellar: "Stellar",
+    starknet: "Starknet",
+  };
+  return labels[chain];
+}
+
+type WalletGroup = {
+  address: string;
+  chains: SourceChipKey[];
+};
+
+function groupWallets(sources: ConnectedSourceWallet[]): WalletGroup[] {
+  const byAddress = new Map<string, SourceChipKey[]>();
+  for (const source of sources) {
+    const key = source.address;
+    const list = byAddress.get(key) ?? [];
+    if (!list.includes(source.chainKey)) list.push(source.chainKey);
+    byAddress.set(key, list);
+  }
+  return [...byAddress.entries()].map(([address, chains]) => ({
+    address,
+    chains,
+  }));
+}
+
 export function IslandNav() {
   const pathname = usePathname();
   const router = useRouter();
@@ -81,6 +116,7 @@ export function IslandNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const lastSessionToken = useRef<string | null | undefined>(undefined);
   const { sources, clearSources } = useSourceWallet();
@@ -161,6 +197,7 @@ export function IslandNav() {
     try {
       await signOutSupabase();
       clearVault();
+      clearSources();
       setMe(null);
       setSession(null);
       toast.success("Signed out");
@@ -177,13 +214,28 @@ export function IslandNav() {
   function disconnectWallet() {
     setMenuOpen(false);
     clearSources();
-    toast.success("Source wallets disconnected");
+    toast.success("Wallet disconnected");
+  }
+
+  async function copyAddress(address: string) {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(address);
+      window.setTimeout(() => setCopiedAddress(null), 1_800);
+    } catch {
+      setCopiedAddress(null);
+      toast.error("Couldn’t copy address");
+    }
   }
 
   const authKinds = session ? resolveAuthProviders(session) : [];
   const primaryAuth = authKinds[0] ?? "email";
-  const hasWallet = sources.length > 0;
-  const walletCount = sources.length;
+  const walletGroups = useMemo(() => groupWallets(sources), [sources]);
+  const hasWallet = walletGroups.length > 0;
+  const walletCount = walletGroups.reduce(
+    (sum, group) => sum + group.chains.length,
+    0,
+  );
 
   const xHandle =
     (session?.user.user_metadata?.user_name as string | undefined) ??
@@ -330,41 +382,61 @@ export function IslandNav() {
                       ) : null}
                     </div>
 
-                    {sources.length > 0 ? (
+                    {walletGroups.length > 0 ? (
                       <div className="border-t border-border/60 px-3 py-3">
                         <div className="mb-2 flex items-center justify-between px-1">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                            Connected browser wallets
+                            Connected wallets
                           </p>
                           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
-                            {sources.length}{" "}
-                            {sources.length === 1 ? "chain" : "chains"}
+                            {walletCount}{" "}
+                            {walletCount === 1 ? "chain" : "chains"}
                           </span>
                         </div>
                         <ul className="space-y-2 font-sans">
-                          {sources.map((source) => (
+                          {walletGroups.map((group) => (
                             <li
-                              key={source.routeKey}
+                              key={group.address}
                               className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 p-2.5"
                             >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={
-                                  source.icon ?? routeLogoPath(String(source.routeKey))
-                                }
-                                alt=""
-                                width={20}
-                                height={20}
-                                className="size-5 shrink-0"
-                              />
+                              <span className="flex shrink-0 items-center gap-1">
+                                {group.chains.map((chain) => (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    key={chain}
+                                    src={routeLogoPath(chain)}
+                                    alt={chainLabel(chain)}
+                                    title={chainLabel(chain)}
+                                    width={20}
+                                    height={20}
+                                    className="size-5"
+                                  />
+                                ))}
+                              </span>
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-medium capitalize text-foreground">
-                                  {source.label ?? source.routeKey}
+                                <p className="truncate text-xs font-medium text-foreground">
+                                  {group.chains.map(chainLabel).join(" · ")}
                                 </p>
                                 <p className="truncate text-[11px] tabular-nums text-muted-foreground">
-                                  {truncateAddress(source.address)}
+                                  {truncateAddress(group.address)}
                                 </p>
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => void copyAddress(group.address)}
+                                className="flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                aria-label={
+                                  copiedAddress === group.address
+                                    ? "Wallet address copied"
+                                    : `Copy ${chainLabel(group.chains[0]!)} wallet address`
+                                }
+                              >
+                                {copiedAddress === group.address ? (
+                                  <Check className="size-4 text-success" aria-hidden />
+                                ) : (
+                                  <Copy className="size-4" aria-hidden />
+                                )}
+                              </button>
                             </li>
                           ))}
                         </ul>
@@ -396,7 +468,7 @@ export function IslandNav() {
                           aria-hidden
                         />
                         <span className="flex-1 text-left">
-                          Disconnect source wallets
+                          Disconnect all wallets
                         </span>
                       </button>
                     </div>
