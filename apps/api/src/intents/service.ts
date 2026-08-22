@@ -28,8 +28,10 @@ export async function markSourceSubmitted(db: Db, ownerId: string, intentId: str
   if (current.state !== "quoted" || current.version !== expectedVersion) throw new Error("version_conflict");
   const { data, error } = await db.from("intents").update({ source_tx_hash: txHash, state: "source_submitted", version: expectedVersion + 1, updated_at: new Date().toISOString() }).eq("id", intentId).eq("owner_id", ownerId).eq("state", "quoted").eq("version", expectedVersion).select("*").maybeSingle();
   if (error) throw error; if (!data) throw new Error("version_conflict");
-  const { error: jobError } = await db.from("relayer_jobs").upsert({ intent_id: intentId, status: "queued", attempts: 0 }, { onConflict: "intent_id" });
-  if (jobError) throw jobError;
+  if (current.route_id !== "starknet-public") {
+    const { error: jobError } = await db.from("relayer_jobs").upsert({ intent_id: intentId, status: "queued", attempts: 0 }, { onConflict: "intent_id" });
+    if (jobError) throw jobError;
+  }
   await appendEvent(db, intentId, "quoted", "source_submitted", expectedVersion + 1, { txHash }, {});
   return data;
 }
@@ -76,9 +78,29 @@ export async function signQuote(db: Db, config: Config, ownerId: string, input: 
   const intent = await getIntent(db, ownerId, String(input.id));
   if (intent.state !== "draft") throw new Error("invalid_transition");
   if (!quoteMatchesStoredIntent(intent, input)) throw new Error("quote_intent_mismatch");
+  const expiresAt = Math.floor(Date.now() / 1000) + 120, quoteId = crypto.randomUUID();
+
+  if (String(input.routeId) === "starknet-public") {
+    const denomination = String(input.denomination) as keyof typeof DENOMINATION_CODES;
+    const escrow = config.manifest.pools.find((pool) => pool.denomination === denomination);
+    if (!escrow || !/^0x[0-9a-f]+$/i.test(config.manifest.usdc)) throw new Error("route_disabled:missing_router_or_pool");
+    if (!input.publicRefundRecipient) throw new Error("invalid_public_refund_recipient");
+    const sourcePlan = {
+      kind: "starknet_public_deposit" as const,
+      usdc: config.manifest.usdc,
+      escrowPool: escrow.address,
+      claimHash: String(input.claimHash),
+      publicRefundRecipient: String(input.publicRefundRecipient),
+      expiresAt: Math.floor(Date.parse(String(input.expiresAt)) / 1000),
+    };
+    const quote = { version: 1, quoteId, intentId: input.id, routeId: input.routeId, sourceAccount: input.sourceAccount, denomination: input.denomination, requestedReceive: input.denomination, grossDebit: input.denomination, maxFee: "0", minFinalityThreshold: 0, claimHash: input.claimHash, refundRecipient: input.publicRefundRecipient, manifestHash: config.manifestHash, sourcePlan, issuedAt: Math.floor(Date.now() / 1000), expiresAt };
+    const signature = await new SignJWT(quote).setProtectedHeader({ alg: "HS256", typ: "wotta+quote" }).setIssuedAt().setExpirationTime(expiresAt).sign(new TextEncoder().encode(config.env.RESOLVER_SIGNING_KEY));
+    const { data: updated, error } = await db.from("intents").update({ quote: { quote, signature }, state: "quoted", version: 1, updated_at: new Date().toISOString() }).eq("id", intent.id).eq("owner_id", ownerId).eq("state", "draft").eq("version", 0).select("id").maybeSingle(); if (error) throw error; if (!updated) throw new Error("version_conflict");
+    await appendEvent(db, intent.id, "draft", "quoted", 1, {}, { quoteId }); return { quote, signature };
+  }
+
   if (route.domain === null) throw new Error("route_disabled:not_cctp");
   const exactNet = await quoteCircleExactNet({ irisBaseUrl: config.env.CIRCLE_IRIS_BASE_URL, sourceDomain: route.domain, destinationDomain: 25, requestedReceive: BigInt(String(input.denomination)), minFinalityThreshold: 2000 });
-  const expiresAt = Math.floor(Date.now() / 1000) + 120, quoteId = crypto.randomUUID();
   const sourcePlan = buildSourcePlan(config, input, exactNet.grossDebit, exactNet.maxFee);
   const quote = { version: 1, quoteId, intentId: input.id, routeId: input.routeId, sourceAccount: input.sourceAccount, denomination: input.denomination, requestedReceive: input.denomination, grossDebit: exactNet.grossDebit.toString(), maxFee: exactNet.maxFee.toString(), minFinalityThreshold: 2000, claimHash: input.claimHash, refundRecipient: input.publicRefundRecipient, manifestHash: config.manifestHash, sourcePlan, issuedAt: Math.floor(Date.now() / 1000), expiresAt };
   const signature = await new SignJWT(quote).setProtectedHeader({ alg: "HS256", typ: "wotta+quote" }).setIssuedAt().setExpirationTime(expiresAt).sign(new TextEncoder().encode(config.env.RESOLVER_SIGNING_KEY));

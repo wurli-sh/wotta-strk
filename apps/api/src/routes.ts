@@ -1,7 +1,7 @@
 import type { Config } from "./config.ts";
 
 export const ROUTES = [
-  { id: "starknet-public", family: "starknet", domain: 25, enabled: false, reason: "awaiting_verified_escrow_deployment" },
+  { id: "starknet-public", family: "starknet", domain: null, enabled: false, reason: "awaiting_verified_escrow_deployment" },
   { id: "ethereum", family: "cctp", domain: 0, enabled: false, reason: "awaiting_live_cctp_smoke" },
   { id: "arbitrum", family: "cctp", domain: 3, enabled: false, reason: "awaiting_live_cctp_smoke" },
   { id: "base", family: "cctp", domain: 6, enabled: false, reason: "awaiting_live_cctp_smoke" },
