@@ -14,7 +14,7 @@ import {
 import { decryptEnvelope, encryptEnvelope, generateInboxKeyPair, publicKeyFromSecret } from "@wotta/crypto";
 import { computeClaimHash, type Denomination } from "@wotta/shared";
 import { stark, type TypedData, type WalletAccountV6 } from "starknet";
-import { connectReady } from "./ready.ts";
+import { connectReady, ensureReadyChain } from "./ready.ts";
 import { executeStarknetPublicDeposit, isStarknetPublicDepositPlan, type StarknetPublicDepositPlan } from "./public-deposit.ts";
 import { oauthCallbackUrl, stashAuthNext } from "../app-origin.ts";
 import { requireSourceWallet } from "../wallet-install.ts";
@@ -25,8 +25,11 @@ import {
   parseOAuthCallbackFailure,
   type AuthProvider,
 } from "./auth-errors.ts";
+import { apiBase } from "../api/client.ts";
+import { readNetworkMode, type NetworkMode } from "../network-mode.ts";
 export type ProductApiConfig = {
   apiUrl: string;
+  network: NetworkMode;
   supabaseUrl: string;
   supabasePublishableKey: string;
   solanaRpcUrl: string;
@@ -59,14 +62,16 @@ export function createProductSession(config: ProductApiConfig): ProductSession {
   return new WottaProductSession(supabase, config);
 }
 
-let browserProductSession: ProductSession | undefined;
+const browserProductSessions: Partial<Record<NetworkMode, ProductSession>> = {};
 
 /** Browser product session — shares the app Supabase client (cookie session), not a separate localStorage client. */
 export function createBrowserProductSession(): ProductSession {
   if (typeof window === "undefined") {
     throw new Error("createBrowserProductSession is browser-only");
   }
-  if (browserProductSession) return browserProductSession;
+  const network = readNetworkMode();
+  const existing = browserProductSessions[network];
+  if (existing) return existing;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabasePublishableKey =
@@ -76,14 +81,16 @@ export function createBrowserProductSession(): ProductSession {
     throw new Error("Supabase browser configuration is missing");
   }
 
-  browserProductSession = new WottaProductSession(createAppSupabaseClient(), {
-    apiUrl: (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8787").replace(/\/$/, ""),
+  const session = new WottaProductSession(createAppSupabaseClient(), {
+    apiUrl: apiBase(network),
+    network,
     supabaseUrl,
     supabasePublishableKey,
     solanaRpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
     stellarRpcUrl: process.env.NEXT_PUBLIC_STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org",
   });
-  return browserProductSession;
+  browserProductSessions[network] = session;
+  return session;
 }
 
 export type FundingStage = "resolving" | "quoting" | "delivering" | "connecting_source" | "approving" | "depositing" | "burning" | "confirming" | "attesting" | "settling";
@@ -221,10 +228,16 @@ export class WottaProductSession {
     return (await this.authState()).label;
   }
 
-  async bindReadyAndIdentity(account: WalletAccountV6, vault: PrivacyVault, identityAddress?: string) {
+  async bindReadyAndIdentity(
+    account: WalletAccountV6,
+    vault: PrivacyVault,
+    identityAddress?: string,
+    options?: { reconnect?: boolean },
+  ) {
     await this.syncSession();
     let me = await this.request<{ wallet: { address: string; inbox_pubkey: string } | null }>("/v1/me");
     let inboxSecretKey = vault.state.inboxSecretKey;
+    const reconnect = options?.reconnect === true;
 
     if (me.wallet) {
       if (BigInt(me.wallet.address) !== BigInt(account.address)) {
@@ -233,6 +246,11 @@ export class WottaProductSession {
       const localMatches =
         inboxSecretKey !== undefined &&
         publicKeyFromSecret(inboxSecretKey) === me.wallet.inbox_pubkey;
+      if (localMatches && !reconnect) {
+        if (identityAddress) await this.publishPrivateIdentity(identityAddress);
+        await this.syncSession();
+        return { reconnected: true as const };
+      }
       if (!localMatches) {
         // Server still has the wallet row but this browser lost the inbox secret
         // (privacy reset, site-data clear, or stale encrypted vault). Re-link.
@@ -242,12 +260,13 @@ export class WottaProductSession {
       }
     }
 
-    if (!me.wallet) {
+    if (!me.wallet || reconnect) {
       if (!inboxSecretKey) {
         inboxSecretKey = generateInboxKeyPair().secretKey;
         await vault.setInboxSecretKey(inboxSecretKey);
       }
       const inboxPublicKey = publicKeyFromSecret(inboxSecretKey);
+      await ensureReadyChain(account, this.config.network);
       const challenge = await this.request<{ typedData: TypedData }>("/v1/wallet/challenge", { method: "POST", body: JSON.stringify({ address: account.address }) });
       const signature = stark.formatSignature(await account.signMessage(challenge.typedData));
       await this.request("/v1/wallet/link", { method: "POST", body: JSON.stringify({ challenge: JSON.stringify(challenge.typedData), signature, inboxPublicKey }) });
@@ -590,6 +609,7 @@ export class WottaProductSession {
     if (!data.session) throw new Error("Sign in with Google or X first");
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${data.session.access_token}`);
+    headers.set("x-wotta-network", this.config.network);
     let requestBody = init.body;
     // Fastify rejects content-type: application/json with an empty body
     // (FST_ERR_CTP_EMPTY_JSON_BODY). Only advertise JSON when we send a body.

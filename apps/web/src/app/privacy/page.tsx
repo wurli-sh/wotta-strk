@@ -1,8 +1,10 @@
 "use client";
 
 import { PageShell } from "@/components/PageShell";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
 
 function PrivacyContent() {
+  const { mode } = useNetworkMode();
   return (
     <PageShell
       title="Privacy"
@@ -11,11 +13,9 @@ function PrivacyContent() {
     >
       <div className="space-y-8" data-testid="privacy-page">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Wotta is a Sepolia-only test system. Cross-chain funding begins on a
-          public source testnet and settles through public Starknet contracts.
-          Private balance actions use the Starknet privacy SDK and a hosted
-          prover. The system is unaudited and is not suitable for meaningful
-          funds.
+          {mode === "mainnet"
+            ? "Mainnet mode uses real funds and only Ready’s wallet-managed live STRK20 pool. It supports allowlisted USDC shield amounts, registered-recipient private transfer, and public withdrawal. The system is unaudited; use only the minimum demo funds."
+            : "Testnet beta uses public source testnets, Starknet Sepolia contracts, the Starknet privacy SDK, and a hosted prover. The system is unaudited and is not suitable for meaningful funds."}
         </p>
 
         <section>
@@ -51,7 +51,7 @@ function PrivacyContent() {
             <li>
               Linked Starknet addresses, source-chain approvals and burns,
               CCTP messages, settlement transactions, token amounts, and
-              timing are public on their respective testnets.
+              timing are public on their respective networks.
             </li>
             <li>
               Proof submission and pool state changes are public Starknet
@@ -64,8 +64,9 @@ function PrivacyContent() {
               identifiers remain subject to the identity service’s data model.
             </li>
             <li>
-              All settlement denominations are exact whole USDC amounts: 1,
-              10, 50, or 100.
+              {mode === "mainnet"
+                ? "Mainnet actions are limited to 0.5, 1, 10, 50, or 100 native USDC; the qualification demo uses 0.5 USDC."
+                : "Testnet settlement denominations are exact whole USDC amounts: 1, 10, 50, or 100."}
             </li>
           </ul>
         </section>
@@ -91,9 +92,9 @@ function PrivacyContent() {
               escrow as funded, and not “Claimed” until it observes the claim.
             </li>
             <li>
-              Not a production deployment: contracts, relayers, adapters, and
-              the hosted prover require independent audit and retained live
-              test evidence before mainnet.
+              {mode === "mainnet"
+                ? "Not audited production infrastructure: Mainnet remains limited to Ready’s direct Starknet private route and allowlisted amounts."
+                : "Not a production deployment: contracts, relayers, adapters, and the hosted prover require independent audit and retained live test evidence before broader mainnet use."}
             </li>
           </ul>
         </section>

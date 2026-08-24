@@ -1,11 +1,18 @@
 export const DENS = [1n, 10n, 50n, 100n] as const;
-export type Dens = (typeof DENS)[number];
+export const MAINNET_DENS = ["0.5", ...DENS] as const;
+export type TestnetDens = (typeof DENS)[number];
+export type Dens = (typeof MAINNET_DENS)[number];
 
 export function densLabel(d: Dens | number | bigint): string {
   return `${d} USDC`;
 }
 
-export function isAllowedDenomination(value: unknown): value is Dens {
+export function denominationBaseUnits(value: Dens): bigint {
+  if (value === "0.5") return 500_000n;
+  return value * 1_000_000n;
+}
+
+export function isAllowedDenomination(value: unknown): value is TestnetDens {
   try {
     const amount = BigInt(value as string | number | bigint);
     return DENS.some((denomination) => denomination === amount);
