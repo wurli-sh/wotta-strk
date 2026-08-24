@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { useGlimm } from "glimm/next";
 import { cn } from "@/lib/cn";
 import { buttonTap, navSpring } from "@/lib/motion";
+import { useGlimmSweep } from "@/lib/useGlimmSweep";
 
 type Props = {
   enabled: boolean;
@@ -14,25 +13,14 @@ type Props = {
 };
 
 export function ConfidentialToggle({ enabled, disabled, locked = false, onChange }: Props) {
-  const { sweep } = useGlimm();
+  const playSweep = useGlimmSweep();
   const reduce = useReducedMotion();
-  const warmed = useRef(false);
-
-  // First sweep builds WebGL lazily — prime it so the first toggle isn't stalled.
-  useEffect(() => {
-    if (warmed.current || reduce) return;
-    warmed.current = true;
-    sweep(() => {}, { sweepMs: 1, outroMs: 1, peakAlpha: 0, midpoint: 0 }).cancel();
-  }, [sweep, reduce]);
 
   const toggle = () => {
     if (disabled) return;
     const next = !enabled;
     onChange(next);
-    if (reduce) return;
-    sweep(() => {}, {
-      direction: next ? "ltr" : "rtl",
-    });
+    playSweep(next);
   };
 
   return (

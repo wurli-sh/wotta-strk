@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { toastNetworkModeEnabled } from "@/lib/network-mode-toast";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { useGlimmSweep } from "@/lib/useGlimmSweep";
 import { Button } from "@/components/ui/Button";
 
 export function WrongModeNotice({
@@ -18,12 +19,14 @@ export function WrongModeNotice({
   mainnetLabel?: string;
 }) {
   const { setMode } = useNetworkMode();
+  const playSweep = useGlimmSweep();
 
   function switchToTestnet() {
     if (!setMode("testnet")) {
       toast.error("Finish or cancel the open Ready request before switching networks");
       return;
     }
+    playSweep(true);
     toastNetworkModeEnabled("testnet");
   }
 

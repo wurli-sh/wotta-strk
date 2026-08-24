@@ -30,6 +30,7 @@ import {
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { apiFetch } from "@/lib/api/client";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { useGlimmSweep } from "@/lib/useGlimmSweep";
 
 const NAV_LINKS = [
   ["/send", "Send"],
@@ -212,6 +213,7 @@ function NetworkChoices({
 
 export function IslandNav() {
   const { mode, setMode } = useNetworkMode();
+  const playSweep = useGlimmSweep();
   const pathname = usePathname();
   const router = useRouter();
   const reduce = useReducedMotion();
@@ -251,6 +253,7 @@ export function IslandNav() {
       toast.error("Finish or cancel the open Ready request before switching networks");
       return;
     }
+    playSweep(next === "testnet");
     setMe(null);
     setConfirmMainnet(false);
     setMenuOpen(false);
