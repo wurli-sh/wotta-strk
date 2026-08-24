@@ -64,13 +64,28 @@ export async function shieldUsdc(
   return { fundingTx: funding.transaction_hash, privacyTx };
 }
 
+export function rewritePrivacyDiscoveryError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    /viewing_key does not match/i.test(message)
+    || (/incoming_state/i.test(message) && /invalid_request/i.test(message))
+  ) {
+    return Object.assign(new Error("privacy_viewing_key_mismatch"), { cause: error });
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
 export async function privateBalance(
   transfers: PrivateTransfersInterface,
   token: string,
 ): Promise<bigint> {
-  const result = await transfers.discoverNotes({ tokens: [BigInt(token)] });
-  const notes = result.notes.get(BigInt(token)) ?? [];
-  return notes.reduce((sum, note) => sum + note.amount, 0n);
+  try {
+    const result = await transfers.discoverNotes({ tokens: [BigInt(token)] });
+    const notes = result.notes.get(BigInt(token)) ?? [];
+    return notes.reduce((sum, note) => sum + note.amount, 0n);
+  } catch (error) {
+    throw rewritePrivacyDiscoveryError(error);
+  }
 }
 
 export async function privateTransfer(

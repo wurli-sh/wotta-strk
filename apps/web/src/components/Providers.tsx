@@ -5,12 +5,16 @@ import { Toaster } from "sonner";
 import { SessionSync } from "@/components/SessionSync";
 import { PrivacyVaultProvider } from "@/components/PrivacyVaultProvider";
 import { SourceWalletProvider } from "@/components/SourceWalletProvider";
+import { NetworkModeProvider } from "@/components/NetworkModeProvider";
+import { NetworkWalletReconnectPrompt } from "@/components/NetworkWalletReconnectPrompt";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <SourceWalletProvider>
-      <PrivacyVaultProvider>
+    <NetworkModeProvider>
+      <SourceWalletProvider>
+        <PrivacyVaultProvider>
         <SessionSync />
+        <NetworkWalletReconnectPrompt />
         {children}
       <Toaster
         position="top-right"
@@ -25,7 +29,8 @@ export function Providers({ children }: { children: ReactNode }) {
           duration: 4500,
         }}
       />
-      </PrivacyVaultProvider>
-    </SourceWalletProvider>
+        </PrivacyVaultProvider>
+      </SourceWalletProvider>
+    </NetworkModeProvider>
   );
 }

@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { WalletConnectModal } from "@/components/WalletConnectModal";
 import { apiFetch, type MeResponse } from "@/lib/api/client";
 import { userFacingError } from "@/lib/errors";
+import { isPrivacyReconnectError, requestWalletReconnect } from "@/lib/network-reconnect";
 import { routeLogoPath } from "@/lib/crypto-icons";
 import { createClient } from "@/lib/supabase/client";
 import { createPrivacyClient } from "@/lib/wotta/privacy-account";
@@ -15,6 +16,9 @@ import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateBalance } from "@/lib/wotta/privacy-flow";
 import { unlockPrivacyVault, clearAllPrivacyVaultLocalState } from "@/lib/wotta/privacy-state";
 import { connectReady } from "@/lib/wotta/ready";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { readMainnetPrivateBalance } from "@/lib/wotta/mainnet-privacy";
+import { beginNetworkOperation } from "@/lib/network-operations";
 
 type Props = {
   me: MeResponse | null;
@@ -38,6 +42,7 @@ export function WalletAndBalancePanel({
   revealHref,
   onLinked,
 }: Props) {
+  const { mode } = useNetworkMode();
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [modalOpen, setModalOpen] = useState(autoOpenConnect);
@@ -60,6 +65,7 @@ export function WalletAndBalancePanel({
   }
 
   async function unlinkWallet() {
+    const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     setBusy(true);
     try {
       const { data } = await createClient().auth.getSession();
@@ -69,6 +75,8 @@ export function WalletAndBalancePanel({
         token,
         method: "POST",
         body: {},
+        network: mode,
+        signal: operation.signal,
       });
       clearAllPrivacyVaultLocalState();
       toast.success("Ready wallet unlinked");
@@ -80,6 +88,7 @@ export function WalletAndBalancePanel({
     } catch (e) {
       toast.error(userFacingError(e, "Couldn't unlink wallet"));
     } finally {
+      operation.finish();
       setBusy(false);
     }
   }
@@ -89,23 +98,41 @@ export function WalletAndBalancePanel({
       toast.error("Link Ready to reveal your private balance");
       return;
     }
+    const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     setBalanceBusy(true);
     try {
-      const connected = await connectReady();
+      const connected = await connectReady(mode);
+      operation.assertActive();
       if (BigInt(connected.address) !== BigInt(me.wallet.address)) {
         throw new Error("Connect the Ready account linked to this Wotta profile");
       }
-      const config = directPrivacyConfig();
-      const vault = await unlockPrivacyVault(connected.account, config);
-      const identityAddress = vault.state.identityAddress ?? me.wallet.private_identity_address;
-      if (!identityAddress) throw new Error("Register your private identity first");
-      const transfers = createPrivacyClient(identityAddress, BigInt(vault.state.viewingKey), config);
-      setBalance(await privateBalance(transfers, config.usdc));
+      if (mode === "mainnet") {
+        setBalance(await readMainnetPrivateBalance(connected.account));
+      } else {
+        const config = directPrivacyConfig();
+        const vault = await unlockPrivacyVault(connected.account, config);
+        const identityAddress = vault.state.identityAddress ?? me.wallet.private_identity_address;
+        if (!identityAddress) throw new Error("Register your private identity first");
+        const transfers = createPrivacyClient(identityAddress, BigInt(vault.state.viewingKey), config);
+        const nextBalance = await privateBalance(transfers, config.usdc);
+        if (!vault.state.identityAddress) {
+          await vault.setIdentityAddress(identityAddress, config.identityClassHash);
+        }
+        setBalance(nextBalance);
+      }
       setRevealed(true);
       setUpdatedAt(new Date());
     } catch (error) {
-      toast.error(userFacingError(error, "Could not reveal your private balance"));
+      const message = userFacingError(error, "Could not reveal your private balance");
+      if (isPrivacyReconnectError(error)) {
+        requestWalletReconnect({
+          linkedWalletAddress: me?.wallet?.address ?? null,
+          immediate: true,
+        });
+      }
+      toast.error(message);
     } finally {
+      operation.finish();
       setBalanceBusy(false);
     }
   }
@@ -153,9 +180,11 @@ export function WalletAndBalancePanel({
             <ShieldCheck className="h-4 w-4" aria-hidden />
           </span>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Wallet & private balance</h2>
+            <h2 className="text-sm font-semibold text-foreground">{mode === "mainnet" ? "Mainnet wallet & private balance" : "Wallet & private balance"}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Your Ready address receives private claims. Private USDC notes stay under your identity.
+              {mode === "mainnet"
+                ? "Your Ready mainnet account controls live-pool USDC. Real funds and STRK fees apply."
+                : "Your Ready address receives private claims. Private USDC notes stay under your identity."}
             </p>
           </div>
         </div>
@@ -198,6 +227,11 @@ export function WalletAndBalancePanel({
                   {busy ? "Unlinking…" : "Unlink"}
                 </Button>
               </div>
+              {mode === "mainnet" && !me?.wallet?.private_identity_verified_at ? (
+                <div className="radius-surface-inner border border-warning-border bg-warning-surface px-4 py-3 text-xs leading-5 text-warning-foreground" role="status">
+                  Wallet linked; private pool setup is not finished. Open Ready → gear → your account → Enable private tokens, tap Enable, then return to Send. Wotta shields the selected amount automatically.
+                </div>
+              ) : null}
             </div>
           ) : (
             <div>
@@ -261,6 +295,8 @@ export function WalletAndBalancePanel({
       <WalletConnectModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
+        reconnect={Boolean(wallet)}
+        linkedWalletAddress={wallet}
         onLinked={async (linkedMe) => {
           await onLinked({
             profile: linkedMe.profile ?? me?.profile ?? null,
@@ -269,7 +305,8 @@ export function WalletAndBalancePanel({
               ? {
                   address: linkedMe.wallet.address,
                   inbox_pubkey: linkedMe.wallet.inbox_pubkey,
-                  chain_id: me?.wallet?.chain_id ?? "SN_SEPOLIA",
+                  chain_id: (linkedMe.wallet as { chain_id?: string }).chain_id
+                    ?? (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
                   key_version: me?.wallet?.key_version ?? 1,
                   private_identity_address:
                     linkedMe.wallet.private_identity_address ?? me?.wallet?.private_identity_address,

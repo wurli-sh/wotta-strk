@@ -19,6 +19,7 @@ import {
   type PrivacyVault,
 } from "@/lib/wotta/privacy-state";
 import { connectReady } from "@/lib/wotta/ready";
+import { NETWORK_MODE_EVENT } from "@/lib/network-mode";
 
 type PrivacyVaultContextValue = {
   vault: PrivacyVault | null;
@@ -72,6 +73,32 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
   const clearVault = useCallback(() => {
     setVault(null);
     clearAllPrivacyVaultLocalState();
+  }, []);
+
+  useEffect(() => {
+    const onMode = (event: Event) => {
+      const next = (event as CustomEvent<"testnet" | "mainnet">).detail;
+      setVault(null);
+      if (next !== "testnet") return;
+      void (async () => {
+        try {
+          const { data } = await createClient().auth.getSession();
+          const token = data.session?.access_token;
+          if (!token) return;
+          const me = await apiFetch<MeResponse>("/v1/me", { token, network: "testnet" });
+          if (!me.wallet?.address) return;
+          const restored = await restorePrivacyVaultFromSession(
+            me.wallet.address,
+            directPrivacyConfig(),
+          );
+          if (restored) setVault(restored);
+        } catch {
+          // Ignore restore errors — user can unlock manually.
+        }
+      })();
+    };
+    window.addEventListener(NETWORK_MODE_EVENT, onMode);
+    return () => window.removeEventListener(NETWORK_MODE_EVENT, onMode);
   }, []);
 
   const value = useMemo(

@@ -49,6 +49,28 @@ const APP_MESSAGES: Record<string, string> = {
   wallet_already_linked:
     "This Ready wallet is linked to another Wotta account",
   private_route_disabled: "The private Starknet route is not verified",
+  mainnet_api_not_configured: "Wotta’s mainnet API is not configured yet",
+  network_mode_mismatch: "This API serves the other Starknet network — switch mode or configure the mainnet API",
+  mainnet_wallet_not_linked: "Link a Ready wallet on Mainnet from Account first",
+  mainnet_wallet_not_deployed: "Activate this Ready Mainnet account first: add STRK and make one outgoing transaction, then retry",
+  testnet_wallet_not_deployed: "Activate this Ready Sepolia account first, then retry",
+  mainnet_private_route_disabled: "The live-pool mainnet route is not verified",
+  ready_network_mismatch: "Disconnect or switch Ready to the selected Starknet network, then reconnect",
+  ready_mainnet_network_mismatch: "Disconnect or switch Ready to Starknet Mainnet, then reconnect",
+  ready_testnet_network_mismatch: "Disconnect or switch Ready to Starknet Sepolia, then reconnect",
+  signature_invalid: "Ready signature did not verify — switch network in Ready and retry",
+  challenge_invalid: "Wallet binding expired — close the modal and try again",
+  ready_pool_mismatch: "Ready’s live privacy pool does not match Wotta’s verified pool",
+  mainnet_pool_class_mismatch: "The configured live privacy pool failed verification",
+  mainnet_rpc_not_configured: "Mainnet Starknet RPC is not configured on the API",
+  private_identity_not_registered:
+    "Open Ready → gear → your account → Enable private tokens, then reconnect Wotta",
+  mainnet_privacy_registration_required:
+    "Open Ready → gear → your account → Enable private tokens, tap Enable, then retry Send in Wotta",
+  privacy_viewing_key_mismatch:
+    "Local privacy state no longer matches this identity — reconnect Ready from Account",
+  wallet_binding_ambiguous:
+    "Wallet link is out of sync — retry reconnect, or unlink and link Ready again from Account",
 };
 
 function firstLine(s: string): string {
@@ -179,12 +201,55 @@ function mapKnownPhrase(raw: string): string | null {
   }
 
   if (
+    m.includes("cannot sign the message from a different chainid")
+    || m.includes("different chainid")
+  ) {
+    if (m.includes("sn_main") || m.includes("534e5f4d41494e")) {
+      return "Switch Ready to Starknet Mainnet in the wallet, then reconnect";
+    }
+    return "Switch Ready to Starknet Sepolia in the wallet, then reconnect";
+  }
+
+  if (m.includes("user_refused_op")) {
+    return "Ready declined the request — approve the network switch if prompted, then retry";
+  }
+
+  if (
+    m.includes("viewing_key does not match")
+    || m.includes("privacy_viewing_key_mismatch")
+    || (m.includes("incoming_state") && m.includes("invalid_request"))
+  ) {
+    return APP_MESSAGES.privacy_viewing_key_mismatch;
+  }
+
+  if (
+    m.includes("json object requested, multiple")
+    || m.includes("wallet_binding_ambiguous")
+  ) {
+    return APP_MESSAGES.wallet_binding_ambiguous;
+  }
+
+  if (
+    m.includes("wallet_challenges")
+    && m.includes("chain_id")
+    && m.includes("schema cache")
+  ) {
+    return "Database migration pending — run pnpm db:migrate from the repo root";
+  }
+
+  if (
     m.includes("chain mismatch")
     || m.includes("wrong network")
     || m.includes("switch chain")
     || m.includes("unrecognized chain")
     || m.includes("not configured for chain")
   ) {
+    if (m.includes("ready_mainnet_network_mismatch")) {
+      return "Disconnect or switch Ready to Starknet Mainnet, then reconnect";
+    }
+    if (m.includes("ready_testnet_network_mismatch")) {
+      return "Disconnect or switch Ready to Starknet Sepolia, then reconnect";
+    }
     return "Switch Ready to Starknet Sepolia";
   }
 

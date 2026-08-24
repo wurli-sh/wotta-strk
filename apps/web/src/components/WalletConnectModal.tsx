@@ -21,7 +21,10 @@ import {
   type PrivacyVault,
 } from "@/lib/wotta/privacy-state";
 import { createBrowserProductSession } from "@/lib/wotta/product-session";
-import { connectReady } from "@/lib/wotta/ready";
+import { connectReady, ensureReadyAccountDeployed } from "@/lib/wotta/ready";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { mainnetPrivacyConfig } from "@/lib/wotta/mainnet-privacy";
+import { beginNetworkOperation } from "@/lib/network-operations";
 
 type ModalStep = "choose" | "link" | "done";
 type LinkPhase =
@@ -39,6 +42,9 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onLinked: (me: LinkedMe) => void | Promise<void>;
+  /** When set, modal treats the flow as reconnecting an already-linked wallet. */
+  reconnect?: boolean;
+  linkedWalletAddress?: string | null;
 };
 
 const STEP_BAR: { key: ModalStep; label: string }[] = [
@@ -56,7 +62,14 @@ const phaseLabel: Record<LinkPhase, string> = {
   submitting: "Submitting proof on Sepolia…",
 };
 
-export function WalletConnectModal({ open, onClose, onLinked }: Props) {
+export function WalletConnectModal({
+  open,
+  onClose,
+  onLinked,
+  reconnect = false,
+  linkedWalletAddress = null,
+}: Props) {
+  const { mode } = useNetworkMode();
   const reduce = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState<ModalStep>("choose");
@@ -92,32 +105,64 @@ export function WalletConnectModal({ open, onClose, onLinked }: Props) {
   }, [busy, onClose, open]);
 
   async function chooseReady() {
+    const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     setBusy(true);
     setPhase("connecting");
     try {
-      const connected = await connectReady();
+      const connected = await connectReady(mode);
+      operation.assertActive();
       setPhase("unlocking");
-      const privacyVault = await unlockPrivacyVault(connected.account, directPrivacyConfig());
+      const privacyVault = await unlockPrivacyVault(
+        connected.account,
+        mode === "mainnet" ? mainnetPrivacyConfig() : directPrivacyConfig(),
+      );
       setAccount(connected.account);
       setVault(privacyVault);
       setLinkedAddress(connected.address);
+      if (reconnect && linkedWalletAddress && BigInt(connected.address) !== BigInt(linkedWalletAddress)) {
+        throw new Error("Connect the Ready account linked to this Wotta profile");
+      }
       setStep("link");
     } catch (error) {
       toast.error(userFacingError(error, "Couldn’t connect Ready"));
       setPhase("idle");
     } finally {
+      operation.finish();
       setBusy(false);
     }
   }
 
   async function bindAndRegister() {
     if (!account || !vault) return;
+    const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     setBusy(true);
     try {
-      const config = directPrivacyConfig();
+      await ensureReadyAccountDeployed(account, mode);
       const session = createBrowserProductSession();
       setPhase("binding");
-      await session.bindReadyAndIdentity(account, vault);
+      await session.bindReadyAndIdentity(account, vault, undefined, { reconnect });
+      operation.assertActive();
+
+      if (mode === "mainnet") {
+        // A wallet may have initialized its Ready-managed pool state before it
+        // was linked (or while its Wotta binding was stale). Republish when
+        // possible; an uninitialized wallet can still finish linking and will
+        // be published after Ready privacy setup, when Send next refreshes it.
+        try {
+          await session.publishPrivateIdentity(account.address);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.includes("private_identity_not_registered")) throw error;
+        }
+        await session.syncSession();
+        const linkedMe = await session.me();
+        setStep("done");
+        toast.success(reconnect ? "Ready mainnet wallet reconnected" : "Ready mainnet wallet linked");
+        await onLinked(linkedMe);
+        return;
+      }
+
+      const config = directPrivacyConfig();
 
       if (await ensureCurrentIdentityClass(account, vault, config)) {
         toast.message("Private identity upgraded for Wotta — redeploying…");
@@ -149,27 +194,37 @@ export function WalletConnectModal({ open, onClose, onLinked }: Props) {
       await session.syncSession();
       const linkedMe = await session.me();
       setStep("done");
-      toast.success("Ready wallet and private identity linked");
+      toast.success(reconnect ? "Ready wallet reconnected" : "Ready wallet and private identity linked");
       await onLinked(linkedMe);
     } catch (error) {
-      toast.error(userFacingError(error, "Couldn’t complete private registration"));
+      toast.error(userFacingError(
+        error,
+        mode === "mainnet" ? "Couldn't link mainnet wallet" : "Couldn't complete private registration",
+      ));
       setPhase("idle");
     } finally {
+      operation.finish();
       setBusy(false);
     }
   }
 
   const stepIndex = STEP_BAR.findIndex((item) => item.key === step);
   const title =
-    step === "choose" ? "Connect Ready wallet" :
-    step === "link" ? "Activate private identity" :
-    "Wallet linked";
+    step === "choose"
+      ? reconnect ? "Reconnect Ready wallet" : "Connect Ready wallet"
+      :
+    step === "link" ? (mode === "mainnet" ? (reconnect ? "Confirm mainnet wallet" : "Link mainnet wallet") : (reconnect ? "Confirm wallet access" : "Activate private identity")) :
+    reconnect ? "Wallet reconnected" : "Wallet linked";
   const subtitle =
     step === "choose"
-      ? "Ready signs on Starknet Sepolia. Wotta never holds your wallet or viewing key."
+      ? `Ready signs on Starknet ${mode === "mainnet" ? "Mainnet" : "Sepolia"}. Wotta never holds your wallet or viewing key.`
       : step === "link"
-        ? "Bind this wallet, deploy its private identity, and prove registration."
-        : "Cross-chain claims can now settle into your private USDC balance.";
+        ? mode === "mainnet"
+          ? "Bind this Ready account to your handle. Shielded-token setup stays inside Ready."
+          : "Bind this wallet, deploy its private identity, and prove registration."
+        : mode === "mainnet"
+          ? "This handle can receive privately after Ready private tokens are enabled. Sending shields automatically."
+          : "Cross-chain claims can now settle into your private USDC balance.";
 
   return (
     <AnimatePresence>
@@ -237,13 +292,21 @@ export function WalletConnectModal({ open, onClose, onLinked }: Props) {
                   <Button variant="outline" className="w-full justify-start" shape="rounded" disabled={busy} onClick={() => void chooseReady()}>
                     {busy ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <Wallet className="size-5" aria-hidden />}
                     <span className="flex-1 text-left">Ready</span>
-                    <span className="text-xs text-muted-foreground">Starknet Sepolia</span>
+                    <span className="text-xs text-muted-foreground">
+                      Starknet {mode === "mainnet" ? "Mainnet" : "Sepolia"}
+                    </span>
                   </Button>
                 ) : null}
                 {step === "link" ? (
                   <Button className="w-full" disabled={busy || !account || !vault} onClick={() => void bindAndRegister()}>
                     {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Wallet className="size-4" aria-hidden />}
-                    {busy ? <TextShimmer>{phaseLabel[phase]}</TextShimmer> : "Bind wallet & prove identity"}
+                    {busy ? (
+                      <TextShimmer>{phaseLabel[phase]}</TextShimmer>
+                    ) : reconnect ? (
+                      "Confirm wallet access"
+                    ) : (
+                      "Bind wallet & prove identity"
+                    )}
                   </Button>
                 ) : null}
                 {step === "done" ? (

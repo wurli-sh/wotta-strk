@@ -31,6 +31,12 @@ Version: viem@2.55.10`;
     expect(userFacingError(new Error("fcc_proxy_unavailable"))).toBe(
       "Private inbox is still syncing — tap Refresh in a minute",
     );
+    expect(userFacingError(new Error("mainnet_wallet_not_deployed"))).toBe(
+      "Activate this Ready Mainnet account first: add STRK and make one outgoing transaction, then retry",
+    );
+    expect(userFacingError(new Error("mainnet_privacy_registration_required"))).toBe(
+      "Open Ready → gear → your account → Enable private tokens, tap Enable, then retry Send in Wotta",
+    );
     expect(userFacingError(new Error("nonce"))).toBe(
       "Private session is syncing — try again",
     );
@@ -62,5 +68,27 @@ Version: viem@2.55.10`;
     expect(
       userFacingError(new Error("Unsupported EVM source chain")),
     ).toBe("Switch MetaMask to Ethereum, Base, or Arbitrum Sepolia");
+    expect(userFacingError(new Error("ready_mainnet_network_mismatch"))).toBe(
+      "Disconnect or switch Ready to Starknet Mainnet, then reconnect",
+    );
+    expect(userFacingError(new Error("ready_testnet_network_mismatch"))).toBe(
+      "Disconnect or switch Ready to Starknet Sepolia, then reconnect",
+    );
+  });
+
+  it("maps a Sepolia indexer viewing-key mismatch after a network switch", () => {
+    expect(userFacingError(new Error("privacy_viewing_key_mismatch"))).toBe(
+      "Local privacy state no longer matches this identity — reconnect Ready from Account",
+    );
+    expect(
+      userFacingError(
+        new Error(
+          'Indexer API /v1/sync/incoming_state failed (400): {"error":{"code":"INVALID_REQUEST","message":"viewing_key does not match the registered public key"}}',
+        ),
+      ),
+    ).toBe("Local privacy state no longer matches this identity — reconnect Ready from Account");
+    expect(
+      userFacingError(new Error("JSON object requested, multiple (or no) rows returned")),
+    ).toBe("Wallet link is out of sync — retry reconnect, or unlink and link Ready again from Account");
   });
 });

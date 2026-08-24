@@ -12,12 +12,12 @@ import { TextShimmer } from "@/components/ui/TextShimmer";
 import { fireClaimConfetti } from "@/features/claim/celebrateClaim";
 import { getAccessToken } from "@/lib/auth";
 import { userFacingError } from "@/lib/errors";
-import { withMinSkeleton } from "@/lib/skeleton-hold";
 import { createPrivacyClient } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { claimPrivateFund } from "@/lib/wotta/privacy-flow";
 import { createBrowserProductSession } from "@/lib/wotta/product-session";
 import { connectReady } from "@/lib/wotta/ready";
+import { beginNetworkOperation } from "@/lib/network-operations";
 
 type ClaimRow = {
   noteId: string;
@@ -70,21 +70,23 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
 
   const loadFromVault = useCallback(async () => {
     if (!vault) return;
+    const operation = beginNetworkOperation("testnet");
     setLoading(true);
     setError(null);
     try {
-      await withMinSkeleton(async () => {
         const latest = await createBrowserProductSession().loadClaim(
           vault,
           noteId ?? undefined,
         );
+        operation.assertActive();
         setClaim(latest);
-      });
     } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
       const message = userFacingError(caught, "No claimable private payment was found");
       setClaim(null);
       setError(message);
     } finally {
+      operation.finish();
       setLoading(false);
     }
   }, [noteId, vault]);
@@ -114,6 +116,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       toast.error("Unlock your inbox from Inbox first");
       return;
     }
+    const operation = beginNetworkOperation("testnet", { blocksNetworkSwitch: true });
     setBusy(true);
     setError(null);
     try {
@@ -135,6 +138,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
         claim.claimSecret,
         (next) => setPhase(next),
       );
+      operation.assertActive();
       setTransactionHash(hash);
       setPhase("confirming");
       toast.success("Claim submitted");
@@ -154,6 +158,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       setPhase("idle");
       toast.error(message);
     } finally {
+      operation.finish();
       setBusy(false);
     }
   }

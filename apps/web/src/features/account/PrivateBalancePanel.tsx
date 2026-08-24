@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { MeResponse } from "@/lib/api/client";
 import { userFacingError } from "@/lib/errors";
+import { isPrivacyReconnectError, requestWalletReconnect } from "@/lib/network-reconnect";
 import { createPrivacyClient } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateBalance } from "@/lib/wotta/privacy-flow";
 import { unlockPrivacyVault } from "@/lib/wotta/privacy-state";
 import { connectReady } from "@/lib/wotta/ready";
+import { beginNetworkOperation } from "@/lib/network-operations";
 
 type Props = { wallet: MeResponse["wallet"]; loading?: boolean };
 
@@ -32,9 +34,11 @@ export function PrivateBalancePanel({ wallet, loading }: Props) {
       toast.error("Link Ready to reveal your private balance");
       return;
     }
+    const operation = beginNetworkOperation("testnet", { blocksNetworkSwitch: true });
     setBusy(true);
     try {
       const connected = await connectReady();
+      operation.assertActive();
       if (BigInt(connected.address) !== BigInt(wallet.address)) {
         throw new Error("Connect the Ready account linked to this Wotta profile");
       }
@@ -43,12 +47,24 @@ export function PrivateBalancePanel({ wallet, loading }: Props) {
       const identityAddress = vault.state.identityAddress ?? wallet.private_identity_address;
       if (!identityAddress) throw new Error("Register your private identity first");
       const transfers = createPrivacyClient(identityAddress, BigInt(vault.state.viewingKey), config);
-      setBalance(await privateBalance(transfers, config.usdc));
+      const nextBalance = await privateBalance(transfers, config.usdc);
+      if (!vault.state.identityAddress) {
+        await vault.setIdentityAddress(identityAddress, config.identityClassHash);
+      }
+      setBalance(nextBalance);
       setRevealed(true);
       setUpdatedAt(new Date());
     } catch (error) {
-      toast.error(userFacingError(error, "Could not reveal your private balance"));
+      const message = userFacingError(error, "Could not reveal your private balance");
+      if (isPrivacyReconnectError(error)) {
+        requestWalletReconnect({
+          linkedWalletAddress: wallet?.address ?? null,
+          immediate: true,
+        });
+      }
+      toast.error(message);
     } finally {
+      operation.finish();
       setBusy(false);
     }
   }

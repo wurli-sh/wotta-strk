@@ -18,6 +18,7 @@ import {
   HandlesPanelSkeleton,
   WalletPanelSkeleton,
 } from "@/components/ui/Skeleton";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
 
 type AccountTab = "handles" | "wallet";
 
@@ -32,6 +33,7 @@ function parseTab(value: string | null): AccountTab {
 }
 
 function AccountContent() {
+  const { mode } = useNetworkMode();
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -99,7 +101,7 @@ function AccountContent() {
 
   useEffect(() => {
     void loadAccount();
-  }, [loadAccount]);
+  }, [loadAccount, mode]);
 
   useEffect(() => {
     if (!setupWallet) return;
@@ -199,7 +201,7 @@ function AccountContent() {
                       ? {
                           address: linkedMe.wallet.address,
                           inbox_pubkey: linkedMe.wallet.inbox_pubkey,
-                          chain_id: me?.wallet?.chain_id ?? "SN_SEPOLIA",
+                          chain_id: me?.wallet?.chain_id ?? (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
                           key_version: me?.wallet?.key_version ?? 1,
                           private_identity_address:
                             linkedMe.wallet.private_identity_address ?? me?.wallet?.private_identity_address,

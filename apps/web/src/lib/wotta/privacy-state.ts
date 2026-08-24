@@ -1,5 +1,6 @@
 import { stark, type TypedData, type WalletAccountV6 } from "starknet";
 import type { DirectPrivacyConfig } from "./privacy-config.ts";
+import { ensureReadyChain } from "./ready.ts";
 
 export type PrivacyState = {
   version: 2;
@@ -7,6 +8,29 @@ export type PrivacyState = {
   identityClassHash?: string;
   identityAddress?: string;
   inboxSecretKey?: string;
+};
+
+export function materializePrivacyState(
+  rawState: PrivacyState | LegacyPrivacyState | null,
+): PrivacyState {
+  if (rawState?.version === 2) return rawState;
+  if (rawState?.version === 1) {
+    return {
+      version: 2,
+      viewingKey: rawState.viewingKey,
+      identityAddress: rawState.identityAddress,
+      inboxSecretKey: rawState.inboxSecretKey,
+    };
+  }
+  return {
+    version: 2,
+    viewingKey: `0x${generateViewingKey().toString(16)}`,
+  };
+}
+
+type PrivacyVaultUnlockConfig = {
+  chainId: "SN_MAIN" | "SN_SEPOLIA";
+  poolAddress: string;
 };
 
 type LegacyPrivacyState = {
@@ -67,9 +91,11 @@ export class PrivacyVault {
 
 export async function unlockPrivacyVault(
   account: WalletAccountV6,
-  config: DirectPrivacyConfig,
+  config: PrivacyVaultUnlockConfig,
 ): Promise<PrivacyVault> {
-  const typedData = unlockTypedData(account.address, config.poolAddress);
+  const mode = config.chainId === "SN_MAIN" ? "mainnet" : "testnet";
+  await ensureReadyChain(account, mode);
+  const typedData = unlockTypedData(account.address, config.poolAddress, config.chainId);
   const signature = stark.formatSignature(await account.signMessage(typedData));
   persistUnlockSession(account.address, config.poolAddress, signature);
   return vaultFromSignature(account.address, config.poolAddress, signature);
@@ -171,14 +197,9 @@ async function vaultFromSignature(
   const storageKey = stateStorageKey(wallet, pool);
   const stored = localStorage.getItem(storageKey);
   const rawState = stored ? await decryptState(stored, key) : null;
-  const state: PrivacyState = rawState?.version === 2
-    ? rawState
-    : {
-      version: 2,
-      viewingKey: rawState?.viewingKey ?? `0x${generateViewingKey().toString(16)}`,
-    };
+  const state = materializePrivacyState(rawState);
   const vault = new PrivacyVault(storageKey, key, state);
-  if (!stored) await vault.save();
+  if (!stored || rawState?.version === 1) await vault.save();
   return vault;
 }
 
@@ -214,7 +235,11 @@ export function generateViewingKey(): bigint {
   return value;
 }
 
-function unlockTypedData(wallet: string, pool: string): TypedData {
+function unlockTypedData(
+  wallet: string,
+  pool: string,
+  chainId: PrivacyVaultUnlockConfig["chainId"],
+): TypedData {
   return {
     types: {
       StarknetDomain: [
@@ -230,7 +255,7 @@ function unlockTypedData(wallet: string, pool: string): TypedData {
       ],
     },
     primaryType: "Unlock",
-    domain: { name: "Wotta", version: "1", chainId: "SN_SEPOLIA", revision: "1" },
+    domain: { name: "Wotta", version: "1", chainId, revision: "1" },
     message: { wallet, pool, purpose: "privacy-state" },
   };
 }
