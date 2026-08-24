@@ -2,19 +2,52 @@
 import { execSync } from "node:child_process";
 import { spawn, type ChildProcess } from "node:child_process";
 
-/** Product web on :3000; API on :8787; indexer + relayer workers. */
-const services = [
+// The root dev launcher needs these values too: Next and the API child each
+// load .env themselves, but this process decides whether to launch :8788.
+process.loadEnvFile(".env");
+
+type Service = {
+  name: string;
+  args: string[];
+  env?: NodeJS.ProcessEnv;
+};
+
+const mainnetApiUrl = process.env.NEXT_PUBLIC_MAINNET_API_URL?.replace(/\/$/, "");
+const startLocalMainnetApi = mainnetApiUrl === "http://127.0.0.1:8788" || mainnetApiUrl === "http://localhost:8788";
+const mainnetRpcUrl = process.env.STARKNET_MAINNET_RPC_URL?.trim();
+
+if (startLocalMainnetApi && !mainnetRpcUrl) {
+  throw new Error("NEXT_PUBLIC_MAINNET_API_URL targets local :8788 but STARKNET_MAINNET_RPC_URL is missing");
+}
+
+/** Product web on :3000; Testnet API on :8787; optional Mainnet API on :8788. */
+const services: Service[] = [
   { name: "web", args: ["--filter", "@wotta/web", "dev"] },
   { name: "api", args: ["--filter", "@wotta/api", "dev"] },
   { name: "indexer", args: ["--filter", "@wotta/api", "dev:indexer"] },
   { name: "relayer", args: ["--filter", "@wotta/api", "dev:relayer"] },
-] as const;
+];
+
+if (startLocalMainnetApi) {
+  services.splice(2, 0, {
+    name: "api-mainnet",
+    args: ["--filter", "@wotta/api", "dev"],
+    env: {
+      STARKNET_NETWORK: "mainnet",
+      STARKNET_RPC_URL: mainnetRpcUrl,
+      DEPLOYMENT_MANIFEST_PATH: `${process.cwd()}/deployments/mainnet.json`,
+      PORT: "8788",
+    },
+  });
+}
 
 warnStaleWalletSmoke();
 assertProductWebPort();
+assertApiPort();
+if (startLocalMainnetApi) assertMainnetApiPort();
 
 process.stdout.write(
-  "[dev] product web http://localhost:3000 · api http://127.0.0.1:8787\n",
+  `[dev] product web http://localhost:3000 · testnet api http://127.0.0.1:8787${startLocalMainnetApi ? " · mainnet api http://127.0.0.1:8788" : ""}\n`,
 );
 process.stdout.write(
   "[dev] wallet-smoke is NOT started (optional: pnpm dev:wallet-smoke on :5173)\n",
@@ -26,7 +59,7 @@ let stopping = false;
 for (const service of services) {
   const child = spawn("pnpm", service.args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: { ...process.env, ...service.env },
     stdio: "inherit",
     detached: process.platform !== "win32",
   });
@@ -53,6 +86,26 @@ function warnStaleWalletSmoke(): void {
     `[dev] warning: port 3001 is still in use (likely an old wallet-smoke process: pids ${stale3001.join(", ")})\n` +
       "[dev] stop it: `pkill -f 'vite.*3001'` — product UI is only on http://localhost:3000\n",
   );
+}
+
+function assertApiPort(): void {
+  const blocked = portListenPids(8787);
+  if (blocked.length === 0) return;
+  process.stderr.write(
+    `[dev] error: port 8787 is already in use (pids ${blocked.join(", ")})\n` +
+      "[dev] stop the old dev stack first (Ctrl+C), or run: `fuser -k 8787/tcp`\n",
+  );
+  process.exit(1);
+}
+
+function assertMainnetApiPort(): void {
+  const blocked = portListenPids(8788);
+  if (blocked.length === 0) return;
+  process.stderr.write(
+    `[dev] error: port 8788 is already in use (pids ${blocked.join(", ")})\n` +
+      "[dev] stop the old mainnet API first (Ctrl+C), or set NEXT_PUBLIC_MAINNET_API_URL to a deployed mainnet API.\n",
+  );
+  process.exit(1);
 }
 
 function assertProductWebPort(): void {
