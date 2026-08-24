@@ -214,7 +214,8 @@ export async function runRelayerOnce(deps: { db: Db; config: Config; log: Logger
 
 export async function runRelayerLoop(deps: { db: Db; config: Config; log: Logger }, signal: AbortSignal) {
   while (!signal.aborted) {
-    await runRelayerOnce(deps);
+    try { await runRelayerOnce(deps); }
+    catch (error) { deps.log.error({ error: error instanceof Error ? error.message : "relayer_failed" }, "Wotta relayer iteration failed"); }
     await new Promise((resolve) => setTimeout(resolve, 5_000));
   }
 }

@@ -162,7 +162,7 @@ class WottaProductSession {
         publicKeyFromSecret(inboxSecretKey) === me.wallet.inbox_pubkey;
       if (!localMatches) {
         await this.request("/v1/wallet/unlink", { method: "POST" });
-        me = { wallet: undefined };
+        me = {};
         inboxSecretKey = undefined;
       }
     }
@@ -401,7 +401,7 @@ class WottaProductSession {
     }
     const response = await fetch(`${this.config.apiUrl}${path}`, {
       ...init,
-      body: requestBody,
+      ...(requestBody === undefined ? {} : { body: requestBody }),
       credentials: "omit",
       headers,
     });

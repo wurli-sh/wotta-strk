@@ -26,8 +26,8 @@ export async function resolveDescriptor(db: Db, config: Config, provider: Recipi
     const wallet = await activeWalletBindingForProfile(db, identity.profile_id, config.manifest.chainId, { dedupe: true });
     recipientStarknetAddress = wallet?.address; inboxEncryptionPublicKey = wallet?.inbox_pubkey;
     if (wallet?.private_identity_verified_at && expectedPool && wallet.privacy_pool_address && BigInt(wallet.privacy_pool_address) === BigInt(expectedPool)) {
-      recipientPrivateIdentityAddress = wallet.private_identity_address;
-      privacyPoolAddress = wallet.privacy_pool_address;
+      recipientPrivateIdentityAddress = wallet.private_identity_address ?? undefined;
+      privacyPoolAddress = wallet.privacy_pool_address ?? undefined;
     }
   }
   const descriptor = { version: 1, descriptorId: crypto.randomUUID(), registered: Boolean(identity && recipientStarknetAddress && inboxEncryptionPublicKey), privateReady: Boolean(recipientPrivateIdentityAddress && privacyPoolAddress), recipientProfileRef: identity?.profile_id, recipientStarknetAddress, recipientPrivateIdentityAddress, privacyPoolAddress, inboxEncryptionPublicKey, issuedAt: Math.floor(Date.now() / 1000), validUntil: expiresAt, nonce: crypto.randomUUID() };

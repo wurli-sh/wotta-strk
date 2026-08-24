@@ -18,13 +18,15 @@ import { idempotent } from "./intents/idempotency.ts";
 import { routesForConfig } from "./routes.ts";
 import { openApiDocument } from "./openapi/document.ts";
 import { requestChainId, rpcUrlForChainId } from "./network-scope.ts";
+import { runIndexerLoop } from "./indexer/run.ts";
+import { runRelayerLoop } from "./relayer/run.ts";
 
-type Deps = ReturnType<typeof deps>; function deps() { const config = loadConfig(); return { config, db: createDb(config), log: createLogger(config) }; }
+type Deps = ReturnType<typeof deps>; function deps(config = loadConfig()) { return { config, db: createDb(config), log: createLogger(config) }; }
 function parse<T>(schema: z.ZodType<T>, body: unknown): T { const result = schema.safeParse(body); if (!result.success) throw new Error(`invalid_body:${result.error.issues[0]?.path.join(".") ?? "value"}`); return result.data; }
 function errorReply(reply: { code: (status: number) => { send: (body: unknown) => unknown } }, error: unknown) { const message = safeError(error); const status = message === "unauthorized" ? 401 : message === "not_found" ? 404 : message.includes("route_disabled") || message.includes("identity_already_linked") || message.includes("wallet_already_linked") || message.includes("wallet_inbox_key_mismatch") || message.includes("wallet_binding_ambiguous") || message.includes("invalid_") || message.includes("challenge_") || message.includes("signature_") || message.includes("version_conflict") || message.includes("idempotency_") ? 409 : 400; return reply.code(status).send({ error: { code: message.split(":")[0], message } }); }
 
-export async function buildServer() {
-  const d = deps(); const app = Fastify({ bodyLimit: 256 * 1024, loggerInstance: d.log });
+export async function buildServer(d = deps()) {
+  const app = Fastify({ bodyLimit: 256 * 1024, loggerInstance: d.log });
   await app.register(cors, { origin: d.config.corsOrigins, credentials: false });
   app.addHook("onRequest", async (request, reply) => { if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method) && request.url.startsWith("/v1/") && request.headers.cookie) return reply.code(400).send({ error: { code: "cookie_auth_forbidden" } }); });
   app.addHook("onRequest", async (request, reply) => {
@@ -33,7 +35,13 @@ export async function buildServer() {
     }
   });
   app.addHook("onSend", async (_request, reply) => { reply.header("Cache-Control", "no-store").header("X-Content-Type-Options", "nosniff").header("X-Frame-Options", "DENY").header("Referrer-Policy", "no-referrer"); });
-  app.get("/v1/health", async () => ({ ok: true, manifestHash: d.config.manifestHash, routesEnabled: routesForConfig(d.config).filter((route) => route.enabled).length }));
+  app.get("/v1/health", async () => ({
+    ok: true,
+    chainId: d.config.manifest.chainId,
+    manifestHash: d.config.manifestHash,
+    routesEnabled: routesForConfig(d.config).filter((route) => route.enabled).length,
+    workers: { indexer: d.config.env.RUN_INDEXER, relayer: d.config.env.RUN_RELAYER },
+  }));
   app.get("/v1/routes", async () => ({
     routes: routesForConfig(d.config),
     manifestHash: d.config.manifestHash,
@@ -119,5 +127,23 @@ export async function buildServer() {
   app.post("/v1/notes/:id/delivered", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); const { data, error } = await d.db.from("encrypted_notes").update({ delivered_at: new Date().toISOString() }).eq("id", String((request.params as { id: string }).id)).eq("recipient_profile_id", auth.userId).select("id").maybeSingle(); return error ? errorReply(reply, error) : data ? { ok: true } : errorReply(reply, new Error("not_found")); });
   return app;
 }
-async function main() { const config = loadConfig(); await assertStarknetRpcNetwork(config); const app = await buildServer(); const close = async () => { await app.close(); process.exit(0); }; process.once("SIGINT", () => void close()); process.once("SIGTERM", () => void close()); await app.listen({ port: config.port, host: "0.0.0.0" }); }
+async function main() {
+  const config = loadConfig();
+  await assertStarknetRpcNetwork(config);
+  const d = deps(config);
+  const app = await buildServer(d);
+  const workers = new AbortController();
+  const workerTasks: Promise<void>[] = [];
+  if (config.env.RUN_INDEXER) workerTasks.push(runIndexerLoop(d, workers.signal));
+  if (config.env.RUN_RELAYER) workerTasks.push(runRelayerLoop(d, workers.signal));
+  const close = async () => {
+    workers.abort();
+    await Promise.allSettled(workerTasks);
+    await app.close();
+    process.exit(0);
+  };
+  process.once("SIGINT", () => void close());
+  process.once("SIGTERM", () => void close());
+  await app.listen({ port: config.port, host: "0.0.0.0" });
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((error) => { console.error(safeError(error)); process.exit(1); });

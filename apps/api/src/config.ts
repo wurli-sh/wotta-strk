@@ -4,6 +4,12 @@ import { z } from "zod";
 import { deploymentManifestSchema, hashDeploymentManifest } from "@wotta/shared";
 import { constants, RpcProvider } from "starknet";
 
+const envBoolean = z.preprocess(
+  (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+  z.union([z.literal("true"), z.literal("false"), z.boolean()])
+    .transform((value) => value === true || value === "true"),
+);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"), PORT: z.coerce.number().int().min(1).max(65535).default(8787),
   API_ORIGIN: z.string().url().default("http://127.0.0.1:8787"), CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"), LOG_LEVEL: z.string().default("info"),
@@ -13,6 +19,8 @@ const envSchema = z.object({
   STARKNET_DEPLOYER_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_DEPLOYER_PRIVATE_KEY: z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/).optional(),
   DEPLOYMENT_MANIFEST_PATH: z.string().optional(),
   CCTP_ADMITTED_ROUTES: z.string().default(""),
+  RUN_INDEXER: envBoolean.default(false),
+  RUN_RELAYER: envBoolean.default(false),
 }).passthrough();
 export type Config = ReturnType<typeof loadConfig>;
 
@@ -34,6 +42,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
   const supportedCctpRoutes = new Set(["ethereum", "arbitrum", "base", "solana", "stellar"]);
   for (const route of admittedCctpRoutes) {
     if (!supportedCctpRoutes.has(route)) throw new Error(`unsupported_admitted_route:${route}`);
+  }
+  if (expectedChainId === "SN_MAIN" && (env.RUN_INDEXER || env.RUN_RELAYER)) {
+    throw new Error("mainnet_workers_not_supported");
   }
   return { env, port: env.PORT, origin: env.API_ORIGIN.replace(/\/$/, ""), corsOrigins: env.CORS_ORIGINS.split(",").map((x) => x.trim()).filter(Boolean), manifestHash, manifest, manifestPath, admittedCctpRoutes };
 }

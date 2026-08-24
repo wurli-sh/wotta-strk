@@ -8,6 +8,12 @@ if [[ -f .env ]]; then
   set +a
 fi
 
+# Supabase's direct database hostname can be IPv6-only. Prefer the session
+# pooler URI when supplied while keeping DATABASE_URL compatible with CI.
+if [[ -n "${DATABASE_POOLER_URL:-}" ]]; then
+  DATABASE_URL="$DATABASE_POOLER_URL"
+fi
+
 if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL is required; add it to .env or export it before running migrations." >&2
   exit 1

@@ -27,6 +27,7 @@
     "test:web": "pnpm --filter @wotta/web test",
     "openapi:generate": "pnpm --filter @wotta/api openapi:generate",
     "db:migrate": "bash scripts/db/migrate.sh",
+    "deploy:env": "node scripts/deploy/sync-production-env.mjs",
     "keys:sepolia-privacy": "node --experimental-strip-types scripts/ops/init-sepolia-privacy-keys.ts",
     "account:sepolia-promote": "node --experimental-strip-types scripts/ops/promote-sepolia-account.ts",
     "reset:sepolia-privacy-dev": "bash scripts/ops/reset-sepolia-privacy-dev.sh",

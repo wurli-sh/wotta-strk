@@ -1,0 +1,100 @@
+services:
+  - type: web
+    name: wotta-api-testnet
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /v1/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: STARKNET_NETWORK
+        value: sepolia
+      - key: DEPLOYMENT_MANIFEST_PATH
+        value: /app/deployments/sepolia.json
+      - key: RUN_INDEXER
+        value: "true"
+      - key: RUN_RELAYER
+        value: "true"
+      - key: CIRCLE_IRIS_BASE_URL
+        value: https://iris-api-sandbox.circle.com
+      - key: CCTP_ADMITTED_ROUTES
+        value: ethereum,arbitrum,base,solana,stellar
+      - key: LOG_LEVEL
+        value: info
+      - key: API_ORIGIN
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: STARKNET_RPC_URL
+        sync: false
+      - key: STARKNET_MAINNET_RPC_URL
+        sync: false
+      - key: RESOLVER_SIGNING_KEY
+        sync: false
+      - key: IDENTITY_LOOKUP_KEY
+        sync: false
+      - key: PENDING_DELIVERY_PRIVATE_KEY
+        sync: false
+      - key: STARKNET_DEPLOYER_ADDRESS
+        sync: false
+      - key: STARKNET_DEPLOYER_PRIVATE_KEY
+        sync: false
+      - key: STARKNET_RELAYER_ADDRESS
+        sync: false
+      - key: STARKNET_RELAYER_PRIVATE_KEY
+        sync: false
+      - key: STARKNET_RELAYER_KEY_OR_KEYSTORE
+        sync: false
+
+  - type: web
+    name: wotta-api-mainnet
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /v1/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: STARKNET_NETWORK
+        value: mainnet
+      - key: DEPLOYMENT_MANIFEST_PATH
+        value: /app/deployments/mainnet.json
+      - key: RUN_INDEXER
+        value: "false"
+      - key: RUN_RELAYER
+        value: "false"
+      - key: CIRCLE_IRIS_BASE_URL
+        value: https://iris-api.circle.com
+      - key: CCTP_ADMITTED_ROUTES
+        value: ""
+      - key: LOG_LEVEL
+        value: info
+      - key: API_ORIGIN
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: STARKNET_RPC_URL
+        sync: false
+      - key: STARKNET_MAINNET_RPC_URL
+        sync: false
+      - key: RESOLVER_SIGNING_KEY
+        sync: false
+      - key: IDENTITY_LOOKUP_KEY
+        sync: false
+      - key: PENDING_DELIVERY_PRIVATE_KEY
+        sync: false
