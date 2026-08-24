@@ -63,6 +63,7 @@ const APP_MESSAGES: Record<string, string> = {
   ready_mainnet_network_mismatch: "Disconnect or switch Ready to Starknet Mainnet, then reconnect",
   ready_testnet_network_mismatch: "Disconnect or switch Ready to Starknet Sepolia, then reconnect",
   ready_connection_unresponsive: "Ready did not answer — unlock or reopen Ready, then retry",
+  balance_check_unresponsive: "Balance check timed out — reopen Ready and retry",
   signature_invalid: "Ready signature did not verify — switch network in Ready and retry",
   challenge_invalid: "Wallet binding expired — close the modal and try again",
   ready_pool_mismatch: "Ready’s live privacy pool does not match Wotta’s verified pool",

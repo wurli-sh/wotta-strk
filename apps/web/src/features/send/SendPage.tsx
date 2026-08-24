@@ -536,6 +536,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           throw new Error("Recipient isn’t ready for private payments on Starknet Mainnet");
         }
         const amount = denominationBaseUnits(denom);
+        setStage("unlocking_private");
         const [privateBalance, publicBalance, strkBalance] = await Promise.all([
           readMainnetPrivateBalance(connected.account),
           readMainnetPublicUsdcBalance(connected.account),
@@ -864,7 +865,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                     className="mx-auto mt-3 block text-xs font-medium text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={unlockAfterReadyClosed}
                   >
-                    I closed Ready — unlock Send
+                    Cancel and unlock Send
                   </button>
                 ) : null}
               </div>

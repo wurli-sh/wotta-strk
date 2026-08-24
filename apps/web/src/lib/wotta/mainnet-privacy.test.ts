@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { constants, type WalletAccountV6 } from "starknet";
 import {
   MAINNET_USDC_AMOUNT,
@@ -12,6 +12,8 @@ import {
 } from "./mainnet-privacy";
 
 describe("Ready-managed mainnet privacy", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("pins the live pool, demo amount, and selected-amount allowlist", () => {
     const config = mainnetPrivacyConfig();
     expect(config.chainId).toBe("SN_MAIN");
@@ -65,6 +67,17 @@ describe("Ready-managed mainnet privacy", () => {
       strk20Balances: async () => { throw new Error("rpc_unavailable"); },
     } as unknown as WalletAccountV6;
     await expect(readMainnetPrivateBalance(account)).rejects.toThrow("rpc_unavailable");
+  });
+
+  it("does not leave Send stuck when Ready never answers a balance request", async () => {
+    vi.useFakeTimers();
+    const account = {
+      strk20Balances: () => new Promise<never>(() => undefined),
+    } as unknown as WalletAccountV6;
+    const balance = readMainnetPrivateBalance(account);
+    const rejection = expect(balance).rejects.toThrow("balance_check_unresponsive");
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
   });
 
   it("turns Ready's raw registration failure into an actionable app error", async () => {

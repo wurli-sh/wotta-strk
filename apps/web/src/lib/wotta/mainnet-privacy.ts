@@ -3,6 +3,7 @@ import mainnetDeployment from "../../../../../deployments/mainnet.json";
 import { ensureReadyChain } from "./ready.ts";
 
 export const MAINNET_USDC_AMOUNT = 100_000n;
+const READY_BALANCE_TIMEOUT_MS = 30_000;
 // Ready chooses and prices the private fee inside its confirmation UI; Wallet
 // API 0.10.3 does not return that quote to the dapp. Keep a conservative USDC
 // reserve inside the pool so an exact-denomination transfer can pay the fee.
@@ -87,6 +88,23 @@ function mainnetPrivacyRegistrationRequired(): Error {
   return new Error("mainnet_privacy_registration_required");
 }
 
+async function withBalanceReadTimeout<T>(request: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("balance_check_unresponsive")),
+          READY_BALANCE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export async function assertMainnetPrivacyRuntime(account: WalletAccountV6): Promise<void> {
   const config = mainnetPrivacyConfig();
   await ensureReadyChain(account, "mainnet");
@@ -98,7 +116,7 @@ export async function readMainnetPrivateBalance(account: WalletAccountV6): Promi
   const config = mainnetPrivacyConfig();
   let entries;
   try {
-    entries = await account.strk20Balances([config.usdc]);
+    entries = await withBalanceReadTimeout(account.strk20Balances([config.usdc]));
   } catch (error) {
     // The Wallet API has no dapp registration method. Until the user enables
     // Shielded tokens in Ready, an unregistered account has no private balance.
@@ -111,21 +129,21 @@ export async function readMainnetPrivateBalance(account: WalletAccountV6): Promi
 
 export async function readMainnetPublicUsdcBalance(account: WalletAccountV6): Promise<bigint> {
   const config = mainnetPrivacyConfig();
-  const values = await account.provider.callContract({
+  const values = await withBalanceReadTimeout(account.provider.callContract({
     contractAddress: config.usdc,
     entrypoint: "balance_of",
     calldata: [account.address],
-  }, "latest");
+  }, "latest"));
   return BigInt(values[0] ?? "0") + (BigInt(values[1] ?? "0") << 128n);
 }
 
 export async function readMainnetPublicStrkBalance(account: WalletAccountV6): Promise<bigint> {
   const config = mainnetPrivacyConfig();
-  const values = await account.provider.callContract({
+  const values = await withBalanceReadTimeout(account.provider.callContract({
     contractAddress: config.feeToken,
     entrypoint: "balance_of",
     calldata: [account.address],
-  }, "latest");
+  }, "latest"));
   return BigInt(values[0] ?? "0") + (BigInt(values[1] ?? "0") << 128n);
 }
 
