@@ -28,44 +28,22 @@ test("privacy page honest labels", async ({ page }) => {
   await expect(page.getByTestId("privacy-page")).toContainText(/unaudited/i);
 });
 
-test("network dropdown confirms, persists, and restores shared Send state", async ({ page }) => {
+test("signed-out nav hides network menu; mode still persists via storage", async ({ page }) => {
   await page.goto("/send");
-  const menuButton = page.getByTestId("network-menu");
-  await expect(menuButton).toContainText("Testnet");
+  await expect(page.getByTestId("sign-in")).toBeVisible();
+  await expect(page.getByTestId("network-menu")).toHaveCount(0);
+  await expect(page.getByTestId("denom-0.1")).toHaveCount(0);
 
-  await menuButton.click();
-  const testnetToggle = page.getByRole("switch", { name: "Testnet mode" });
-  await expect(testnetToggle).toBeChecked();
-  await testnetToggle.click();
-  await expect(
-    page.getByRole("region", { name: "Network menu" }).getByRole("alert"),
-  ).toContainText("Mainnet uses real USDC and STRK");
-  await expect(menuButton).toContainText("Testnet");
-  await expect(testnetToggle).toBeChecked();
-
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("button", { name: "Use mainnet" })).toHaveCount(0);
-  await expect(menuButton).toContainText("Testnet");
-  await testnetToggle.click();
-
-  await page.getByRole("button", { name: "Use mainnet" }).click();
-  await expect(menuButton).toContainText("Mainnet");
+  await page.evaluate(() => window.localStorage.setItem("wotta-network-mode", "mainnet"));
+  await page.reload();
+  await expect(page.getByTestId("sign-in")).toBeVisible();
+  await expect(page.getByTestId("network-menu")).toHaveCount(0);
   await expect(page.getByTestId("denom-0.1")).toBeVisible();
   await expect(page.getByTestId("source-ethereum")).toBeDisabled();
 
+  await page.evaluate(() => window.localStorage.setItem("wotta-network-mode", "testnet"));
   await page.reload();
-  await expect(menuButton).toContainText("Mainnet");
-  await expect(page.getByTestId("denom-0.1")).toBeVisible();
-
-  await menuButton.click();
-  await page.getByRole("switch", { name: "Testnet mode" }).click();
-  await expect(menuButton).toContainText("Testnet");
   await expect(page.getByTestId("denom-0.1")).toHaveCount(0);
-  await expect(page.getByRole("switch", { name: "Private route send mode" })).not.toBeChecked();
-
-  await menuButton.click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("region", { name: "Network menu" })).toHaveCount(0);
 });
 
 test.describe("Mainnet mode isolation", () => {

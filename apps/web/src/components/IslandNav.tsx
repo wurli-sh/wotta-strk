@@ -218,13 +218,11 @@ export function IslandNav() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [confirmMainnet, setConfirmMainnet] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const networkMenuRef = useRef<HTMLDivElement>(null);
   const lastSessionToken = useRef<string | null | undefined>(undefined);
   const { sources, clearSources } = useSourceWallet();
   const { clearVault } = usePrivacyVault();
@@ -256,7 +254,6 @@ export function IslandNav() {
     setMe(null);
     setConfirmMainnet(false);
     setMenuOpen(false);
-    setNetworkMenuOpen(false);
     toastNetworkModeEnabled(next);
     router.refresh();
   }
@@ -305,19 +302,12 @@ export function IslandNav() {
   }, [session]);
 
   useEffect(() => {
-    if (!menuOpen && !networkMenuOpen) return;
+    if (!menuOpen) return;
     function onPointer(e: MouseEvent) {
-      const target = e.target as Node;
-      if (!menuRef.current?.contains(target) && !networkMenuRef.current?.contains(target)) {
-        setMenuOpen(false);
-        setNetworkMenuOpen(false);
-      }
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        setNetworkMenuOpen(false);
-      }
+      if (e.key === "Escape") setMenuOpen(false);
     }
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -325,7 +315,7 @@ export function IslandNav() {
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [menuOpen, networkMenuOpen]);
+  }, [menuOpen]);
 
   async function disconnectAuth() {
     setBusy(true);
@@ -526,7 +516,7 @@ export function IslandNav() {
                       ) : null}
                     </div>
 
-                    <div className="border-t border-border/60 px-3 py-3">
+                    <div className="border-t border-border/60 px-3 py-3" data-testid="network-menu">
                       <NetworkChoices
                         mode={mode}
                         confirmMainnet={confirmMainnet}
@@ -681,50 +671,17 @@ export function IslandNav() {
               </div>
             ) : null}
             {session === null ? (
-              <div className="flex items-center gap-1.5">
-                <div className="relative" ref={networkMenuRef}>
-                  <button
-                    type="button"
-                    data-testid="network-menu"
-                    aria-label="Network menu"
-                    aria-expanded={networkMenuOpen}
-                    aria-controls="signed-out-network-menu"
-                    onClick={() => setNetworkMenuOpen((open) => !open)}
-                    className={cn(
-                      "radius-control flex min-h-8 items-center gap-1 bg-nav-hover px-2.5 text-[10px] font-semibold uppercase tracking-wide text-nav-foreground/80 transition-[background-color,color,box-shadow] duration-300 hover:bg-nav-active hover:text-nav-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav",
-                      networkRingClass(mode),
-                    )}
-                  >
-                    {mode === "mainnet" ? "Mainnet" : "Testnet"}
-                    <ChevronDown className={cn("size-3 transition-transform", networkMenuOpen && "rotate-180")} aria-hidden />
-                  </button>
-                  {networkMenuOpen ? (
-                    <section
-                      id="signed-out-network-menu"
-                      aria-label="Network menu"
-                      className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-border/80 bg-card p-3 shadow-card"
-                    >
-                      <NetworkChoices
-                        mode={mode}
-                        confirmMainnet={confirmMainnet}
-                        onSelect={switchNetwork}
-                        onCancelMainnet={() => setConfirmMainnet(false)}
-                      />
-                    </section>
-                  ) : null}
-                </div>
-                <motion.div whileTap={reduce ? undefined : buttonTap}>
-                  <button
-                    data-motion-button
-                    data-testid="sign-in"
-                    type="button"
-                    onClick={() => setSignInOpen(true)}
-                    className="radius-control cursor-pointer bg-brand px-3 py-1.5 text-sm font-semibold text-brand-foreground shadow-action transition-colors duration-100 ease-out hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav disabled:opacity-50"
-                  >
-                    Sign in
-                  </button>
-                </motion.div>
-              </div>
+              <motion.div whileTap={reduce ? undefined : buttonTap}>
+                <button
+                  data-motion-button
+                  data-testid="sign-in"
+                  type="button"
+                  onClick={() => setSignInOpen(true)}
+                  className="radius-control cursor-pointer bg-brand px-3 py-1.5 text-sm font-semibold text-brand-foreground shadow-action transition-colors duration-100 ease-out hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav disabled:opacity-50"
+                >
+                  Sign in
+                </button>
+              </motion.div>
             ) : null}
             {session === undefined ? (
               <span className="radius-control block size-8 animate-pulse bg-nav-hover" />
