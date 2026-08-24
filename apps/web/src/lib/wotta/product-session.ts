@@ -535,7 +535,10 @@ export class WottaProductSession {
         const intent = await this.intent(intentId);
         consecutiveNetworkErrors = 0;
         if (intent.onchain_state === "funded" || intent.state === "funded" || intent.state === "delivered" || intent.state === "claimable" || intent.state === "completed") return intent;
-        if (intent.onchain_state === "refunded" || intent.state === "failed_terminal" || intent.state === "refunded") {
+        if (intent.onchain_state === "refunded" || intent.state === "failed_terminal" || intent.state === "failed_recoverable" || intent.state === "refunded") {
+          if (intent.state === "failed_recoverable") {
+            throw new Error("Starknet settlement stalled — Sepolia relayer needs STRK. Fund STARKNET_DEPLOYER_ADDRESS (~10 STRK) and retry.");
+          }
           throw new Error(`Cross-chain payment ended in ${intent.onchain_state ?? intent.state}`);
         }
         if (intent.state === "destination_submitted" || intent.state === "attestation_ready") onStage?.("settling");

@@ -234,11 +234,11 @@ function mapKnownPhrase(raw: string): string | null {
     return "Privacy pool received an empty proof — retry after Sepolia catches up";
   }
 
-  if (/privacy submitter strk balance too low|sepolia proof submitter is low on strk/i.test(m)) {
-    return "Sepolia proof submitter needs STRK — fund STARKNET_DEPLOYER_ADDRESS (~5 STRK) and retry";
+  if (/privacy submitter strk balance too low|relayer strk balance too low|sepolia proof submitter is low on strk|settlement stalled|relayer needs strk/i.test(m)) {
+    return "Sepolia settlement wallet needs STRK — fund STARKNET_DEPLOYER_ADDRESS (~10 STRK) and retry";
   }
   if (/resources bounds.*exceed balance|exceed balance/i.test(m)) {
-    return "Sepolia proof submitter needs STRK — fund STARKNET_DEPLOYER_ADDRESS (~5 STRK) and retry";
+    return "Sepolia settlement wallet needs STRK — fund STARKNET_DEPLOYER_ADDRESS (~10 STRK) and retry";
   }
   if (m.includes("privacy proof submission was rejected")) {
     return "Privacy proof was rejected on Sepolia — reconnect Ready from Account and retry";

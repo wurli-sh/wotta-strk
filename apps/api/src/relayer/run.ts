@@ -1,4 +1,4 @@
-import { CairoByteArray, Account, RpcProvider, Signer } from "starknet";
+import { CairoByteArray, Account, RpcProvider, Signer, type Call, type ResourceBoundsBN } from "starknet";
 import { decodeCircleCctpMessageV2, DENOMINATION_CODES, type IntentState } from "@wotta/shared";
 import type { Config } from "../config.ts";
 import type { Db } from "../db/client.ts";
@@ -6,7 +6,12 @@ import type { Logger } from "pino";
 import { acquireLease } from "../workers/lease.ts";
 import { routeById } from "../routes.ts";
 import { fetchAttestation } from "./iris.ts";
-import { transition } from "../intents/service.ts";
+import { transition, transitionAllowed } from "../intents/service.ts";
+
+const STRK_TOKEN_ADDRESS =
+  "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
+/** CCTP settle is cheaper than privacy apply_actions; keep a floor so we fail loud when empty. */
+const SETTLE_MIN_L2_GAS = 30_000_000n;
 
 type JobRow = {
   id: string;
@@ -38,6 +43,61 @@ function relayerAccount(config: Config) {
   if (!address || !key || !/^0x[0-9a-f]+$/i.test(key)) throw new Error("relayer_credentials_missing");
   const provider = new RpcProvider({ nodeUrl: config.env.STARKNET_RPC_URL });
   return { provider, account: new Account({ provider, address, signer: new Signer(key) }) };
+}
+
+async function strkBalance(account: Account): Promise<bigint> {
+  const result = await account.provider.callContract({
+    contractAddress: STRK_TOKEN_ADDRESS,
+    entrypoint: "balanceOf",
+    calldata: [account.address],
+  });
+  return BigInt(result[0] ?? 0) + (BigInt(result[1] ?? 0) << 128n);
+}
+
+function maxFeeForBounds(bounds: ResourceBoundsBN): bigint {
+  const l1 = bounds.l1_gas.max_amount * bounds.l1_gas.max_price_per_unit;
+  const l2 = bounds.l2_gas.max_amount * bounds.l2_gas.max_price_per_unit;
+  const l1Data = bounds.l1_data_gas.max_amount * bounds.l1_data_gas.max_price_per_unit;
+  return l1 + l2 + l1Data;
+}
+
+/** Shrink L2 max_amount so total max fee fits ~95% of STRK balance (auto-estimates often overshoot). */
+function clampBoundsToBalance(bounds: ResourceBoundsBN, balance: bigint, accountAddress: string): ResourceBoundsBN {
+  const budget = (balance * 95n) / 100n;
+  const l1Cost = bounds.l1_gas.max_amount * bounds.l1_gas.max_price_per_unit;
+  const l1DataCost = bounds.l1_data_gas.max_amount * bounds.l1_data_gas.max_price_per_unit;
+  const reserved = l1Cost + l1DataCost;
+  if (budget <= reserved) {
+    throw new Error(
+      `relayer STRK balance too low on Sepolia — fund STARKNET_RELAYER_ADDRESS / STARKNET_DEPLOYER_ADDRESS (${accountAddress}) with at least 10 STRK`,
+    );
+  }
+  const l2Price = bounds.l2_gas.max_price_per_unit;
+  const affordableL2 = l2Price > 0n ? (budget - reserved) / l2Price : 0n;
+  const l2Max = affordableL2 < bounds.l2_gas.max_amount ? affordableL2 : bounds.l2_gas.max_amount;
+  if (l2Max < SETTLE_MIN_L2_GAS) {
+    throw new Error(
+      `relayer STRK balance too low on Sepolia — fund STARKNET_RELAYER_ADDRESS / STARKNET_DEPLOYER_ADDRESS (${accountAddress}) with at least 10 STRK`,
+    );
+  }
+  return {
+    ...bounds,
+    l2_gas: { ...bounds.l2_gas, max_amount: l2Max },
+  };
+}
+
+async function executeSettle(account: Account, call: Call) {
+  const estimated = await account.estimateInvokeFee(call);
+  const balance = await strkBalance(account);
+  let resourceBounds = estimated.resourceBounds;
+  if (maxFeeForBounds(resourceBounds) > (balance * 95n) / 100n) {
+    resourceBounds = clampBoundsToBalance(resourceBounds, balance, account.address);
+  }
+  return account.execute(call, { resourceBounds });
+}
+
+function isRelayerFeeExhausted(message: string): boolean {
+  return /exceed balance|strk balance too low|resources bounds/i.test(message);
 }
 
 function validateSettlement(config: Config, job: JobRow, message: string) {
@@ -86,11 +146,12 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
   if (job.intent.state === "attestation_ready" && !job.destination_tx_hash) {
     const message = new CairoByteArray(Buffer.from(iris.message.replace(/^0x/, ""), "hex"));
     const attestation = new CairoByteArray(Buffer.from(iris.attestation.replace(/^0x/, ""), "hex"));
-    const response = await account.execute({
+    const call = {
       contractAddress: deps.config.manifest.router.address,
       entrypoint: "settle",
       calldata: [...message.toApiRequest(), ...attestation.toApiRequest()],
-    });
+    };
+    const response = await executeSettle(account, call);
     job.destination_tx_hash = response.transaction_hash;
     await deps.db.from("relayer_jobs").update({ destination_tx_hash: response.transaction_hash, message_hash: iris.messageHash, updated_at: new Date().toISOString() }).eq("id", job.id);
     await advance(deps.db, job, "destination_submitted", { destinationTxHash: response.transaction_hash, messageHash: iris.messageHash });
@@ -128,9 +189,23 @@ export async function runRelayerOnce(deps: { db: Db; config: Config; log: Logger
       if (done) processed += 1;
     } catch (error) {
       const attempts = job.attempts + 1;
-      const terminal = attempts >= 10;
       const message = error instanceof Error ? error.message : "relayer_failed";
+      const feeExhausted = isRelayerFeeExhausted(message);
+      const terminal = attempts >= 10 || feeExhausted;
       await deps.db.from("relayer_jobs").update({ status: terminal ? "failed" : "queued", attempts, last_error: message.slice(0, 512), updated_at: new Date().toISOString() }).eq("id", job.id);
+      if (feeExhausted && transitionAllowed(job.intent.state, "failed_recoverable")) {
+        try {
+          await advance(deps.db, job, "failed_recoverable", {
+            reason: "relayer_strk_insufficient",
+            error: message.slice(0, 240),
+          });
+        } catch (transitionError) {
+          deps.log.warn({
+            intentId: job.intent.id,
+            error: transitionError instanceof Error ? transitionError.message : "transition_failed",
+          }, "Could not mark CCTP intent failed after relayer STRK exhaustion");
+        }
+      }
       deps.log.warn({ intentId: job.intent.id, attempts, error: message }, "CCTP settlement attempt failed");
     }
   }
