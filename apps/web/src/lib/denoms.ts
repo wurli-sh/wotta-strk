@@ -1,5 +1,5 @@
 export const DENS = [1n, 10n, 50n, 100n] as const;
-export const MAINNET_DENS = ["0.5", ...DENS] as const;
+export const MAINNET_DENS = ["0.1", ...DENS] as const;
 export type TestnetDens = (typeof DENS)[number];
 export type Dens = (typeof MAINNET_DENS)[number];
 
@@ -8,7 +8,7 @@ export function densLabel(d: Dens | number | bigint): string {
 }
 
 export function denominationBaseUnits(value: Dens): bigint {
-  if (value === "0.5") return 500_000n;
+  if (value === "0.1") return 100_000n;
   return value * 1_000_000n;
 }
 

@@ -65,7 +65,7 @@ function PrivacyContent() {
             </li>
             <li>
               {mode === "mainnet"
-                ? "Mainnet actions are limited to 0.5, 1, 10, 50, or 100 native USDC; the qualification demo uses 0.5 USDC."
+                ? "Mainnet actions are limited to 0.1, 1, 10, 50, or 100 native USDC; the qualification demo uses 0.1 USDC."
                 : "Testnet settlement denominations are exact whole USDC amounts: 1, 10, 50, or 100."}
             </li>
           </ul>

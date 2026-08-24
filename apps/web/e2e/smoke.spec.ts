@@ -9,7 +9,7 @@ test("landing + Send shell", async ({ page }) => {
   await expect(page.getByText("1").first()).toBeVisible();
   await expect(page.getByTestId("denom-1")).toBeVisible();
   await expect(page.getByTestId("denom-100")).toBeVisible();
-  await expect(page.getByTestId("denom-0.5")).toHaveCount(0);
+  await expect(page.getByTestId("denom-0.1")).toHaveCount(0);
   await expect(page.getByText(/admitted testnet source/i)).toBeVisible();
 });
 
@@ -50,17 +50,17 @@ test("network dropdown confirms, persists, and restores shared Send state", asyn
 
   await page.getByRole("button", { name: "Use mainnet" }).click();
   await expect(menuButton).toContainText("Mainnet");
-  await expect(page.getByTestId("denom-0.5")).toBeVisible();
+  await expect(page.getByTestId("denom-0.1")).toBeVisible();
   await expect(page.getByTestId("source-ethereum")).toBeDisabled();
 
   await page.reload();
   await expect(menuButton).toContainText("Mainnet");
-  await expect(page.getByTestId("denom-0.5")).toBeVisible();
+  await expect(page.getByTestId("denom-0.1")).toBeVisible();
 
   await menuButton.click();
   await page.getByRole("switch", { name: "Testnet mode" }).click();
   await expect(menuButton).toContainText("Testnet");
-  await expect(page.getByTestId("denom-0.5")).toHaveCount(0);
+  await expect(page.getByTestId("denom-0.1")).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "Private route send mode" })).not.toBeChecked();
 
   await menuButton.click();
@@ -76,7 +76,7 @@ test.describe("Mainnet mode isolation", () => {
   test("Send keeps the shared form and restricts it to Starknet", async ({ page }) => {
     await page.goto("/send");
     await expect(page.getByRole("heading", { name: "Send", exact: true })).toBeVisible();
-    for (const amount of ["0.5", "1", "10", "50", "100"]) {
+    for (const amount of ["0.1", "1", "10", "50", "100"]) {
       await expect(page.getByTestId(`denom-${amount}`)).toBeVisible();
     }
     await expect(page.getByRole("switch", { name: "Private route send mode" })).toBeChecked();

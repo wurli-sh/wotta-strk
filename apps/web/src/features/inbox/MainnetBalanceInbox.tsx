@@ -9,7 +9,7 @@ import { userFacingError } from "@/lib/errors";
 import { starkscanTransactionUrl } from "@/lib/network-mode";
 import { beginNetworkOperation } from "@/lib/network-operations";
 import { connectReady } from "@/lib/wotta/ready";
-import { mainnetPrivacyConfig, readMainnetPrivateBalance, readMainnetPublicStrkBalance, submitMainnetPrivacyAction } from "@/lib/wotta/mainnet-privacy";
+import { MAINNET_USDC_PRIVACY_FEE_RESERVE, mainnetPrivacyConfig, readMainnetPrivateBalance, readMainnetPublicStrkBalance, submitMainnetPrivacyAction } from "@/lib/wotta/mainnet-privacy";
 import { readMainnetEvidence, recordMainnetEvidence, type MainnetEvidence } from "@/lib/wotta/mainnet-evidence";
 
 function formatUsdc(value: bigint): string {
@@ -26,6 +26,8 @@ export function MainnetBalanceInbox() {
   const [feeBalance, setFeeBalance] = useState<bigint | null>(null);
   const [error, setError] = useState<string | null>(null);
   const config = mainnetPrivacyConfig();
+  const withdrawalAmount = config.amount;
+  const withdrawalRequiredBalance = withdrawalAmount + MAINNET_USDC_PRIVACY_FEE_RESERVE;
 
   useEffect(() => setEvidence(readMainnetEvidence()), []);
 
@@ -82,14 +84,16 @@ export function MainnetBalanceInbox() {
       ]);
       operation.assertActive();
       setFeeBalance(strkBalance);
-      if (current < 500_000n) throw new Error("You need at least 0.5 private USDC to withdraw");
+      if (current < withdrawalRequiredBalance) {
+        throw new Error(`You need at least ${formatUsdc(withdrawalRequiredBalance)} private USDC to withdraw ${formatUsdc(withdrawalAmount)} and cover Ready’s privacy fee reserve`);
+      }
       if (strkBalance < config.protocolFeeStrk) throw new Error("Need at least 6 STRK plus network gas in this Ready mainnet account");
       const hash = await submitMainnetPrivacyAction(connected.account, "withdraw", connected.address, operation.signal);
       operation.assertActive();
       recordMainnetEvidence("withdraw", hash);
       setEvidence(readMainnetEvidence());
       setBalance(await readMainnetPrivateBalance(connected.account));
-      toast.success("0.5 USDC withdrawn to your public Ready balance");
+      toast.success(`${formatUsdc(withdrawalAmount)} USDC withdrawn to your public Ready balance`);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         const message = userFacingError(error, "Couldn’t withdraw on mainnet");
@@ -136,11 +140,11 @@ export function MainnetBalanceInbox() {
             <Button variant="outline" className="w-full" disabled={busy} onClick={() => void refresh()}>
               <RefreshCw className={`size-4 ${busy ? "animate-spin" : ""}`} aria-hidden /> Refresh balance
             </Button>
-            <Button className="w-full" disabled={busy || balance === null || balance < 500_000n} onClick={() => void withdraw()}>
-              <Wallet className="size-4" aria-hidden /> Withdraw 0.5 USDC
+            <Button className="w-full" disabled={busy || balance === null || balance < withdrawalRequiredBalance} onClick={() => void withdraw()}>
+              <Wallet className="size-4" aria-hidden /> Withdraw {formatUsdc(withdrawalAmount)} USDC
             </Button>
           </div>
-          <p className="text-xs leading-5 text-muted-foreground">Withdrawal sends 0.5 USDC to this Ready account’s public mainnet balance. It incurs the live pool’s STRK fee and Starknet gas.</p>
+          <p className="text-xs leading-5 text-muted-foreground">Withdrawal sends {formatUsdc(withdrawalAmount)} USDC to this Ready account’s public mainnet balance. Keep at least {formatUsdc(MAINNET_USDC_PRIVACY_FEE_RESERVE)} additional private USDC for Ready’s privacy fee; Starknet gas also applies.</p>
         </div>
       </section>
 

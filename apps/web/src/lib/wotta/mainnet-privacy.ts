@@ -2,7 +2,7 @@ import { type STRK20_ACTION, type WalletAccountV6 } from "starknet";
 import mainnetDeployment from "../../../../../deployments/mainnet.json";
 import { ensureReadyChain } from "./ready.ts";
 
-export const MAINNET_USDC_AMOUNT = 500_000n;
+export const MAINNET_USDC_AMOUNT = 100_000n;
 // Ready chooses and prices the private fee inside its confirmation UI; Wallet
 // API 0.10.3 does not return that quote to the dapp. Keep a conservative USDC
 // reserve inside the pool so an exact-denomination transfer can pay the fee.

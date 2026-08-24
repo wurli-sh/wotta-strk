@@ -17,7 +17,7 @@ describe("Ready-managed mainnet privacy", () => {
     expect(config.chainId).toBe("SN_MAIN");
     expect(config.amount).toBe(MAINNET_USDC_AMOUNT);
     expect(MAINNET_USDC_PRIVACY_FEE_RESERVE).toBe(250_000n);
-    expect(config.allowedAmounts).toEqual([500_000n, 1_000_000n, 10_000_000n, 50_000_000n, 100_000_000n]);
+    expect(config.allowedAmounts).toEqual([100_000n, 1_000_000n, 10_000_000n, 50_000_000n, 100_000_000n]);
     expect(config.poolAddress).toMatch(/^0x[0-9a-f]+$/i);
     expect(config.feeToken).toMatch(/^0x[0-9a-f]+$/i);
     expect(config.protocolFeeStrk).toBe(6_000_000_000_000_000_000n);
@@ -25,9 +25,9 @@ describe("Ready-managed mainnet privacy", () => {
 
   it("builds the three demo Wallet API actions", () => {
     const recipient = "0x123";
-    expect(mainnetActions("shield")[0]).toMatchObject({ type: "deposit", amount: "0x7a120" });
-    expect(mainnetActions("transfer", recipient)[0]).toMatchObject({ type: "transfer", amount: "0x7a120", recipient });
-    expect(mainnetActions("withdraw", recipient)[0]).toMatchObject({ type: "withdraw", amount: "0x7a120", recipient });
+    expect(mainnetActions("shield")[0]).toMatchObject({ type: "deposit", amount: "0x186a0" });
+    expect(mainnetActions("transfer", recipient)[0]).toMatchObject({ type: "transfer", amount: "0x186a0", recipient });
+    expect(mainnetActions("withdraw", recipient)[0]).toMatchObject({ type: "withdraw", amount: "0x186a0", recipient });
   });
 
   it("bundles the selected transfer with a private-fee reserve in order", () => {
@@ -38,9 +38,9 @@ describe("Ready-managed mainnet privacy", () => {
   });
 
   it("supports topping up only the missing private amount", () => {
-    expect(mainnetShieldedTransferActions("0x123", 500_000n, 350_000n)).toEqual([
+    expect(mainnetShieldedTransferActions("0x123", 100_000n, 350_000n)).toEqual([
       expect.objectContaining({ type: "deposit", amount: "0x55730" }),
-      expect.objectContaining({ type: "transfer", amount: "0x7a120", recipient: "0x123" }),
+      expect.objectContaining({ type: "transfer", amount: "0x186a0", recipient: "0x123" }),
     ]);
   });
 
