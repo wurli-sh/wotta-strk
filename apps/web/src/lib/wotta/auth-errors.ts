@@ -41,6 +41,17 @@ export function normalizeIdentityLinkError(error: unknown, provider: AuthProvide
       `${providerLabel} is not enabled in Supabase. Turn on Authentication → Providers → ${providerLabel === "X" ? "X / Twitter (OAuth 2.0)" : "Google"}, then try again.`,
     );
   }
+  if (/identity_already_exists/i.test(`${code} ${message}`)) {
+    const providerLabel = provider === "x" ? "X" : "Google";
+    return new Error(
+      `${providerLabel} already belongs to another account — sign in with that account or unlink it there first`,
+    );
+  }
+  if (/flow_state|pkce|code.?verifier/i.test(`${code} ${message}`)) {
+    return new Error(
+      "OAuth link expired or callback origin mismatched — confirm Supabase redirect allow-list includes this site, then retry",
+    );
+  }
   return error instanceof Error ? error : new Error(message || "Identity linking failed");
 }
 
@@ -75,6 +86,19 @@ export function describeOAuthCallbackFailure(failure: OAuthCallbackFailure, prov
     return new Error(
       `${providerLabel} already belongs to another Supabase user. Wotta did not merge payment ownership. Use account recovery or remove the unused test account, then retry.`,
     );
+  }
+  if (/unsupported.provider|provider is not enabled/i.test(`${failure.code} ${failure.description}`)) {
+    return new Error(
+      `${providerLabel} is not enabled in Supabase. Turn on Authentication → Providers → ${providerLabel === "X" ? "X / Twitter (OAuth 2.0)" : "Google"}, then try again.`,
+    );
+  }
+  if (/flow_state|pkce|code.?verifier|invalid request/i.test(`${failure.code} ${failure.description}`)) {
+    return new Error(
+      `${providerLabel} link expired or the callback origin mismatched. Confirm Supabase redirect allow-list includes this site’s /auth/callback, then try again.`,
+    );
+  }
+  if (/access_denied|user.?denied|cancelled/i.test(`${failure.code} ${failure.description}`)) {
+    return new Error(`${providerLabel} authorization was cancelled`);
   }
   return new Error(`${providerLabel} failed: ${failure.description} (${failure.code})`);
 }

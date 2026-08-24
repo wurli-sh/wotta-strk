@@ -38,6 +38,10 @@ const APP_MESSAGES: Record<string, string> = {
   unauthorized: "Sign in again",
   auth_unavailable: "Auth temporarily unavailable",
   auth_failed: "Sign-in did not complete — try again",
+  identity_already_exists:
+    "That X account is already linked to another Wotta login — use that account or unlink it first",
+  flow_state_not_found:
+    "OAuth link expired — confirm this site is in Supabase redirect URLs, then try Link X again",
   claim_payout_authorization_missing:
     "Claim authorization incomplete — try again",
   insufficient_strk_claim_gas: "Add Sepolia STRK to cover the claim gas fee",
@@ -247,6 +251,26 @@ function mapKnownPhrase(raw: string): string | null {
 
   if (m.includes("privacy authorization signature did not verify")) {
     return APP_MESSAGES.privacy_viewing_key_mismatch;
+  }
+
+  if (m.includes("auth_failed") || m === "auth_failed") {
+    return APP_MESSAGES.auth_failed;
+  }
+
+  if (/identity_already_exists/i.test(m)) {
+    return APP_MESSAGES.identity_already_exists;
+  }
+
+  if (/flow_state_not_found|pkce|code.?verifier/i.test(m)) {
+    return APP_MESSAGES.flow_state_not_found;
+  }
+
+  if (/unsupported provider|provider is not enabled/i.test(m)) {
+    return "X is not enabled in Supabase — turn on Authentication → Providers → X / Twitter (OAuth 2.0)";
+  }
+
+  if (/manual(?: identity)? linking/i.test(m)) {
+    return "Enable Supabase Authentication → Settings → Allow manual linking, then retry Link X";
   }
 
   if (

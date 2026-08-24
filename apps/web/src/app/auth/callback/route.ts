@@ -26,14 +26,37 @@ function safeNext(next: string | null): string {
   return "/inbox";
 }
 
+function authErrorRedirect(origin: string, reason: string) {
+  const compact = reason.replace(/\s+/g, " ").trim().slice(0, 180) || "auth_failed";
+  const response = NextResponse.redirect(
+    `${origin}/account?authError=${encodeURIComponent(compact)}`,
+  );
+  response.cookies.delete(AUTH_NEXT_COOKIE);
+  return response;
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const oauthError =
+    searchParams.get("error_code")
+    ?? searchParams.get("error")
+    ?? undefined;
+  const oauthDescription = searchParams.get("error_description") ?? undefined;
   const cookieStore = await cookies();
   const fromCookie = cookieStore.get(AUTH_NEXT_COOKIE)?.value;
   const next = safeNext(
     fromCookie ? decodeURIComponent(fromCookie) : searchParams.get("next"),
   );
+
+  if (oauthError) {
+    const detail = oauthDescription
+      ? `${oauthError}: ${decodeURIComponent(oauthDescription.replace(/\+/g, " "))}`
+      : oauthError;
+    console.error("[auth/callback] oauth provider error", detail);
+    return authErrorRedirect(origin, detail);
+  }
+
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -42,10 +65,10 @@ export async function GET(request: Request) {
       response.cookies.delete(AUTH_NEXT_COOKIE);
       return response;
     }
+    console.error("[auth/callback] exchangeCodeForSession failed", error.message, error.code);
+    return authErrorRedirect(origin, error.code ? `${error.code}: ${error.message}` : error.message);
   }
-  const response = NextResponse.redirect(
-    `${origin}/account?authError=${encodeURIComponent("auth_failed")}`,
-  );
-  response.cookies.delete(AUTH_NEXT_COOKIE);
-  return response;
+
+  console.error("[auth/callback] missing code and oauth error params");
+  return authErrorRedirect(origin, "auth_failed");
 }
