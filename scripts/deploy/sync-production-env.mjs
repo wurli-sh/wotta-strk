@@ -102,7 +102,7 @@ function createRenderServiceIfMissing(services, name, values) {
 function syncVercel() {
   run("vercel", ["link", "--yes", "--scope", scope, "--project", project]);
   for (const [key, value] of Object.entries(web)) {
-    run("vercel", ["env", "add", key, "production", "--force", "--yes"], { input: `${value}\n` });
+    run("vercel", ["env", "add", key, "production", "--force", "--yes"], { input: value });
   }
   console.log(`Vercel: synced ${Object.keys(web).length} production variables to ${scope}/${project}`);
 }

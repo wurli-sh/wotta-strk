@@ -3,16 +3,20 @@ import { readNetworkMode, type NetworkMode } from "@/lib/network-mode";
 
 /** API client — Bearer JWT to hosted Fastify only. */
 export function apiBase(network: NetworkMode = readNetworkMode()): string {
-  const testnetUrl =
+  const testnetUrl = (
     process.env.NEXT_PUBLIC_TESTNET_API_URL ??
-    process.env.NEXT_PUBLIC_API_URL ??
-    "http://127.0.0.1:8787";
+    process.env.NEXT_PUBLIC_API_URL
+  )?.trim();
   if (network === "mainnet") {
     const mainnetUrl = process.env.NEXT_PUBLIC_MAINNET_API_URL?.trim();
     // A mainnet action must never be sent to the testnet API as a fallback.
     // Mainnet requires a separately configured, SN_MAIN-verified API deployment.
     if (!mainnetUrl) throw new Error("mainnet_api_not_configured");
     return mainnetUrl.replace(/\/$/, "");
+  }
+  if (!testnetUrl) {
+    if (process.env.NODE_ENV === "production") throw new Error("testnet_api_not_configured");
+    return "http://127.0.0.1:8787";
   }
   return testnetUrl.replace(/\/$/, "");
 }
