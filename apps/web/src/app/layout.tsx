@@ -8,7 +8,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Wotta",
   description:
-    "Private fixed-denomination USDC payments on Starknet Sepolia. Send from admitted testnet rails to a handle or email.",
+    "Private USDC payments through Starknet, with full Testnet beta routes and a restricted live-pool Mainnet mode.",
   referrer: "no-referrer",
   icons: {
     icon: [

@@ -4,6 +4,8 @@ import { apiFetch, type MeResponse } from "@/lib/api/client";
 import { AUTH_NEXT_COOKIE } from "@/lib/app-origin";
 import { userFacingError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
+import { readNetworkMode } from "@/lib/network-mode";
+import type { NetworkMode } from "@/lib/network-mode";
 
 export const AUTH_SESSION_EVENT = "wotta-session";
 export type { MeResponse };
@@ -14,8 +16,8 @@ type ApiOk<T> = { ok: true; status: number; data: T };
 type ApiErr = { ok: false; status: number; data?: undefined; error: string };
 export type ApiResult<T> = ApiOk<T> | ApiErr;
 
-let cachedMe: { expiresAt: number; result: ApiResult<MeResponse> } | undefined;
-let meInFlight: Promise<ApiResult<MeResponse>> | undefined;
+let cachedMe: { network: string; expiresAt: number; result: ApiResult<MeResponse> } | undefined;
+const meInFlight: Partial<Record<NetworkMode, Promise<ApiResult<MeResponse>>>> = {};
 
 export function notifySessionChanged() {
   cachedMe = undefined;
@@ -42,12 +44,13 @@ export async function refreshSupabaseSession() {
 
 async function fetchMeWithToken(
   access: string | null,
+  network: NetworkMode = readNetworkMode(),
 ): Promise<ApiResult<MeResponse>> {
   if (!access) {
     return { ok: false, status: 401, error: "unauthorized" };
   }
   try {
-    const data = await apiFetch<MeResponse>("/v1/me", { token: access });
+    const data = await apiFetch<MeResponse>("/v1/me", { token: access, network });
     return { ok: true, status: 200, data };
   } catch (e) {
     const message = userFacingError(e, "me_failed");
@@ -66,6 +69,7 @@ async function fetchMeWithToken(
         }
         const retry = await apiFetch<MeResponse>("/v1/me", {
           token: refreshed,
+          network,
         });
         return { ok: true, status: 200, data: retry };
       } catch {
@@ -79,20 +83,21 @@ async function fetchMeWithToken(
 export async function fetchMe(
   token?: string | null,
 ): Promise<ApiResult<MeResponse>> {
-  if (token !== undefined) return fetchMeWithToken(token);
+  const network = readNetworkMode();
+  if (token !== undefined) return fetchMeWithToken(token, network);
 
-  if (cachedMe && cachedMe.expiresAt > Date.now()) return cachedMe.result;
-  if (meInFlight) return meInFlight;
+  if (cachedMe && cachedMe.network === network && cachedMe.expiresAt > Date.now()) return cachedMe.result;
+  if (meInFlight[network]) return meInFlight[network];
 
-  meInFlight = (async () => {
-    const result = await fetchMeWithToken(await getAccessToken());
-    cachedMe = { result, expiresAt: Date.now() + ME_CACHE_MS };
+  meInFlight[network] = (async () => {
+    const result = await fetchMeWithToken(await getAccessToken(), network);
+    cachedMe = { network, result, expiresAt: Date.now() + ME_CACHE_MS };
     return result;
   })();
   try {
-    return await meInFlight;
+    return await meInFlight[network];
   } finally {
-    meInFlight = undefined;
+    delete meInFlight[network];
   }
 }
 
@@ -127,23 +132,24 @@ export async function signOutSupabase() {
   notifySessionChanged();
 }
 
-let syncInFlight: Promise<void> | undefined;
+const syncInFlight: Partial<Record<NetworkMode, Promise<void>>> = {};
 
-async function runSessionSync(): Promise<void> {
+async function runSessionSync(network: NetworkMode): Promise<void> {
   const token = await getAccessToken();
   if (!token) return;
-  await apiFetch("/v1/session/sync", { token, method: "POST", body: {} });
+  await apiFetch("/v1/session/sync", { token, method: "POST", body: {}, network });
 }
 
 /** Reconcile OAuth identities and deliver pending inbox items after sign-in or link. */
 export async function syncWottaSession(options?: { notify?: boolean }): Promise<void> {
   try {
-    if (!syncInFlight) {
-      syncInFlight = runSessionSync().finally(() => {
-        syncInFlight = undefined;
+    const network = readNetworkMode();
+    if (!syncInFlight[network]) {
+      syncInFlight[network] = runSessionSync(network).finally(() => {
+        delete syncInFlight[network];
       });
     }
-    await syncInFlight;
+    await syncInFlight[network];
     if (options?.notify) notifySessionChanged();
   } catch {
     /* sync is best-effort; pages still load me from /v1/me */

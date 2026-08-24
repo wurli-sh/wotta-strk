@@ -14,6 +14,7 @@ import {
   type SourceChipKey,
   type SourceRail,
 } from "@/components/SourceChips";
+import { NETWORK_MODE_EVENT } from "@/lib/network-mode";
 
 export type ConnectedSourceWallet = {
   routeKey: SourceRail;
@@ -157,6 +158,11 @@ export function SourceWalletProvider({ children }: { children: ReactNode }) {
     writeStored({});
     setByChain({});
   }, []);
+
+  useEffect(() => {
+    window.addEventListener(NETWORK_MODE_EVENT, clearSources);
+    return () => window.removeEventListener(NETWORK_MODE_EVENT, clearSources);
+  }, [clearSources]);
 
   const getSource = useCallback(
     (routeKey: SourceRail) => byChain[chainKeyForRoute(routeKey)] ?? null,

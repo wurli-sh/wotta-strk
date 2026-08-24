@@ -2,29 +2,32 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { SKELETON_MIN_MS } from "@/lib/skeleton-hold";
+import { SKELETON_MAX_MS } from "@/lib/skeleton-hold";
 
 /**
- * In-panel skeleton hold (tabs / refresh regions).
- * Holds skeleton for a mandatory minimum, then fades content in.
- * Does not remount page chrome (title, segmented tabs).
+ * In-panel skeleton (tabs / refresh regions).
+ * Skips shimmer when `ready` is true; shows skeleton only while loading.
  */
 export function TabContentShimmer({
   skeleton,
   children,
   holdKey,
-  minMs = SKELETON_MIN_MS,
+  ready = true,
+  maxMs = SKELETON_MAX_MS,
 }: {
   skeleton: ReactNode;
   children: ReactNode;
   holdKey: string | number;
-  minMs?: number;
+  /** When true, render children immediately with no skeleton flash. */
+  ready?: boolean;
+  maxMs?: number;
 }) {
   return (
     <PageShimmer
       skeleton={skeleton}
       holdKey={holdKey}
-      minMs={minMs}
+      ready={ready}
+      maxMs={maxMs}
       animateContent
     >
       {children}
@@ -33,59 +36,64 @@ export function TabContentShimmer({
 }
 
 /**
- * Holds a shimmer skeleton for a mandatory minimum duration, then reveals children.
- * Prefer for in-panel remounts; full routes use RouteSkeletonGate.
+ * Shows skeleton only while `ready` is false. When ready, reveals content immediately.
  */
 export function PageShimmer({
   skeleton,
   children,
-  minMs = SKELETON_MIN_MS,
+  ready = true,
+  maxMs = SKELETON_MAX_MS,
   animateContent = true,
-  /** Remount hold when this changes (tabs, refresh keys). */
   holdKey = "default",
 }: {
   skeleton: ReactNode;
   children: ReactNode;
-  minMs?: number;
+  ready?: boolean;
+  maxMs?: number;
   animateContent?: boolean;
   holdKey?: string | number;
 }) {
   const reduce = useReducedMotion();
-  const [ready, setReady] = useState(false);
+  const [showContent, setShowContent] = useState(ready);
+  const instantReveal = useState(() => ready)[0];
 
   useEffect(() => {
-    setReady(false);
-    // Always enforce min hold — including when user prefers reduced motion.
-    const id = window.setTimeout(() => setReady(true), minMs);
+    if (ready) {
+      setShowContent(true);
+      return;
+    }
+    setShowContent(false);
+    const id = window.setTimeout(() => setShowContent(true), maxMs);
     return () => window.clearTimeout(id);
-  }, [minMs, holdKey]);
+  }, [ready, maxMs, holdKey]);
+
+  if (ready || showContent) {
+    if (reduce || !animateContent || instantReveal) {
+      return <div key={`content-${holdKey}`}>{children}</div>;
+    }
+    return (
+      <motion.div
+        key={`content-${holdKey}`}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      >
+        {children}
+      </motion.div>
+    );
+  }
 
   return (
     <AnimatePresence mode="wait">
-      {!ready ? (
-        <motion.div
-          key={`shimmer-${holdKey}`}
-          initial={reduce ? false : { opacity: 0.7 }}
-          animate={{ opacity: 1 }}
-          exit={reduce ? undefined : { opacity: 0 }}
-          transition={{ duration: reduce ? 0 : 0.18 }}
-        >
-          {skeleton}
-        </motion.div>
-      ) : (
-        <motion.div
-          key={`content-${holdKey}`}
-          initial={reduce || !animateContent ? false : { opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={
-            reduce || !animateContent
-              ? { duration: 0 }
-              : { duration: 0.28, ease: [0.16, 1, 0.3, 1] }
-          }
-        >
-          {children}
-        </motion.div>
-      )}
+      <motion.div
+        key={`shimmer-${holdKey}`}
+        initial={reduce ? false : { opacity: 0.85 }}
+        animate={{ opacity: 1 }}
+        exit={reduce ? undefined : { opacity: 0 }}
+        transition={{ duration: reduce ? 0 : 0.12 }}
+      >
+        {skeleton}
+      </motion.div>
     </AnimatePresence>
   );
 }

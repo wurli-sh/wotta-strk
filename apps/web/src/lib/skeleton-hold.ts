@@ -1,20 +1,22 @@
-/** Mandatory skeleton hold duration (ms) for page switch, mount, and refresh/reveal. */
-export const SKELETON_MIN_MS = 500;
+/** Max shimmer hold when content is still loading (ms). */
+export const SKELETON_MAX_MS = 400;
+
+/** @deprecated Use `ready` on PageShimmer instead; kept at 0 for legacy call sites. */
+export const SKELETON_MIN_MS = 0;
 
 /**
- * Run `work` and do not resolve until at least `minMs` has elapsed.
- * Use for refresh/reveal so skeletons always flash long enough to read.
+ * Run `work` and optionally cap how long callers wait before resolving.
+ * Default minMs is 0 — no artificial delay when data is already available.
  */
 export async function withMinSkeleton<T>(
   work: () => Promise<T>,
-  minMs: number = SKELETON_MIN_MS,
+  minMs: number = 0,
 ): Promise<T> {
   const started = performance.now();
   try {
     return await work();
   } finally {
-    const elapsed = performance.now() - started;
-    const remaining = minMs - elapsed;
+    const remaining = minMs - (performance.now() - started);
     if (remaining > 0) {
       await new Promise<void>((resolve) => {
         window.setTimeout(resolve, remaining);

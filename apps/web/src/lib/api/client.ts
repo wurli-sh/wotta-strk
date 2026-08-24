@@ -1,11 +1,20 @@
 import { withServiceStatusToast } from "@/lib/service-status-toast";
+import { readNetworkMode, type NetworkMode } from "@/lib/network-mode";
 
 /** API client — Bearer JWT to hosted Fastify only. */
-export function apiBase(): string {
-  return (
-    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-    "http://127.0.0.1:8787"
-  );
+export function apiBase(network: NetworkMode = readNetworkMode()): string {
+  const testnetUrl =
+    process.env.NEXT_PUBLIC_TESTNET_API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://127.0.0.1:8787";
+  if (network === "mainnet") {
+    const mainnetUrl = process.env.NEXT_PUBLIC_MAINNET_API_URL?.trim();
+    // A mainnet action must never be sent to the testnet API as a fallback.
+    // Mainnet requires a separately configured, SN_MAIN-verified API deployment.
+    if (!mainnetUrl) throw new Error("mainnet_api_not_configured");
+    return mainnetUrl.replace(/\/$/, "");
+  }
+  return testnetUrl.replace(/\/$/, "");
 }
 
 function apiErrorMessage(data: unknown, status: number): string {
@@ -32,15 +41,19 @@ export async function apiFetch<T>(
     body?: unknown;
     /** The enclosing operation already owns the loading toast. */
     suppressServiceStatus?: boolean;
+    network?: NetworkMode;
+    signal?: AbortSignal;
   } = {},
 ): Promise<T> {
+  const network = opts.network ?? readNetworkMode();
   const request = async (): Promise<T> => {
     const headers: Record<string, string> = {
       accept: "application/json",
+      "x-wotta-network": network,
     };
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     if (opts.body !== undefined) headers["content-type"] = "application/json";
-    const url = `${apiBase()}${path}`;
+    const url = `${apiBase(network)}${path}`;
     let res: Response;
     try {
       res = await fetch(url, {
@@ -48,8 +61,10 @@ export async function apiFetch<T>(
         headers,
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         cache: "no-store",
+        signal: opts.signal,
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
       throw new Error("api_unreachable");
     }
     const text = await res.text();
