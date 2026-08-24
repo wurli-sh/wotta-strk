@@ -222,6 +222,32 @@ function mapKnownPhrase(raw: string): string | null {
     return APP_MESSAGES.privacy_viewing_key_mismatch;
   }
 
+  if (m.includes("local proof submission failed:")) {
+    const inner = raw.split(/local proof submission failed:\s*/i)[1] ?? "";
+    const nested = mapKnownPhrase(inner);
+    if (nested) return nested;
+    const rpcTail = inner.match(/-3260\d:\s*([^"\n]+)/i)?.[1]?.trim();
+    if (rpcTail) return truncate(rpcTail);
+  }
+
+  if (/empty_proof_facts/i.test(m)) {
+    return "Privacy pool received an empty proof — retry after Sepolia catches up";
+  }
+
+  if (/privacy submitter strk balance too low|sepolia proof submitter is low on strk/i.test(m)) {
+    return "Sepolia proof submitter needs STRK — fund STARKNET_DEPLOYER_ADDRESS (~5 STRK) and retry";
+  }
+  if (/resources bounds.*exceed balance|exceed balance/i.test(m)) {
+    return "Sepolia proof submitter needs STRK — fund STARKNET_DEPLOYER_ADDRESS (~5 STRK) and retry";
+  }
+  if (m.includes("privacy proof submission was rejected")) {
+    return "Privacy proof was rejected on Sepolia — reconnect Ready from Account and retry";
+  }
+
+  if (m.includes("privacy authorization signature did not verify")) {
+    return APP_MESSAGES.privacy_viewing_key_mismatch;
+  }
+
   if (
     m.includes("json object requested, multiple")
     || m.includes("wallet_binding_ambiguous")

@@ -7,6 +7,8 @@ export type PrivacyState = {
   viewingKey: string;
   identityClassHash?: string;
   identityAddress?: string;
+  /** Block where the privacy identity was deployed; needed to prove registration safely. */
+  identityDeployedBlock?: number;
   inboxSecretKey?: string;
 };
 
@@ -61,9 +63,16 @@ export class PrivacyVault {
     this.state = state;
   }
 
-  async setIdentityAddress(identityAddress: string, identityClassHash: string): Promise<void> {
+  async setIdentityAddress(
+    identityAddress: string,
+    identityClassHash: string,
+    identityDeployedBlock?: number,
+  ): Promise<void> {
     this.state.identityAddress = identityAddress;
     this.state.identityClassHash = identityClassHash;
+    if (identityDeployedBlock !== undefined) {
+      this.state.identityDeployedBlock = identityDeployedBlock;
+    }
     await this.save();
   }
 
@@ -163,6 +172,7 @@ export async function ensureCurrentIdentityClass(
   }
   vault.state.identityAddress = undefined;
   vault.state.identityClassHash = undefined;
+  vault.state.identityDeployedBlock = undefined;
   await vault.save();
   return true;
 }

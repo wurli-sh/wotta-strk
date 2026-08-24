@@ -40,7 +40,7 @@ export function NetworkWalletReconnectPrompt() {
       const nextMode = (event as CustomEvent<NetworkMode>).detail;
       const token = await getAccessToken();
       if (!token) return;
-      const res = await fetchMe(token);
+      const res = await fetchMe(token, nextMode);
       if (!res.ok || !res.data.wallet?.address) return;
       setLinkedWalletAddress(res.data.wallet.address);
       openReconnect({ linkedWalletAddress: res.data.wallet.address }, nextMode);

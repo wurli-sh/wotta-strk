@@ -78,7 +78,7 @@ function localPrivacySubmitter(
             proofFacts: payload.proof!.proof_facts as string[],
             proof: payload.proof!.data!,
             resourceBounds,
-            tip: 100_000_000n,
+            tip: SUBMITTER_TIP,
           });
           response.statusCode = 200;
           response.end(JSON.stringify({ transactionHash: tx.transaction_hash }));
@@ -121,6 +121,10 @@ function receiptRevertReason(receipt: object): string {
   return "unknown revert reason";
 }
 
+const SUBMITTER_TIP = 100_000_000n;
+const L2_GAS_CEILING = 250_000_000n;
+const MIN_L2_GAS = 50_000_000n;
+
 async function privacyResourceBounds(account: Account) {
   const block = await account.provider.getBlockWithTxHashes("latest") as {
     l1_gas_price?: { price_in_fri?: string };
@@ -131,22 +135,42 @@ async function privacyResourceBounds(account: Account) {
     if (!value || BigInt(value) <= 0n) throw new Error(`latest block has no ${label} price`);
     return BigInt(value) * 3n;
   };
+  const l1_gas = {
+    max_amount: 0n,
+    max_price_per_unit: price(block.l1_gas_price?.price_in_fri, "L1 gas"),
+  };
+  const l1_data_gas = {
+    max_amount: 4_096n,
+    max_price_per_unit: price(block.l1_data_gas_price?.price_in_fri, "L1 data gas"),
+  };
+  const l2_price = price(block.l2_gas_price?.price_in_fri, "L2 gas");
+  const balance = await strkBalance(account);
+  const reserved = SUBMITTER_TIP + l1_data_gas.max_amount * l1_data_gas.max_price_per_unit;
+  const l2Budget = balance > reserved ? balance - reserved : 0n;
+  const affordableL2 = l2_price > 0n ? (l2Budget * 95n) / (100n * l2_price) : 0n;
+  const l2_max_amount = affordableL2 < L2_GAS_CEILING ? affordableL2 : L2_GAS_CEILING;
+  if (l2_max_amount < MIN_L2_GAS) {
+    throw new Error(
+      `privacy submitter STRK balance too low on Sepolia — fund STARKNET_DEPLOYER_ADDRESS (${account.address}) with at least 5 STRK`,
+    );
+  }
   return {
-    // Derived from recent successful transactions against this exact pool with
-    // ample headroom for registration, deposit, and transfer action variants.
-    l1_gas: {
-      max_amount: 0n,
-      max_price_per_unit: price(block.l1_gas_price?.price_in_fri, "L1 gas"),
-    },
-    l1_data_gas: {
-      max_amount: 4_096n,
-      max_price_per_unit: price(block.l1_data_gas_price?.price_in_fri, "L1 data gas"),
-    },
+    l1_gas,
+    l1_data_gas,
     l2_gas: {
-      max_amount: 250_000_000n,
-      max_price_per_unit: price(block.l2_gas_price?.price_in_fri, "L2 gas"),
+      max_amount: l2_max_amount,
+      max_price_per_unit: l2_price,
     },
   };
+}
+
+async function strkBalance(account: Account): Promise<bigint> {
+  const result = await account.provider.callContract({
+    contractAddress: STRK_TOKEN_ADDRESS,
+    entrypoint: "balanceOf",
+    calldata: [account.address],
+  });
+  return BigInt(result[0] ?? 0) + (BigInt(result[1] ?? 0) << 128n);
 }
 
 async function createSubmitterAccount(env: Record<string, string>): Promise<Account> {

@@ -7,6 +7,7 @@ import {
   type Call,
 } from "starknet";
 import sepoliaDeployment from "../../../../../../deployments/sepolia.json";
+import { formatPrivacySubmitError } from "@/lib/wotta/privacy-submit-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,15 +39,17 @@ export async function POST(request: Request) {
       proofFacts: payload.proof!.proof_facts as string[],
       proof: payload.proof!.data!,
       resourceBounds,
-      tip: 100_000_000n,
+      tip: SUBMITTER_TIP,
     });
     return NextResponse.json(
       { transactionHash: transaction.transaction_hash },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    const message = formatPrivacySubmitError(error);
+    console.error("[privacy/submit]", message, error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "privacy submission failed" },
+      { error: message },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -128,6 +131,11 @@ async function ensurePrivacyPoolFeeAllowance(account: Account, pool: string) {
   if (!receipt.isSuccess()) throw new Error("STRK privacy-pool fee approval reverted");
 }
 
+const SUBMITTER_TIP = 100_000_000n;
+/** Headroom for privacy apply_actions; capped to submitter STRK balance. */
+const L2_GAS_CEILING = 250_000_000n;
+const MIN_L2_GAS = 50_000_000n;
+
 async function privacyResourceBounds(account: Account) {
   const block = await account.provider.getBlockWithTxHashes("latest") as {
     l1_gas_price?: { price_in_fri?: string };
@@ -138,9 +146,30 @@ async function privacyResourceBounds(account: Account) {
     if (!value || BigInt(value) <= 0n) throw new Error(`latest block has no ${label} price`);
     return BigInt(value) * 3n;
   };
-  return {
-    l1_gas: { max_amount: 0n, max_price_per_unit: price(block.l1_gas_price?.price_in_fri, "L1 gas") },
-    l1_data_gas: { max_amount: 4_096n, max_price_per_unit: price(block.l1_data_gas_price?.price_in_fri, "L1 data gas") },
-    l2_gas: { max_amount: 250_000_000n, max_price_per_unit: price(block.l2_gas_price?.price_in_fri, "L2 gas") },
+  const l1_gas = { max_amount: 0n, max_price_per_unit: price(block.l1_gas_price?.price_in_fri, "L1 gas") };
+  const l1_data_gas = {
+    max_amount: 4_096n,
+    max_price_per_unit: price(block.l1_data_gas_price?.price_in_fri, "L1 data gas"),
   };
+  const l2_price = price(block.l2_gas_price?.price_in_fri, "L2 gas");
+  const balance = await strkBalance(account);
+  const reserved = SUBMITTER_TIP + l1_data_gas.max_amount * l1_data_gas.max_price_per_unit;
+  const l2Budget = balance > reserved ? balance - reserved : 0n;
+  const affordableL2 = l2_price > 0n ? (l2Budget * 95n) / (100n * l2_price) : 0n;
+  const l2_max_amount = affordableL2 < L2_GAS_CEILING ? affordableL2 : L2_GAS_CEILING;
+  if (l2_max_amount < MIN_L2_GAS) {
+    throw new Error(
+      `privacy submitter STRK balance too low on Sepolia — fund STARKNET_DEPLOYER_ADDRESS (${account.address}) with at least 5 STRK`,
+    );
+  }
+  return { l1_gas, l1_data_gas, l2_gas: { max_amount: l2_max_amount, max_price_per_unit: l2_price } };
+}
+
+async function strkBalance(account: Account): Promise<bigint> {
+  const result = await account.provider.callContract({
+    contractAddress: STRK_TOKEN_ADDRESS,
+    entrypoint: "balanceOf",
+    calldata: [account.address],
+  });
+  return BigInt(result[0] ?? 0) + (BigInt(result[1] ?? 0) << 128n);
 }

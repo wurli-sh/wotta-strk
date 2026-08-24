@@ -23,6 +23,7 @@ import { beginNetworkOperation } from "@/lib/network-operations";
 type Row = {
   itemId: string;
   amount: number;
+  at: number;
   expiresAt: number;
   status: string;
   counterparty: string;
@@ -42,10 +43,13 @@ type ApiIntent = {
 type ApiNote = {
   id: string;
   intent_id: string;
+  created_at: string;
+  delivered_at?: string | null;
   intent: ApiIntent;
 };
+type ApiIntentWithCreated = ApiIntent & { created_at?: string };
 
-function formatExpiresAt(unixSeconds: number): string {
+function formatRowTime(unixSeconds: number): string {
   const date = new Date(unixSeconds * 1_000);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString(undefined, {
@@ -155,9 +159,11 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
           apiFetch<{ intents: ApiIntent[] }>("/v1/intents", { token, network: "testnet", signal: operation.signal }),
         ]);
         operation.assertActive();
+        const noteReceivedAt = (note: ApiNote) => note.delivered_at ?? note.created_at;
         const noteRows = notesResult.notes.map((note) => ({
           itemId: note.id,
           amount: amountUsdc(note.intent.denomination),
+          at: Math.floor(Date.parse(noteReceivedAt(note)) / 1_000),
           expiresAt: Math.floor(Date.parse(note.intent.expires_at) / 1_000),
           status: normalizedStatus(note.intent),
           counterparty: "Encrypted sender",
@@ -165,9 +171,10 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
         }));
         setIncoming(noteRows.filter((row) => ["funded", "delivered", "claimable"].includes(row.status)));
         setHistory(noteRows.filter((row) => ["claimed", "completed", "refunded"].includes(row.status)));
-        setSent(intentsResult.intents.map((intent) => ({
+        setSent(intentsResult.intents.map((intent: ApiIntentWithCreated) => ({
           itemId: intent.id,
           amount: amountUsdc(intent.denomination),
+          at: Math.floor(Date.parse(intent.created_at ?? intent.expires_at) / 1_000),
           expiresAt: Math.floor(Date.parse(intent.expires_at) / 1_000),
           status: normalizedStatus(intent),
           counterparty: intent.route_id,
@@ -218,7 +225,7 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   if (signedIn === null || !sessionReady) {
     const waiting = (
       <TableShell
-        columns={["Amount", "Expires at", "Status", ""]}
+        columns={["Amount", "Received", "Expires at", "Status", ""]}
         loading
         empty={false}
         emptyMessage=""
@@ -265,9 +272,10 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const loading = signedIn === null || busy;
   const rows = tab === "incoming" ? incoming : tab === "sent" ? sent : history;
   const counterpartyLabel = tab === "sent" ? "Source" : tab === "history" ? "From" : null;
+  const timeColumnLabel = tab === "sent" ? "Sent" : "Received";
   const columns = counterpartyLabel
-    ? ["Amount", counterpartyLabel, "Expires at", "Status"]
-    : ["Amount", "Expires at", "Status", ""];
+    ? ["Amount", counterpartyLabel, timeColumnLabel, "Expires at", "Status"]
+    : ["Amount", timeColumnLabel, "Expires at", "Status", ""];
   const emptyMessage = tab === "incoming" ? "No live claims right now." : tab === "sent" ? "Nothing sent yet." : "Nothing claimed yet.";
 
   const table = (
@@ -285,7 +293,8 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
             <StatusPill status={row.status} />
           </div>
           {counterpartyLabel ? <p className="text-sm font-medium">{counterpartyLabel} {row.counterparty}</p> : null}
-          <p className="text-xs text-muted-foreground">Expires at {formatExpiresAt(row.expiresAt)}</p>
+          <p className="text-xs text-muted-foreground">{timeColumnLabel} {formatRowTime(row.at)}</p>
+          <p className="text-xs text-muted-foreground">Expires at {formatRowTime(row.expiresAt)}</p>
           {tab === "incoming" ? <Button className="w-full" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button> : null}
         </li>
       ))}
@@ -294,7 +303,8 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
         <tr key={row.itemId}>
           <td className="px-5 py-4"><span className="inline-flex items-center gap-2 font-semibold tabular-nums"><UsdcIcon className="size-5" />{row.amount} USDC</span></td>
           {counterpartyLabel ? <td className="px-5 py-4 font-medium capitalize">{row.counterparty}</td> : null}
-          <td className="px-5 py-4 tabular-nums text-muted-foreground">{formatExpiresAt(row.expiresAt)}</td>
+          <td className="px-5 py-4 tabular-nums text-muted-foreground">{formatRowTime(row.at)}</td>
+          <td className="px-5 py-4 tabular-nums text-muted-foreground">{formatRowTime(row.expiresAt)}</td>
           <td className="px-5 py-4"><StatusPill status={row.status} /></td>
           {!counterpartyLabel ? <td className="px-5 py-4 text-right"><Button size="sm" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button></td> : null}
         </tr>

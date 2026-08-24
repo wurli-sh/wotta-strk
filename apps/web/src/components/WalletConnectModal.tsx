@@ -169,13 +169,13 @@ export function WalletConnectModal({
       }
 
       let identityAddress = vault.state.identityAddress;
-      let minimumStateBlock: number | undefined;
+      let minimumStateBlock = vault.state.identityDeployedBlock;
       if (!identityAddress) {
         setPhase("deploying");
         const deployed = await deployPrivacyIdentity(account, config);
         identityAddress = deployed.address;
         minimumStateBlock = deployed.blockNumber;
-        await vault.setIdentityAddress(identityAddress, config.identityClassHash);
+        await vault.setIdentityAddress(identityAddress, config.identityClassHash, deployed.blockNumber);
       }
 
       const transfers = createPrivacyClient(identityAddress, BigInt(vault.state.viewingKey), config);
