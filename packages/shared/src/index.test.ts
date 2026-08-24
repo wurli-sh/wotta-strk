@@ -140,3 +140,12 @@ test("deployment manifest accepts a verified direct Sepolia privacy route", () =
   assert.equal(parsed.directPrivacy?.status, "verified");
   assert.match(parsed.directPrivacy?.poolAddress ?? "", /^0x/);
 });
+
+test("deployment manifest accepts the Ready-managed mainnet privacy route", () => {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../../../deployments/mainnet.json", import.meta.url), "utf8"),
+  );
+  const parsed = deploymentManifestSchema.parse(manifest);
+  assert.equal(parsed.walletManagedPrivacy?.status, "verified");
+  assert.equal(parsed.walletManagedPrivacy?.actionAmount, "500000");
+});

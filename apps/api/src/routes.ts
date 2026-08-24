@@ -14,8 +14,10 @@ export function routesForConfig(config: Config) {
   const cctpReady = config.manifest.router.verification.status === "verified"
     && /^0x[0-9a-f]+$/i.test(config.manifest.router.address)
     && config.manifest.pools.every((pool) => pool.verification.status === "verified");
-  const privateReady = config.manifest.directPrivacy?.status === "verified"
-    && config.manifest.directPrivacy.escrow?.status === "verified";
+  const privateReady = config.manifest.chainId === "SN_MAIN"
+    ? config.manifest.walletManagedPrivacy?.status === "verified"
+    : config.manifest.directPrivacy?.status === "verified"
+      && config.manifest.directPrivacy.escrow?.status === "verified";
   return ROUTES.map((route) => {
     if (route.id === "starknet-private") return { ...route, enabled: privateReady, reason: privateReady ? undefined : route.reason };
     if (route.id === "starknet-public") {

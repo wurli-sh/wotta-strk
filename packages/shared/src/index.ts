@@ -79,6 +79,26 @@ export const directPrivacyManifestSchema = z.object({
   }).strict().optional(),
 }).strict();
 
+export const walletManagedPrivacyManifestSchema = z.object({
+  status: z.enum(["pending", "verified"]),
+  source: z.string().min(1),
+  poolAddress: feltSchema,
+  poolClassHash: feltSchema,
+  usdc: feltSchema,
+  feeToken: feltSchema,
+  actionAmount: z.literal("500000"),
+  allowedActionAmounts: z.tuple([
+    z.literal("500000"),
+    z.literal("1000000"),
+    z.literal("10000000"),
+    z.literal("50000000"),
+    z.literal("100000000"),
+  ]),
+  protocolFeeStrk: z.string().regex(/^\d+$/),
+  walletApiSchema: z.literal("0.10.3"),
+  verificationNotes: z.string().min(1),
+}).strict();
+
 export const deploymentManifestSchema = z.object({
   version: z.literal(1),
   chainId: z.enum(["SN_MAIN", "SN_SEPOLIA"]),
@@ -92,6 +112,7 @@ export const deploymentManifestSchema = z.object({
   strk20Pool: feltSchema,
   strk20ClassHash: optionalHashSchema.default("UNKNOWN"),
   directPrivacy: directPrivacyManifestSchema.optional(),
+  walletManagedPrivacy: walletManagedPrivacyManifestSchema.optional(),
   deployer: deploymentActorSchema.default({ address: "UNKNOWN", keySource: "env:STARKNET_DEPLOYER_PRIVATE_KEY" }),
   tooling: deploymentToolingSchema.default({
     starknetJs: STARKNET_JS_VERSION,
@@ -113,6 +134,12 @@ export const deploymentManifestSchema = z.object({
 }).strict().superRefine((manifest, context) => {
   const expected = manifest.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
   if (manifest.chainId !== expected) context.addIssue({ code: z.ZodIssueCode.custom, message: "network and chainId must match" });
+  if (manifest.walletManagedPrivacy) {
+    if (manifest.network !== "mainnet") context.addIssue({ code: z.ZodIssueCode.custom, message: "wallet-managed privacy is mainnet-only" });
+    if (BigInt(manifest.walletManagedPrivacy.poolAddress) !== BigInt(manifest.strk20Pool)) context.addIssue({ code: z.ZodIssueCode.custom, message: "wallet-managed pool must match strk20Pool" });
+    if (BigInt(manifest.walletManagedPrivacy.poolClassHash) !== BigInt(manifest.strk20ClassHash)) context.addIssue({ code: z.ZodIssueCode.custom, message: "wallet-managed class must match strk20ClassHash" });
+    if (BigInt(manifest.walletManagedPrivacy.usdc) !== BigInt(manifest.usdc)) context.addIssue({ code: z.ZodIssueCode.custom, message: "wallet-managed USDC must match manifest USDC" });
+  }
 });
 
 export type DeploymentManifest = z.infer<typeof deploymentManifestSchema>;
