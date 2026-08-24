@@ -22,3 +22,6 @@ coverage/
 .vercel
 test-results/
 playwright-report/
+
+# Local demo voiceover toolkit (not versioned)
+demo/
