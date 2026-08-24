@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { Check, ChevronDown, Copy, LogOut, Mail, Wallet } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Copy, LogOut, Mail, Network, Wallet } from "lucide-react";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { buttonTap } from "@/lib/motion";
+import { toastNetworkModeEnabled } from "@/lib/network-mode-toast";
+import { buttonTap, navSpring } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 import {
   fetchMe,
+  mergeMeResponse,
   signOutSupabase,
   syncWottaSession,
   type MeResponse,
@@ -27,6 +29,7 @@ import {
 } from "@/components/SourceWalletProvider";
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { apiFetch } from "@/lib/api/client";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
 
 const NAV_LINKS = [
   ["/send", "Send"],
@@ -107,22 +110,127 @@ function groupWallets(sources: ConnectedSourceWallet[]): WalletGroup[] {
   }));
 }
 
+function networkRingClass(mode: "testnet" | "mainnet") {
+  return mode === "mainnet"
+    ? "ring-2 ring-mainnet-bright/45 ring-offset-2 ring-offset-nav"
+    : "ring-2 ring-brand-sky/45 ring-offset-2 ring-offset-nav";
+}
+
+function NetworkChoices({
+  mode,
+  confirmMainnet,
+  onSelect,
+  onCancelMainnet,
+}: {
+  mode: "testnet" | "mainnet";
+  confirmMainnet: boolean;
+  onSelect: (mode: "testnet" | "mainnet") => void;
+  onCancelMainnet: () => void;
+}) {
+  const reduce = useReducedMotion();
+  const testnetOn = mode === "testnet";
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Network className="size-3.5 text-muted-foreground" aria-hidden />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Network
+            </p>
+          </div>
+          <motion.p
+            key={testnetOn ? "testnet" : "mainnet"}
+            initial={reduce ? false : { opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={reduce ? { duration: 0 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-1 text-xs text-muted-foreground"
+          >
+            {testnetOn ? "Testnet beta" : "Mainnet — real funds"}
+          </motion.p>
+        </div>
+        <motion.button
+          type="button"
+          role="switch"
+          aria-checked={testnetOn}
+          aria-label="Testnet mode"
+          data-testid="testnet-mode-toggle"
+          onClick={() => onSelect(testnetOn ? "mainnet" : "testnet")}
+          whileTap={reduce ? undefined : buttonTap}
+          animate={{
+            backgroundColor: testnetOn
+              ? "var(--color-brand)"
+              : "var(--color-mainnet)",
+            borderColor: testnetOn
+              ? "var(--color-brand-muted)"
+              : "var(--color-mainnet-border)",
+          }}
+          transition={reduce ? { duration: 0 } : navSpring}
+          className="relative h-7 w-12 shrink-0 rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <motion.span
+            className="absolute top-0.5 size-5 rounded-full bg-card shadow-sm"
+            animate={{ left: testnetOn ? 24 : 2 }}
+            transition={reduce ? { duration: 0 } : navSpring}
+            aria-hidden
+          />
+        </motion.button>
+      </div>
+      {confirmMainnet ? (
+        <div
+          className="mt-3 rounded-xl border border-mainnet-border/50 bg-card p-3 shadow-soft"
+          role="alert"
+        >
+          <div className="flex gap-2.5 rounded-lg border border-mainnet-muted bg-mainnet-soft px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-mainnet-strong" aria-hidden />
+            <p className="text-xs leading-5 text-foreground">
+              Mainnet uses real USDC and STRK. Only Starknet private sends are enabled; 0.5 USDC is added to the existing amounts.
+            </p>
+          </div>
+          <div className="mt-2.5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => onSelect("mainnet")}
+              className="min-h-10 flex-1 rounded-lg bg-mainnet-strong px-3 text-xs font-semibold text-mainnet-foreground transition-colors hover:bg-mainnet-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Use mainnet
+            </button>
+            <button
+              type="button"
+              onClick={onCancelMainnet}
+              className="min-h-10 flex-1 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function IslandNav() {
+  const { mode, setMode } = useNetworkMode();
   const pathname = usePathname();
   const router = useRouter();
   const reduce = useReducedMotion();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [confirmMainnet, setConfirmMainnet] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const networkMenuRef = useRef<HTMLDivElement>(null);
   const lastSessionToken = useRef<string | null | undefined>(undefined);
   const { sources, clearSources } = useSourceWallet();
   const { clearVault } = usePrivacyVault();
 
   function prefetchInbox() {
+    if (mode === "mainnet") return;
     if (!session?.access_token) return;
     void apiFetch("/v1/notes", {
       token: session.access_token,
@@ -132,9 +240,30 @@ export function IslandNav() {
     });
   }
 
+  function switchNetwork(next: "testnet" | "mainnet") {
+    if (next === mode) {
+      setConfirmMainnet(false);
+      return;
+    }
+    if (next === "mainnet" && !confirmMainnet) {
+      setConfirmMainnet(true);
+      return;
+    }
+    if (!setMode(next)) {
+      toast.error("Finish or cancel the open Ready request before switching networks");
+      return;
+    }
+    setMe(null);
+    setConfirmMainnet(false);
+    setMenuOpen(false);
+    setNetworkMenuOpen(false);
+    toastNetworkModeEnabled(next);
+    router.refresh();
+  }
+
   async function refreshMe() {
     const res = await fetchMe();
-    if (res.ok) setMe(res.data);
+    if (res.ok) setMe((prev) => mergeMeResponse(prev, res.data));
     else setMe(null);
   }
 
@@ -165,7 +294,7 @@ export function IslandNav() {
   useEffect(() => {
     if (session) void onSessionEstablished();
     else setMe(null);
-  }, [session]);
+  }, [session, mode]);
 
   useEffect(() => {
     function onSession() {
@@ -176,12 +305,19 @@ export function IslandNav() {
   }, [session]);
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !networkMenuOpen) return;
     function onPointer(e: MouseEvent) {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+      const target = e.target as Node;
+      if (!menuRef.current?.contains(target) && !networkMenuRef.current?.contains(target)) {
+        setMenuOpen(false);
+        setNetworkMenuOpen(false);
+      }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setNetworkMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -189,7 +325,7 @@ export function IslandNav() {
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [menuOpen]);
+  }, [menuOpen, networkMenuOpen]);
 
   async function disconnectAuth() {
     setBusy(true);
@@ -237,13 +373,17 @@ export function IslandNav() {
     0,
   );
   const linkedReadyAddress = me?.wallet?.address ?? null;
-  const linkedReadyAlreadyListed = Boolean(
-    linkedReadyAddress
-      && walletGroups.some(
-        (group) => group.address.toLowerCase() === linkedReadyAddress.toLowerCase(),
-      ),
+  const connectedWalletGroups = useMemo(() => {
+    if (!linkedReadyAddress) return walletGroups;
+    return walletGroups.filter(
+      (group) => group.address.toLowerCase() !== linkedReadyAddress.toLowerCase(),
+    );
+  }, [linkedReadyAddress, walletGroups]);
+  const connectedWalletCount = connectedWalletGroups.reduce(
+    (sum, group) => sum + group.chains.length,
+    0,
   );
-  const showLinkedReadyRow = Boolean(linkedReadyAddress && !linkedReadyAlreadyListed);
+  const showLinkedReadyRow = Boolean(linkedReadyAddress);
 
   const xHandle =
     (session?.user.user_metadata?.user_name as string | undefined) ??
@@ -327,7 +467,8 @@ export function IslandNav() {
                   aria-label="Account menu"
                   onClick={() => setMenuOpen((o) => !o)}
                   className={cn(
-                    "radius-control flex cursor-pointer items-center gap-1.5 bg-nav-hover py-1 pl-1 pr-1.5 text-xs font-medium text-nav-foreground/80 transition-colors hover:bg-nav-active hover:text-nav-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav sm:pr-2",
+                    "radius-control flex cursor-pointer items-center gap-1.5 bg-nav-hover py-1 pl-1 pr-1.5 text-xs font-medium text-nav-foreground/80 transition-[background-color,color,box-shadow] duration-300 hover:bg-nav-active hover:text-nav-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav sm:pr-2",
+                    networkRingClass(mode),
                     menuOpen && "bg-nav-active text-nav-foreground",
                   )}
                 >
@@ -385,6 +526,15 @@ export function IslandNav() {
                       ) : null}
                     </div>
 
+                    <div className="border-t border-border/60 px-3 py-3">
+                      <NetworkChoices
+                        mode={mode}
+                        confirmMainnet={confirmMainnet}
+                        onSelect={switchNetwork}
+                        onCancelMainnet={() => setConfirmMainnet(false)}
+                      />
+                    </div>
+
                     {showLinkedReadyRow && linkedReadyAddress ? (
                       <div className="border-t border-border/60 px-3 py-3">
                         <div className="mb-2 flex items-center justify-between px-1">
@@ -392,7 +542,14 @@ export function IslandNav() {
                             Linked Ready
                           </p>
                         </div>
-                        <div className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 p-2.5">
+                        <div
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-xl border p-2.5",
+                            mode === "mainnet"
+                              ? "border-mainnet-border/70 bg-mainnet-soft/50"
+                              : "border-border/70 bg-background/60",
+                          )}
+                        >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={routeLogoPath("starknet")}
@@ -429,19 +586,19 @@ export function IslandNav() {
                       </div>
                     ) : null}
 
-                    {walletGroups.length > 0 ? (
+                    {connectedWalletGroups.length > 0 ? (
                       <div className="border-t border-border/60 px-3 py-3">
                         <div className="mb-2 flex items-center justify-between px-1">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                             Connected wallets
                           </p>
                           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
-                            {walletCount}{" "}
-                            {walletCount === 1 ? "chain" : "chains"}
+                            {connectedWalletCount}{" "}
+                            {connectedWalletCount === 1 ? "chain" : "chains"}
                           </span>
                         </div>
                         <ul className="space-y-2 font-sans">
-                          {walletGroups.map((group) => (
+                          {connectedWalletGroups.map((group) => (
                             <li
                               key={group.address}
                               className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 p-2.5"
@@ -524,17 +681,50 @@ export function IslandNav() {
               </div>
             ) : null}
             {session === null ? (
-              <motion.div whileTap={reduce ? undefined : buttonTap}>
-                <button
-                  data-motion-button
-                  data-testid="sign-in"
-                  type="button"
-                  onClick={() => setSignInOpen(true)}
-                  className="radius-control cursor-pointer bg-brand px-3.5 py-1.5 text-sm font-semibold text-brand-foreground shadow-action transition-colors duration-100 ease-out hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav disabled:opacity-50"
-                >
-                  Sign in
-                </button>
-              </motion.div>
+              <div className="flex items-center gap-1.5">
+                <div className="relative" ref={networkMenuRef}>
+                  <button
+                    type="button"
+                    data-testid="network-menu"
+                    aria-label="Network menu"
+                    aria-expanded={networkMenuOpen}
+                    aria-controls="signed-out-network-menu"
+                    onClick={() => setNetworkMenuOpen((open) => !open)}
+                    className={cn(
+                      "radius-control flex min-h-8 items-center gap-1 bg-nav-hover px-2.5 text-[10px] font-semibold uppercase tracking-wide text-nav-foreground/80 transition-[background-color,color,box-shadow] duration-300 hover:bg-nav-active hover:text-nav-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav",
+                      networkRingClass(mode),
+                    )}
+                  >
+                    {mode === "mainnet" ? "Mainnet" : "Testnet"}
+                    <ChevronDown className={cn("size-3 transition-transform", networkMenuOpen && "rotate-180")} aria-hidden />
+                  </button>
+                  {networkMenuOpen ? (
+                    <section
+                      id="signed-out-network-menu"
+                      aria-label="Network menu"
+                      className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-border/80 bg-card p-3 shadow-card"
+                    >
+                      <NetworkChoices
+                        mode={mode}
+                        confirmMainnet={confirmMainnet}
+                        onSelect={switchNetwork}
+                        onCancelMainnet={() => setConfirmMainnet(false)}
+                      />
+                    </section>
+                  ) : null}
+                </div>
+                <motion.div whileTap={reduce ? undefined : buttonTap}>
+                  <button
+                    data-motion-button
+                    data-testid="sign-in"
+                    type="button"
+                    onClick={() => setSignInOpen(true)}
+                    className="radius-control cursor-pointer bg-brand px-3 py-1.5 text-sm font-semibold text-brand-foreground shadow-action transition-colors duration-100 ease-out hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-nav disabled:opacity-50"
+                  >
+                    Sign in
+                  </button>
+                </motion.div>
+              </div>
             ) : null}
             {session === undefined ? (
               <span className="radius-control block size-8 animate-pulse bg-nav-hover" />

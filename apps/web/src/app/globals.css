@@ -41,6 +41,15 @@
   --color-warning: #805500;
   --color-warning-surface: #fff6d9;
   --color-warning-border: #eccb72;
+  /* Mainnet accents — aligned with success/toast green for real-funds mode. */
+  --color-mainnet: #14785f;
+  --color-mainnet-bright: #22a882;
+  --color-mainnet-soft: #ecfdf5;
+  --color-mainnet-muted: #d1fae5;
+  --color-mainnet-ink: #0f4f3f;
+  --color-mainnet-strong: #14785f;
+  --color-mainnet-foreground: #ffffff;
+  --color-mainnet-border: #6ee7b7;
   --color-ring: #2c5cc5;
   --color-ink: #171a20;
   --color-paper: #ffffff;
@@ -265,4 +274,39 @@ button:not(:disabled):not([data-motion-button]) {
   .animate-drift {
     animation: none !important;
   }
+}
+
+/* Network-mode switch toasts — testnet cobalt, mainnet green. */
+[data-sonner-toast][data-type="success"].toast-network-testnet {
+  background: var(--color-brand-mist) !important;
+  border: 1px solid var(--color-brand-muted) !important;
+  color: var(--color-brand-ink) !important;
+  --toast-success-bg: var(--color-brand-mist);
+  --toast-success-border: var(--color-brand-muted);
+  --toast-success-text: var(--color-brand-ink);
+}
+
+[data-sonner-toast][data-type="success"].toast-network-testnet [data-icon] {
+  color: var(--color-brand) !important;
+}
+
+.toast-network-testnet-title {
+  color: var(--color-brand-ink) !important;
+}
+
+[data-sonner-toast][data-type="success"].toast-network-mainnet {
+  background: var(--color-mainnet-soft) !important;
+  border: 1px solid var(--color-mainnet-border) !important;
+  color: var(--color-mainnet-ink) !important;
+  --toast-success-bg: var(--color-mainnet-soft);
+  --toast-success-border: var(--color-mainnet-border);
+  --toast-success-text: var(--color-mainnet-ink);
+}
+
+[data-sonner-toast][data-type="success"].toast-network-mainnet [data-icon] {
+  color: var(--color-mainnet-strong) !important;
+}
+
+.toast-network-mainnet-title {
+  color: var(--color-mainnet-ink) !important;
 }
