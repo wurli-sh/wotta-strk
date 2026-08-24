@@ -9,10 +9,11 @@ type Props = {
   value: Dens;
   onChange: (v: Dens) => void;
   disabled?: boolean;
+  denominations?: readonly Dens[];
 };
 
 /** Fixed dens as amount chips — single row, number only. */
-export function DenomChips({ value, onChange, disabled }: Props) {
+export function DenomChips({ value, onChange, disabled, denominations = DENS }: Props) {
   const reduce = useReducedMotion();
 
   return (
@@ -21,9 +22,12 @@ export function DenomChips({ value, onChange, disabled }: Props) {
       <div
         role="group"
         aria-label="Amount"
-        className="mt-3 grid w-full grid-cols-2 gap-2 sm:grid-cols-4"
+        className={cn(
+          "mt-3 grid w-full grid-cols-2 gap-2",
+          denominations.length > 4 ? "sm:grid-cols-5" : "sm:grid-cols-4",
+        )}
       >
-        {DENS.map((d) => {
+        {denominations.map((d) => {
           const selected = value === d;
           const label = d.toString();
           return (

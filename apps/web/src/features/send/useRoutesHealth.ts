@@ -40,7 +40,7 @@ function dismissRouteHealthToast(): void {
   toast.dismiss(ROUTE_HEALTH_TOAST_ID);
 }
 
-export function useRoutesHealth() {
+export function useRoutesHealth(enabled = true) {
   const [routes, setRoutes] = useState<RouteRow[]>(() => buildSourceRoutes());
   const [routesHealth, setRoutesHealth] = useState<RoutesHealth>("loading");
   const [retryNonce, setRetryNonce] = useState(0);
@@ -67,6 +67,10 @@ export function useRoutesHealth() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      clearRouteToast();
+      return;
+    }
     let active = true;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (startedAt.current == null) startedAt.current = Date.now();
@@ -104,7 +108,7 @@ export function useRoutesHealth() {
       if (retryTimer) clearTimeout(retryTimer);
       clearRouteToast();
     };
-  }, [retryNonce, scheduleRouteToast, clearRouteToast]);
+  }, [enabled, retryNonce, scheduleRouteToast, clearRouteToast]);
 
   const retryRoutesHealth = useCallback(() => {
     startedAt.current = Date.now();
@@ -114,7 +118,7 @@ export function useRoutesHealth() {
   return {
     routes,
     routesHealth,
-    routesReady: routesHealth === "ready",
+    routesReady: enabled && routesHealth === "ready",
     retryRoutesHealth,
   };
 }

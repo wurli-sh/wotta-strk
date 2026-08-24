@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Inbox, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/PageShell";
-import { TabContentShimmer } from "@/components/PageShimmer";
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { Button } from "@/components/ui/Button";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
@@ -15,8 +14,11 @@ import { apiFetch } from "@/lib/api/client";
 import { syncWottaSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { userFacingError } from "@/lib/errors";
-import { withMinSkeleton } from "@/lib/skeleton-hold";
+import { withMinSkeleton, SKELETON_MAX_MS } from "@/lib/skeleton-hold";
 import { createClient } from "@/lib/supabase/client";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { WrongModeNotice } from "@/components/WrongModeNotice";
+import { beginNetworkOperation } from "@/lib/network-operations";
 
 type Row = {
   itemId: string;
@@ -121,7 +123,7 @@ function TableShell({
   );
 }
 
-export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
+function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const router = useRouter();
   const { vault, unlocking, unlock, sessionReady } = usePrivacyVault();
   const [tab, setTab] = useState<Tab>("incoming");
@@ -132,6 +134,7 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   const refresh = useCallback(async (hold = true) => {
+    const operation = beginNetworkOperation("testnet");
     setBusy(true);
     try {
       const work = async () => {
@@ -146,10 +149,12 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
         }
         setSignedIn(true);
         await syncWottaSession();
+        operation.assertActive();
         const [notesResult, intentsResult] = await Promise.all([
-          apiFetch<{ notes: ApiNote[] }>("/v1/notes", { token }),
-          apiFetch<{ intents: ApiIntent[] }>("/v1/intents", { token }),
+          apiFetch<{ notes: ApiNote[] }>("/v1/notes", { token, network: "testnet", signal: operation.signal }),
+          apiFetch<{ intents: ApiIntent[] }>("/v1/intents", { token, network: "testnet", signal: operation.signal }),
         ]);
+        operation.assertActive();
         const noteRows = notesResult.notes.map((note) => ({
           itemId: note.id,
           amount: amountUsdc(note.intent.denomination),
@@ -169,10 +174,13 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
           txHash: intent.source_tx_hash,
         })));
       };
-      if (hold) await withMinSkeleton(work); else await work();
+      if (hold) await withMinSkeleton(work, SKELETON_MAX_MS); else await work();
     } catch (error) {
-      toast.error(userFacingError(error, "Couldn’t load inbox"));
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        toast.error(userFacingError(error, "Couldn’t load inbox"));
+      }
     } finally {
+      operation.finish();
       setBusy(false);
     }
   }, []);
@@ -315,16 +323,31 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
           <RefreshCw className={`size-3.5 ${busy ? "animate-spin" : ""}`} aria-hidden /> Refresh
         </Button>
       </div>
-      <TabContentShimmer
-        holdKey={tab}
-        skeleton={<TableShell columns={columns} loading empty={false} emptyMessage="" mobile={<InboxMobileRowsSkeleton rows={2} />}>{null}</TableShell>}
-      >
-        {table}
-      </TabContentShimmer>
+      {table}
     </>
   );
 
   return embedded ? content : (
     <PageShell title="Inbox" subtitle="Payments waiting for a private Starknet claim." maxWidth="lg">{content}</PageShell>
   );
+}
+
+export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const { mode } = useNetworkMode();
+  if (mode === "mainnet") {
+    const blocked = (
+      <WrongModeNotice
+        feature="Inbox"
+        detail="Not available on Mainnet. Switch to Testnet beta for escrow inbox and claim rows, or use Balance for your live-pool private balance."
+        mainnetHref="/balance"
+        mainnetLabel="View Mainnet balance"
+      />
+    );
+    return embedded ? blocked : (
+      <PageShell title="Inbox" subtitle="Payments waiting for a private Starknet claim." maxWidth="lg">
+        {blocked}
+      </PageShell>
+    );
+  }
+  return <TestnetInboxPage embedded={embedded} />;
 }

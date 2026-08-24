@@ -9,10 +9,11 @@ import { buttonTap, navSpring } from "@/lib/motion";
 type Props = {
   enabled: boolean;
   disabled?: boolean;
+  locked?: boolean;
   onChange: (enabled: boolean) => void;
 };
 
-export function ConfidentialToggle({ enabled, disabled, onChange }: Props) {
+export function ConfidentialToggle({ enabled, disabled, locked = false, onChange }: Props) {
   const { sweep } = useGlimm();
   const reduce = useReducedMotion();
   const warmed = useRef(false);
@@ -61,7 +62,8 @@ export function ConfidentialToggle({ enabled, disabled, onChange }: Props) {
         transition={reduce ? { duration: 0 } : navSpring}
         className={cn(
           "relative h-7 w-12 shrink-0 rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          disabled && "cursor-not-allowed opacity-40",
+          disabled && "cursor-not-allowed",
+          disabled && !locked && "opacity-40",
         )}
       >
         <motion.span

@@ -113,6 +113,7 @@ type Props = {
   onChange: (key: SourceRail) => void;
   disabled?: boolean;
   privateMode?: boolean;
+  unavailableReason?: string;
 };
 
 export function SourceChips({
@@ -121,6 +122,7 @@ export function SourceChips({
   onChange,
   disabled,
   privateMode = false,
+  unavailableReason,
 }: Props) {
   const reduce = useReducedMotion();
   const selectedChip = value ? sourceChipKey(value) : null;
@@ -138,9 +140,10 @@ export function SourceChips({
           const on = chipSelectableInMode(chip, routes, privateMode);
           const selected = selectedChip === chip;
           const title = !on
-            ? privateMode && chip !== "starknet"
+            ? unavailableReason
+              ?? (privateMode && chip !== "starknet"
               ? "Switch off private route to use this source"
-              : route?.reason ?? "Not selectable"
+              : route?.reason ?? "Not selectable")
             : undefined;
           return (
             <motion.button
