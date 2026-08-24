@@ -185,7 +185,7 @@ function NetworkChoices({
           <div className="flex gap-2.5 rounded-lg border border-mainnet-muted bg-mainnet-soft px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-mainnet-strong" aria-hidden />
             <p className="text-xs leading-5 text-foreground">
-              Mainnet uses real USDC and STRK. Only Starknet private sends are enabled; 0.5 USDC is added to the existing amounts.
+              Mainnet uses real USDC and STRK. Only Starknet private sends are enabled; 0.1 USDC is added to the existing amounts.
             </p>
           </div>
           <div className="mt-2.5 flex gap-2">
@@ -263,7 +263,7 @@ export function IslandNav() {
 
   async function refreshMe() {
     const res = await fetchMe();
-    if (res.ok) setMe((prev) => mergeMeResponse(prev, res.data));
+    if (res.ok) setMe((prev) => mergeMeResponse(prev, res.data, mode));
     else setMe(null);
   }
 

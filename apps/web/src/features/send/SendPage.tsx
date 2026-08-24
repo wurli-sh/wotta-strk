@@ -113,7 +113,7 @@ function parseRecipient(raw: string): { provider: "email" | "x"; identifier: str
 }
 
 function testnetDenomination(value: Dens): Denomination {
-  if (value === "0.5") throw new Error("unsupported_testnet_denomination");
+  if (value === "0.1") throw new Error("unsupported_testnet_denomination");
   return denominationBaseUnits(value).toString() as Denomination;
 }
 
@@ -209,7 +209,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   const routesHealth = testnetRoutes.routesHealth;
   const routesReady = mainnet || testnetRoutes.routesReady;
   const retryRoutesHealth = testnetRoutes.retryRoutesHealth;
-  const [denom, setDenom] = useState<Dens>(mainnet ? "0.5" : 1n);
+  const [denom, setDenom] = useState<Dens>(mainnet ? "0.1" : 1n);
   const [recipient, setRecipient] = useState("");
   const [confidentialMode, setConfidentialMode] = useState(mainnet);
   const [source, setSource] = useState<SourceRail>(mainnet ? NOX_ROUTE_ID : PUBLIC_DEFAULT_ROUTE_ID);
@@ -363,7 +363,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           if (mainnet) {
             let descriptor = result.descriptor;
             if (descriptor.registered && !descriptor.privateReady && descriptor.recipientProfileRef) {
-              const meResult = await fetchMe(token);
+              const meResult = await fetchMe(token, "mainnet");
               operation.assertActive();
               if (
                 meResult.ok
@@ -478,7 +478,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     const token = await getAccessToken();
     if (!token) throw new Error("sign_in_required");
     await syncWottaSession({ notify: false });
-    const meResult = await fetchMe(token);
+    const meResult = await fetchMe(token, "mainnet");
     if (!meResult.ok || !meResult.data.wallet) {
       throw new Error("Link your Ready mainnet wallet from Account first");
     }

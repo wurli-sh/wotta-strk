@@ -4,7 +4,7 @@ import { apiFetch, type MeResponse } from "@/lib/api/client";
 import { AUTH_NEXT_COOKIE } from "@/lib/app-origin";
 import { userFacingError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
-import { readNetworkMode } from "@/lib/network-mode";
+import { chainIdForMode, readNetworkMode } from "@/lib/network-mode";
 import type { NetworkMode } from "@/lib/network-mode";
 
 export const AUTH_SESSION_EVENT = "wotta-session";
@@ -82,8 +82,8 @@ async function fetchMeWithToken(
 
 export async function fetchMe(
   token?: string | null,
+  network: NetworkMode = readNetworkMode(),
 ): Promise<ApiResult<MeResponse>> {
-  const network = readNetworkMode();
   if (token !== undefined) return fetchMeWithToken(token, network);
 
   if (cachedMe && cachedMe.network === network && cachedMe.expiresAt > Date.now()) return cachedMe.result;
@@ -157,7 +157,13 @@ export async function syncWottaSession(options?: { notify?: boolean }): Promise<
 }
 
 /** Keep a linked wallet when /v1/me briefly returns null during session refresh races. */
-export function mergeMeResponse(prev: MeResponse | null, next: MeResponse): MeResponse {
+export function mergeMeResponse(
+  prev: MeResponse | null,
+  next: MeResponse,
+  network: NetworkMode = readNetworkMode(),
+): MeResponse {
   if (next.wallet || !prev?.wallet) return next;
+  const expectedChain = chainIdForMode(network);
+  if (prev.wallet.chain_id && prev.wallet.chain_id !== expectedChain) return next;
   return { ...next, wallet: prev.wallet };
 }

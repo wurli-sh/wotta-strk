@@ -10,6 +10,7 @@ import { HandlesPanel } from "@/components/account/HandlesPanel";
 import { WalletAndBalancePanel } from "@/components/account/WalletAndBalancePanel";
 import type { MeResponse } from "@/lib/api/client";
 import { fetchMe, mergeMeResponse, notifySessionChanged, refreshSupabaseSession, syncWottaSession } from "@/lib/auth";
+import { chainIdForMode } from "@/lib/network-mode";
 import { userFacingError } from "@/lib/errors";
 import { withMinSkeleton } from "@/lib/skeleton-hold";
 import { createClient } from "@/lib/supabase/client";
@@ -55,11 +56,16 @@ function AccountContent() {
           return;
         }
         await syncWottaSession({ notify: false });
-        const res = await fetchMe(data.session.access_token);
+        const res = await fetchMe(data.session.access_token, mode);
         if (res.ok) {
           setMe((prev) => {
-            const merged = mergeMeResponse(prev, res.data);
-            if (opts?.preserveWallet && prev?.wallet && !res.data.wallet) {
+            const merged = mergeMeResponse(prev, res.data, mode);
+            if (
+              opts?.preserveWallet
+              && prev?.wallet
+              && !res.data.wallet
+              && prev.wallet.chain_id === chainIdForMode(mode)
+            ) {
               return { ...merged, wallet: prev.wallet };
             }
             return merged;
@@ -74,7 +80,7 @@ function AccountContent() {
     } catch (error) {
       toast.error(userFacingError(error, "Couldn't refresh account"));
     }
-  }, []);
+  }, [mode]);
 
   const loadAccount = useCallback(async (opts?: { hold?: boolean }) => {
     setLoading(true);
@@ -85,8 +91,8 @@ function AccountContent() {
         setSession(data.session);
         if (data.session?.access_token) {
           await syncWottaSession({ notify: false });
-          const res = await fetchMe(data.session.access_token);
-          if (res.ok) setMe((prev) => mergeMeResponse(prev, res.data));
+          const res = await fetchMe(data.session.access_token, mode);
+          if (res.ok) setMe((prev) => mergeMeResponse(prev, res.data, mode));
           else setMe(null);
         } else {
           setMe(null);
@@ -97,7 +103,7 @@ function AccountContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     void loadAccount();
@@ -213,7 +219,7 @@ function AccountContent() {
                       : null,
                   };
                   if (linkedMe.wallet) {
-                    setMe((prev) => mergeMeResponse(prev, nextMe));
+                    setMe((prev) => mergeMeResponse(prev, nextMe, mode));
                     notifySessionChanged();
                     return;
                   }
