@@ -9,6 +9,8 @@ export type ConnectedReady = {
   supportedWalletApi: string[];
 };
 
+const READY_CONNECT_TIMEOUT_MS = 30_000;
+
 function expectedChainId(mode: NetworkMode) {
   return mode === "mainnet"
     ? constants.StarknetChainId.SN_MAIN
@@ -17,6 +19,26 @@ function expectedChainId(mode: NetworkMode) {
 
 function findReadyWallet() {
   return createStore().getWallets().find((candidate) => /ready/i.test(candidate.name));
+}
+
+function connectedWalletAddress(wallet: unknown): string | undefined {
+  const accounts = (wallet as { accounts?: ReadonlyArray<{ address?: unknown }> }).accounts;
+  const address = accounts?.[0]?.address;
+  return typeof address === "string" && /^0x[0-9a-f]+$/i.test(address) ? address : undefined;
+}
+
+async function withReadyConnectTimeout<T>(request: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("ready_connection_unresponsive")), READY_CONNECT_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function readWalletChainId(wallet: unknown): Promise<string | undefined> {
@@ -82,7 +104,10 @@ export async function connectReady(mode: NetworkMode = "testnet"): Promise<Conne
   if (!rpcUrl) throw new Error(`${mode === "mainnet" ? "Mainnet" : "Sepolia"} Starknet RPC is not configured`);
   const wallet = findReadyWallet();
   if (!wallet) throw new Error("Ready wallet was not found. Install or unlock Ready and retry");
-  const account = await WalletAccountV6.connect({ nodeUrl: rpcUrl }, wallet as never);
+  const connectedAddress = connectedWalletAddress(wallet);
+  const account = connectedAddress
+    ? new WalletAccountV6({ provider: { nodeUrl: rpcUrl }, walletProvider: wallet as never, address: connectedAddress })
+    : await withReadyConnectTimeout(WalletAccountV6.connect({ nodeUrl: rpcUrl }, wallet as never));
   await ensureReadyChain(account, mode);
   const supportedWalletApi = (await walletV6.supportedWalletApi(wallet as never)).map(String);
   if (mode === "mainnet" && !supportedWalletApi.includes("0.10.3")) {

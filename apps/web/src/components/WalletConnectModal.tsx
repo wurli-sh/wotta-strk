@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, Loader2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
@@ -24,7 +24,7 @@ import { createBrowserProductSession } from "@/lib/wotta/product-session";
 import { connectReady, ensureReadyAccountDeployed } from "@/lib/wotta/ready";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { mainnetPrivacyConfig } from "@/lib/wotta/mainnet-privacy";
-import { beginNetworkOperation } from "@/lib/network-operations";
+import { beginNetworkOperation, type NetworkOperation } from "@/lib/network-operations";
 
 type ModalStep = "choose" | "link" | "done";
 type LinkPhase =
@@ -72,6 +72,7 @@ export function WalletConnectModal({
   const { mode } = useNetworkMode();
   const reduce = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
+  const activeOperationRef = useRef<NetworkOperation | null>(null);
   const [step, setStep] = useState<ModalStep>("choose");
   const [phase, setPhase] = useState<LinkPhase>("idle");
   const [busy, setBusy] = useState(false);
@@ -80,7 +81,11 @@ export function WalletConnectModal({
   const [linkedAddress, setLinkedAddress] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      activeOperationRef.current?.cancel();
+      activeOperationRef.current = null;
+      return;
+    }
     setStep("choose");
     setPhase("idle");
     setBusy(false);
@@ -89,10 +94,20 @@ export function WalletConnectModal({
     setLinkedAddress(null);
   }, [open]);
 
+  const canDismiss = !busy || step === "choose";
+  const dismiss = useCallback(() => {
+    if (busy && step !== "choose") return;
+    activeOperationRef.current?.cancel();
+    activeOperationRef.current = null;
+    setBusy(false);
+    setPhase("idle");
+    onClose();
+  }, [busy, onClose, step]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onClose();
+      if (event.key === "Escape" && canDismiss) dismiss();
     };
     document.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
@@ -102,10 +117,11 @@ export function WalletConnectModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
     };
-  }, [busy, onClose, open]);
+  }, [canDismiss, dismiss, open]);
 
   async function chooseReady() {
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
+    activeOperationRef.current = operation;
     setBusy(true);
     setPhase("connecting");
     try {
@@ -116,6 +132,7 @@ export function WalletConnectModal({
         connected.account,
         mode === "mainnet" ? mainnetPrivacyConfig() : directPrivacyConfig(),
       );
+      operation.assertActive();
       setAccount(connected.account);
       setVault(privacyVault);
       setLinkedAddress(connected.address);
@@ -124,17 +141,23 @@ export function WalletConnectModal({
       }
       setStep("link");
     } catch (error) {
-      toast.error(userFacingError(error, "Couldn’t connect Ready"));
-      setPhase("idle");
+      if (!operation.signal.aborted) {
+        toast.error(userFacingError(error, "Couldn’t connect Ready"));
+        setPhase("idle");
+      }
     } finally {
       operation.finish();
-      setBusy(false);
+      if (activeOperationRef.current === operation) {
+        activeOperationRef.current = null;
+        setBusy(false);
+      }
     }
   }
 
   async function bindAndRegister() {
     if (!account || !vault) return;
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
+    activeOperationRef.current = operation;
     setBusy(true);
     try {
       await ensureReadyAccountDeployed(account, mode);
@@ -204,7 +227,10 @@ export function WalletConnectModal({
       setPhase("idle");
     } finally {
       operation.finish();
-      setBusy(false);
+      if (activeOperationRef.current === operation) {
+        activeOperationRef.current = null;
+        setBusy(false);
+      }
     }
   }
 
@@ -238,7 +264,7 @@ export function WalletConnectModal({
             animate={{ opacity: 1 }}
             exit={reduce ? undefined : { opacity: 0 }}
             transition={{ duration: reduce ? 0 : 0.15 }}
-            onClick={() => { if (!busy) onClose(); }}
+            onClick={dismiss}
           />
           <motion.div
             ref={panelRef}
@@ -257,9 +283,9 @@ export function WalletConnectModal({
                 <h2 id="wallet-connect-title" className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
                 <button
                   type="button"
-                  onClick={() => { if (!busy) onClose(); }}
+                  onClick={dismiss}
                   aria-label="Close"
-                  disabled={busy}
+                  disabled={!canDismiss}
                   className="radius-control inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <X className="size-5" aria-hidden />

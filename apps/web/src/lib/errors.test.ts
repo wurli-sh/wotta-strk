@@ -74,6 +74,9 @@ Version: viem@2.55.10`;
     expect(userFacingError(new Error("ready_testnet_network_mismatch"))).toBe(
       "Disconnect or switch Ready to Starknet Sepolia, then reconnect",
     );
+    expect(userFacingError(new Error("ready_connection_unresponsive"))).toBe(
+      "Ready did not answer — unlock or reopen Ready, then retry",
+    );
   });
 
   it("maps a Sepolia indexer viewing-key mismatch after a network switch", () => {
