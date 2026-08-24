@@ -10,6 +10,8 @@ Wotta production is one Vercel web app backed by two fail-closed Render API serv
 
 The Mainnet service intentionally refuses indexer/relayer flags. Mainnet CCTP and Wotta escrow are out of scope; the shared UI continues to show those actions only in Testnet mode.
 
+The Vercel project Root Directory must be `apps/web`, Framework Preset `Next.js`, and “Include source files outside of the Root Directory” enabled. Build/install/output settings stay on their framework defaults so paths remain relative to `apps/web`.
+
 ## One-time prerequisites
 
 1. Set `DATABASE_POOLER_URL` to the Supabase session-pooler URI and run `pnpm db:migrate` (required on IPv4-only networks). Keep `DATABASE_URL` for the direct connection if other tooling uses it.
