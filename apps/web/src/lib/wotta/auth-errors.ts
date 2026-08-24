@@ -35,6 +35,12 @@ export function normalizeIdentityLinkError(error: unknown, provider: AuthProvide
       `Supabase manual identity linking is disabled. Enable Authentication → Providers (Google/X) and Authentication → Settings → Allow manual linking, then connect ${providerLabel} again.`,
     );
   }
+  if (/unsupported provider|provider is not enabled/i.test(message)) {
+    const providerLabel = provider === "x" ? "X" : "Google";
+    return new Error(
+      `${providerLabel} is not enabled in Supabase. Turn on Authentication → Providers → ${providerLabel === "X" ? "X / Twitter (OAuth 2.0)" : "Google"}, then try again.`,
+    );
+  }
   return error instanceof Error ? error : new Error(message || "Identity linking failed");
 }
 

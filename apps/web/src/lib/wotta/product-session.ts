@@ -18,6 +18,7 @@ import { connectReady, ensureReadyChain } from "./ready.ts";
 import { executeStarknetPublicDeposit, isStarknetPublicDepositPlan, type StarknetPublicDepositPlan } from "./public-deposit.ts";
 import { oauthCallbackUrl, stashAuthNext } from "../app-origin.ts";
 import { requireSourceWallet } from "../wallet-install.ts";
+import { toSupabaseProvider } from "../supabase/providers.ts";
 import {
   cleanOAuthCallbackUrl,
   describeOAuthCallbackFailure,
@@ -128,7 +129,7 @@ export class WottaProductSession {
   }
 
   async connectProvider(provider: AuthProvider) {
-    const supabaseProvider = provider === "x" ? "twitter" : provider;
+    const supabaseProvider = toSupabaseProvider(provider);
     const { data: { session } } = await this.supabase.auth.getSession();
     const alreadyLinked = session?.user.identities?.some((identity) =>
       provider === "x" ? identity.provider === "x" || identity.provider === "twitter" : identity.provider === provider);
@@ -220,7 +221,10 @@ export class WottaProductSession {
 
   async signIn(provider: "google" | "x") {
     const redirectTo = `${window.location.origin}${window.location.pathname}`;
-    const { error } = await this.supabase.auth.signInWithOAuth({ provider: provider === "x" ? "twitter" : provider, options: { redirectTo } });
+    const { error } = await this.supabase.auth.signInWithOAuth({
+      provider: toSupabaseProvider(provider),
+      options: { redirectTo },
+    });
     if (error) throw error;
   }
 
