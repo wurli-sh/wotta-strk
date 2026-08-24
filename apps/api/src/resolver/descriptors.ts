@@ -2,6 +2,7 @@ import { SignJWT } from "jose";
 import type { Config } from "../config.ts";
 import type { Db } from "../db/client.ts";
 import { normalizeIdentifier } from "../auth/normalize.ts";
+import { activeWalletBindingForProfile } from "../auth/wallet-bindings.ts";
 
 type RecipientProvider = "email" | "google" | "x";
 
@@ -19,10 +20,12 @@ export async function resolveDescriptor(db: Db, config: Config, provider: Recipi
   const expiresAt = Math.floor(Date.now() / 1000) + 300;
   let recipientStarknetAddress: string | undefined, recipientPrivateIdentityAddress: string | undefined, privacyPoolAddress: string | undefined, inboxEncryptionPublicKey: string | undefined;
   if (identity) {
-    const { data: wallet, error: walletError } = await db.from("wallet_bindings").select("address,inbox_pubkey,private_identity_address,privacy_pool_address,private_identity_verified_at").eq("profile_id", identity.profile_id).is("revoked_at", null).maybeSingle();
-    if (walletError) throw walletError;
+    const expectedPool = config.manifest.walletManagedPrivacy?.status === "verified"
+      ? config.manifest.walletManagedPrivacy.poolAddress
+      : config.manifest.directPrivacy?.poolAddress;
+    const wallet = await activeWalletBindingForProfile(db, identity.profile_id, config.manifest.chainId, { dedupe: true });
     recipientStarknetAddress = wallet?.address; inboxEncryptionPublicKey = wallet?.inbox_pubkey;
-    if (wallet?.private_identity_verified_at) {
+    if (wallet?.private_identity_verified_at && expectedPool && wallet.privacy_pool_address && BigInt(wallet.privacy_pool_address) === BigInt(expectedPool)) {
       recipientPrivateIdentityAddress = wallet.private_identity_address;
       privacyPoolAddress = wallet.privacy_pool_address;
     }

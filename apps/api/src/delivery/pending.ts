@@ -3,6 +3,7 @@ import nacl from "tweetnacl";
 import type { Db } from "../db/client.ts";
 import type { Config } from "../config.ts";
 import { normalizeIdentifier } from "../auth/normalize.ts";
+import { activeWalletBindingForProfile } from "../auth/wallet-bindings.ts";
 
 type RecipientProvider = "email" | "google" | "x";
 const lookupNamespace = (provider: RecipientProvider) => provider === "x" ? "x" : "email";
@@ -21,7 +22,7 @@ export async function storeDelivery(db: Db, config: Config, params: { senderId: 
   if (profileIds.length > 1) throw new Error("identity_ambiguous");
   const identity = profileIds[0] ? { profile_id: profileIds[0] } : undefined;
   if (identity) {
-    const { data: wallet, error: walletError } = await db.from("wallet_bindings").select("id").eq("profile_id", identity.profile_id).is("revoked_at", null).maybeSingle(); if (walletError) throw walletError;
+    const wallet = await activeWalletBindingForProfile(db, identity.profile_id, config.manifest.chainId, { dedupe: true });
     if (!wallet) throw new Error("recipient_wallet_unbound");
     const { error } = await db.from("encrypted_notes").upsert({ recipient_profile_id: identity.profile_id, sender_profile_id: params.senderId, intent_id: params.intentId, ciphertext: params.ciphertext, nonce: params.nonce, sender_public_key: params.ephemeralPublicKey, algorithm: params.algorithm }, { onConflict: "recipient_profile_id,intent_id" }); if (error) throw error;
     return "registered" as const;
@@ -36,7 +37,8 @@ export async function deliverPendingForProfile(db: Db, config: Config, profileId
     const current = lookupHash(config, id.provider, id.identifier);
     return id.provider === "google" ? [current, legacyLookupHash(config, "google", id.identifier)] : [current];
   }))];
-  const { data: wallet, error: walletError } = await db.from("wallet_bindings").select("inbox_pubkey").eq("profile_id", profileId).is("revoked_at", null).maybeSingle(); if (walletError) throw walletError; if (!wallet) return 0;
+  const wallet = await activeWalletBindingForProfile(db, profileId, config.manifest.chainId, { dedupe: true });
+  if (!wallet) return 0;
   const token = crypto.randomUUID(); const { data, error } = await db.rpc("claim_pending_claims", { p_profile_id: profileId, p_lookup_hashes: hashes, p_token: token }); if (error) throw error;
   const serverKeys = nacl.box.keyPair.fromSecretKey(decode(config.env.PENDING_DELIVERY_PRIVATE_KEY)); let delivered = 0;
   for (const row of (data ?? []) as { id: string; intent_id: string; sender_profile_id: string; sealed_payload: string }[]) {

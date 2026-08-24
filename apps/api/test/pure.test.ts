@@ -8,7 +8,8 @@ import { collectVerifiedIdentities } from "../src/auth/sync.ts";
 import { decodeEscrowProjection } from "../src/indexer/run.ts";
 import { hash } from "starknet";
 import { safeError } from "../src/logger.ts";
-import { requireWalletOrigin, walletBindingTypedData } from "../src/auth/challenge.ts";
+import { requireWalletOrigin, walletBindingTypedData, normalizeWalletAddress } from "../src/auth/challenge.ts";
+import { requestChainId } from "../src/network-scope.ts";
 
 test("identity normalization rejects unverified-shaped inputs", () => { assert.equal(normalizeIdentifier("x", "@Wotta_User"), "wotta_user"); assert.equal(normalizeIdentifier("google", "User@Example.COM"), "user@example.com"); assert.equal(normalizeIdentifier("email", "User@Example.COM"), "user@example.com"); assert.throws(() => normalizeIdentifier("x", "not valid")); });
 test("X-only OAuth registers both its verified handle and email", () => {
@@ -94,6 +95,29 @@ test("verified Sepolia destination admits Starknet publicly but CCTP per route",
   }
   assert.throws(() => loadConfig({ ...base, CCTP_ADMITTED_ROUTES: "unknown" }), /unsupported_admitted_route/);
 });
+test("mainnet exposes only the Ready-managed private route", () => {
+  const config = loadConfig({
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_SECRET_KEY: "a".repeat(32),
+    STARKNET_RPC_URL: "https://rpc.example",
+    RESOLVER_SIGNING_KEY: "b".repeat(32),
+    IDENTITY_LOOKUP_KEY: "c".repeat(32),
+    PENDING_DELIVERY_PRIVATE_KEY: Buffer.alloc(32, 1).toString("base64url"),
+    STARKNET_NETWORK: "mainnet",
+  });
+  const routes = routesForConfig(config);
+  assert.equal(routes.find((route) => route.id === "starknet-private")?.enabled, true);
+  for (const id of ["starknet-public", "ethereum", "arbitrum", "base", "solana", "stellar"] as const) {
+    assert.equal(routes.find((route) => route.id === id)?.enabled, false, id);
+  }
+});
+test("API rejects a network-mode header that does not match its manifest", () => {
+  const config = { manifest: { chainId: "SN_SEPOLIA" } } as ReturnType<typeof loadConfig>;
+  const testnetRequest = { headers: { "x-wotta-network": "testnet" } } as never;
+  const mainnetRequest = { headers: { "x-wotta-network": "mainnet" } } as never;
+  assert.equal(requestChainId(config, testnetRequest), "SN_SEPOLIA");
+  assert.throws(() => requestChainId(config, mainnetRequest), /network_mode_mismatch/);
+});
 test("API errors preserve safe provider/database reasons without exposing hashes", () => {
   assert.equal(safeError({ message: "identity_already_linked" }), "identity_already_linked");
   assert.equal(safeError(new Error(`failed ${"a".repeat(64)}`)), "failed [REDACTED]");
@@ -129,4 +153,10 @@ test("wallet binding challenge stays within Ready's proven SNIP-12 type subset",
   assert.match(String(message.profile_hash), /^0x[0-9a-f]+$/);
   assert.match(String(message.origin_hash), /^0x[0-9a-f]+$/);
   assert.equal(message.address, "0x123");
+});
+test("wallet addresses normalize to canonical felt hex", () => {
+  const padded = "0x0000000000000000000000000000000000000000000000000000000000000099";
+  const short = "0x99";
+  assert.equal(normalizeWalletAddress(padded), normalizeWalletAddress(short));
+  assert.throws(() => normalizeWalletAddress("not-an-address"), /invalid_wallet_address/);
 });
