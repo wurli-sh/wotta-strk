@@ -3,7 +3,7 @@
   "chainId": "SN_MAIN",
   "network": "mainnet",
   "rpcUrlEnv": "STARKNET_RPC_URL",
-  "manifestHash": "87ca2b033c51b17b18724602622af0201e5115c39a2ef977d4398441bb73b4db",
+  "manifestHash": "614ee597b54234b40b5bb56548cfeee28352ce4cce45988b73c16e5fc226fcea",
   "generatedAt": "2026-08-20T08:16:53.788Z",
   "verified": false,
   "verificationNotes": "Wotta contracts remain undeployed. The shared live STRK20 pool and native USDC are pinned for Ready wallet-managed mainnet actions.",
@@ -17,9 +17,9 @@
     "poolClassHash": "0x67dddd89d80fedadc06b6f160798f94800a4a70164e5a24301cd0d6076b554d",
     "usdc": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
     "feeToken": "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
-    "actionAmount": "500000",
+    "actionAmount": "100000",
     "allowedActionAmounts": [
-      "500000",
+      "100000",
       "1000000",
       "10000000",
       "50000000",
@@ -27,7 +27,7 @@
     ],
     "protocolFeeStrk": "6000000000000000000",
     "walletApiSchema": "0.10.3",
-    "verificationNotes": "Pool class hash, version 2.0, unpaused state, native USDC, and the 6 STRK apply_actions fee were checked over SN_MAIN RPC. The UI allowlists 0.5, 1, 10, 50, and 100 USDC actions; a Ready simulate=true preview remains mandatory before every selected-amount write."
+    "verificationNotes": "Pool class hash, version 2.0, unpaused state, native USDC, and the 6 STRK apply_actions fee were checked over SN_MAIN RPC. STRK20 actions accept felt-denominated token amounts; the UI allowlists 0.1, 1, 10, 50, and 100 USDC actions, with a mandatory Ready simulate=true preview before every selected-amount write."
   },
   "deployer": {
     "address": "0xFbc83d9aDA8F06242a528b62A63728e1EF7DE066",

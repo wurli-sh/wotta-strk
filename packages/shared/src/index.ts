@@ -86,9 +86,9 @@ export const walletManagedPrivacyManifestSchema = z.object({
   poolClassHash: feltSchema,
   usdc: feltSchema,
   feeToken: feltSchema,
-  actionAmount: z.literal("500000"),
+  actionAmount: z.literal("100000"),
   allowedActionAmounts: z.tuple([
-    z.literal("500000"),
+    z.literal("100000"),
     z.literal("1000000"),
     z.literal("10000000"),
     z.literal("50000000"),

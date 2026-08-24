@@ -147,5 +147,5 @@ test("deployment manifest accepts the Ready-managed mainnet privacy route", () =
   );
   const parsed = deploymentManifestSchema.parse(manifest);
   assert.equal(parsed.walletManagedPrivacy?.status, "verified");
-  assert.equal(parsed.walletManagedPrivacy?.actionAmount, "500000");
+  assert.equal(parsed.walletManagedPrivacy?.actionAmount, "100000");
 });
