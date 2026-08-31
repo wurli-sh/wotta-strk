@@ -1,6 +1,8 @@
 import { createStore } from "@starknet-io/get-starknet-discovery";
-import { constants, walletV6, WalletAccountV6 } from "starknet";
+import { cairo, constants, walletV6, WalletAccountV6 } from "starknet";
 import type { NetworkMode } from "@/lib/network-mode";
+
+const SEPOLIA_STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
 
 export type ConnectedReady = {
   account: WalletAccountV6;
@@ -129,13 +131,23 @@ export async function ensureReadyAccountDeployed(
     throw new Error("Connect the Ready account linked to this Wotta profile");
   }
 
-  const deployed = await account.deployAccount({
-    classHash: deployment.class_hash,
-    constructorCalldata: deployment.calldata,
-    addressSalt: deployment.salt,
-    contractAddress: deployment.address,
+  // WalletAccount uses an empty local signer, so Account.deployAccount() fails while
+  // estimating/signing. Ready activates counterfactual accounts on the first approved
+  // wallet invoke instead.
+  const { low, high } = cairo.uint256(1n);
+  const activated = await account.execute({
+    contractAddress: SEPOLIA_STRK,
+    entrypoint: "transfer",
+    calldata: [account.address, low.toString(), high.toString()],
   });
-  await account.provider.waitForTransaction(deployed.transaction_hash);
+  await account.provider.waitForTransaction(activated.transaction_hash);
+
+  try {
+    await account.provider.getClassHashAt(account.address);
+  } catch (error) {
+    if (isUndeployedAccountError(error)) throw undeployedAccountError(mode);
+    throw error;
+  }
 }
 
 export async function connectReady(mode: NetworkMode = "testnet"): Promise<ConnectedReady> {

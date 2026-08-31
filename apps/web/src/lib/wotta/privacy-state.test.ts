@@ -35,4 +35,13 @@ describe("materializePrivacyState", () => {
     expect(minted.viewingKey).toMatch(/^0x[0-9a-f]+$/);
     expect(minted.identityAddress).toBeUndefined();
   });
+
+  it("rotates a zero viewing key instead of reusing it", () => {
+    const minted = materializePrivacyState({
+      version: 2,
+      viewingKey: "0x0",
+    });
+    expect(minted.viewingKey).not.toBe("0x0");
+    expect(BigInt(minted.viewingKey)).toBeGreaterThan(0n);
+  });
 });

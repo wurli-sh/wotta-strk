@@ -254,6 +254,13 @@ function mapKnownPhrase(raw: string): string | null {
     return APP_MESSAGES.privacy_viewing_key_mismatch;
   }
 
+  if (
+    m.includes("expected valid private key")
+    || (m.includes("invalid private key") && m.includes("got 0"))
+  ) {
+    return "Local privacy state is invalid — reconnect Ready from Account";
+  }
+
   if (m.includes("auth_failed") || m === "auth_failed") {
     return APP_MESSAGES.auth_failed;
   }

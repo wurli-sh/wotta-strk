@@ -1,4 +1,4 @@
-import { stark, type TypedData, type WalletAccountV6 } from "starknet";
+import { ec, stark, type TypedData, type WalletAccountV6 } from "starknet";
 import type { DirectPrivacyConfig } from "./privacy-config.ts";
 import { ensureReadyChain } from "./ready.ts";
 
@@ -12,11 +12,23 @@ export type PrivacyState = {
   inboxSecretKey?: string;
 };
 
+const MAX_VIEWING_KEY = ec.starkCurve.CURVE.n / 2n;
+
+function isValidViewingKey(viewingKey: string): boolean {
+  if (!/^0x[0-9a-f]+$/i.test(viewingKey)) return false;
+  try {
+    const value = BigInt(viewingKey);
+    return value > 0n && value <= MAX_VIEWING_KEY;
+  } catch {
+    return false;
+  }
+}
+
 export function materializePrivacyState(
   rawState: PrivacyState | LegacyPrivacyState | null,
 ): PrivacyState {
-  if (rawState?.version === 2) return rawState;
-  if (rawState?.version === 1) {
+  if (rawState?.version === 2 && isValidViewingKey(rawState.viewingKey)) return rawState;
+  if (rawState?.version === 1 && isValidViewingKey(rawState.viewingKey)) {
     return {
       version: 2,
       viewingKey: rawState.viewingKey,
@@ -279,7 +291,7 @@ async function decryptState(raw: string, key: CryptoKey): Promise<PrivacyState |
       fromBase64(record.ciphertext),
     );
     const state = JSON.parse(new TextDecoder().decode(plaintext)) as PrivacyState | LegacyPrivacyState;
-    if ((state.version !== 1 && state.version !== 2) || !/^0x[0-9a-f]+$/i.test(state.viewingKey)) {
+    if ((state.version !== 1 && state.version !== 2) || !isValidViewingKey(state.viewingKey)) {
       throw new Error("invalid state payload");
     }
     return state;
