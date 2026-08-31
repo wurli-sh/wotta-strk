@@ -25,6 +25,19 @@ On **Starknet Mainnet**, Wotta focuses on Ready wallet-managed live-pool private
 sends and balance (no CCTP escrow inbox). Switch networks from the signed-in
 account menu.
 
+### Mainnet STRK20 evidence
+
+Private sends through the live STRK20 pool (Wallet One → Wallet One’s linked X
+handle). Each tx succeeded on Starknet Mainnet and touched the pool:
+
+| Tx | Voyager |
+| -- | ------- |
+| 1 | [0x05865c…fa4eb6](https://voyager.online/tx/0x05865c9b8592d5da05f5f031624476c6d681fd72b7da49eb0697adb2dafa4eb6) |
+| 2 | [0x022b04…ff4dee](https://voyager.online/tx/0x022b049c23b35cc5b515a2e607004b1800a8a853007fe6cf4a84a6c74cff4dee) |
+| 3 | [0x0191ca…4d9efb](https://voyager.online/tx/0x0191caf99580ca2f043e05b92fd96defb188492f5d3c32e5f485f685164d9efb) |
+
+Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
+
 ---
 
 ## Deployments
