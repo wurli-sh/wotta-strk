@@ -1,14 +1,10 @@
 import {
-  AddressLookupTableProgram,
   Connection,
   Keypair,
   PublicKey,
   SystemProgram,
   Transaction,
   TransactionInstruction,
-  TransactionMessage,
-  VersionedTransaction,
-  type AddressLookupTableAccount,
 } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import { hexToBytes } from "viem";
@@ -18,7 +14,7 @@ type Phantom = {
   isPhantom?: boolean;
   publicKey?: PublicKey | null;
   connect(): Promise<{ publicKey: PublicKey }>;
-  signAndSendTransaction(transaction: Transaction | VersionedTransaction): Promise<{ signature: string }>;
+  signAndSendTransaction(transaction: Transaction): Promise<{ signature: string }>;
 };
 
 declare global {
@@ -34,7 +30,7 @@ export async function executeSolanaCctpBurn(input: {
   plan: NonEvmCctpBurnPlan;
   rpcUrl: string;
   expectedSourceAccount?: string;
-  onStage?: (stage: "connecting" | "lookup" | "simulating" | "signing" | "confirming") => void;
+  onStage?: (stage: "connecting" | "simulating" | "signing" | "confirming") => void;
 }): Promise<{ txHash: string; sourceAccount: string }> {
   const provider = phantom();
   input.onStage?.("connecting");
@@ -51,18 +47,17 @@ export async function executeSolanaCctpBurn(input: {
   const mint = new PublicKey(input.plan.route.usdc);
   const accounts = deriveAccounts(owner, messenger, transmitter, mint, input.plan.args.destinationDomain);
 
-  input.onStage?.("lookup");
-  const lookup = await setupLookupTable(connection, provider, owner, [
-    accounts.senderUsdc, accounts.senderAuthority, accounts.denylist,
-    accounts.messageTransmitter, accounts.tokenMessenger,
-    accounts.remoteTokenMessenger, accounts.tokenMinter, accounts.localToken,
-    mint, transmitter, messenger, TOKEN_PROGRAM, SystemProgram.programId,
-    accounts.eventAuthority, accounts.transmitterEventAuthority,
-  ]);
+  const senderUsdcAccount = await connection.getAccountInfo(accounts.senderUsdc, "confirmed");
+  if (!senderUsdcAccount) throw new Error("Solana USDC token account not found");
+  const senderUsdc = await connection.getTokenAccountBalance(accounts.senderUsdc, "confirmed");
+  if (BigInt(senderUsdc.value.amount) < BigInt(input.plan.args.amount)) {
+    throw new Error("Insufficient source-chain USDC balance");
+  }
+
   const event = Keypair.generate();
   const latest = await connection.getLatestBlockhash("confirmed");
   const transaction = buildBurnTransaction({
-    owner, messenger, transmitter, mint, accounts, lookup, event,
+    owner, messenger, transmitter, mint, accounts, event,
     blockhash: latest.blockhash,
     amount: BigInt(input.plan.args.amount),
     destinationDomain: input.plan.args.destinationDomain,
@@ -72,16 +67,24 @@ export async function executeSolanaCctpBurn(input: {
     finality: input.plan.args.minFinalityThreshold,
     hookData: input.plan.args.hookData,
   });
-  if (transaction.serialize().length > PACKET_LIMIT) throw new Error("Solana CCTP transaction exceeds the packet limit");
+  if (serializedLength(transaction) > PACKET_LIMIT) throw new Error("Solana CCTP transaction exceeds the packet limit");
   input.onStage?.("simulating");
-  const simulation = await connection.simulateTransaction(transaction, { commitment: "confirmed", sigVerify: false });
-  if (simulation.value.err) throw new Error(`Solana CCTP simulation failed: ${JSON.stringify(simulation.value.err)} ${simulation.value.logs?.slice(-2).join(" ") ?? ""}`);
+  const simulation = await connection.simulateTransaction(transaction);
+  if (simulation.value.err) {
+    const logs = simulation.value.logs?.slice(-6).join(" | ") ?? "No program logs returned";
+    throw new Error(`Solana CCTP simulation failed: ${JSON.stringify(simulation.value.err)} | ${logs}`);
+  }
   input.onStage?.("signing");
   if (provider.publicKey?.toBase58() !== owner.toBase58()) throw new Error("Phantom account changed; request a new quote");
-  const sent = await provider.signAndSendTransaction(transaction);
+  let sent: { signature: string };
+  try {
+    sent = await provider.signAndSendTransaction(transaction);
+  } catch (cause) {
+    throw new Error("Phantom could not submit the Solana transaction", { cause });
+  }
   input.onStage?.("confirming");
   const confirmation = await connection.confirmTransaction({ signature: sent.signature, ...latest }, "confirmed");
-  if (confirmation.value.err) throw new Error("Solana CCTP burn reverted");
+  if (confirmation.value.err) throw new Error(`Solana CCTP burn reverted: ${JSON.stringify(confirmation.value.err)}`);
   return { txHash: sent.signature, sourceAccount: owner.toBase58() };
 }
 
@@ -111,29 +114,12 @@ function deriveAccounts(owner: PublicKey, messenger: PublicKey, transmitter: Pub
     tokenMinter: pda(messenger, [text("token_minter")]),
     localToken: pda(messenger, [text("local_token"), mint.toBytes()]),
     eventAuthority: pda(messenger, [text("__event_authority")]),
-    transmitterEventAuthority: pda(transmitter, [text("__event_authority")]),
   };
 }
 
-async function setupLookupTable(connection: Connection, provider: Phantom, owner: PublicKey, addresses: PublicKey[]): Promise<AddressLookupTableAccount> {
-  const recentSlot = await connection.getSlot("finalized");
-  const [create, lookupAddress] = AddressLookupTableProgram.createLookupTable({ authority: owner, payer: owner, recentSlot });
-  const extend = AddressLookupTableProgram.extendLookupTable({ authority: owner, payer: owner, lookupTable: lookupAddress, addresses });
-  const latest = await connection.getLatestBlockhash("confirmed");
-  const sent = await provider.signAndSendTransaction(new Transaction({ feePayer: owner, ...latest }).add(create, extend));
-  const confirmation = await connection.confirmTransaction({ signature: sent.signature, ...latest }, "confirmed");
-  if (confirmation.value.err) throw new Error("Solana lookup table setup failed");
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const [lookup, slot] = await Promise.all([connection.getAddressLookupTable(lookupAddress, { commitment: "confirmed" }), connection.getSlot("confirmed")]);
-    if (lookup.value && BigInt(slot) > BigInt(lookup.value.state.lastExtendedSlot)) return lookup.value;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  throw new Error("Solana lookup table did not activate");
-}
-
-function buildBurnTransaction(input: {
+export function buildSolanaCctpBurnTransaction(input: {
   owner: PublicKey; messenger: PublicKey; transmitter: PublicKey; mint: PublicKey;
-  accounts: ReturnType<typeof deriveAccounts>; lookup: AddressLookupTableAccount;
+  accounts: ReturnType<typeof deriveAccounts>;
   event: Keypair; blockhash: string; amount: bigint; destinationDomain: number;
   mintRecipient: `0x${string}`; destinationCaller: `0x${string}`;
   maxFee: bigint; finality: number; hookData: `0x${string}`;
@@ -152,14 +138,19 @@ function buildBurnTransaction(input: {
       read(input.accounts.tokenMinter), write(input.accounts.localToken), write(input.mint),
       { pubkey: input.event.publicKey, isSigner: true, isWritable: true },
       read(input.transmitter), read(input.messenger), read(TOKEN_PROGRAM), read(SystemProgram.programId),
-      read(input.accounts.eventAuthority), read(input.messenger), read(input.accounts.transmitterEventAuthority), read(input.transmitter),
+      read(input.accounts.eventAuthority), read(input.messenger),
     ],
     data: Buffer.from(data),
   });
-  const message = new TransactionMessage({ payerKey: input.owner, recentBlockhash: input.blockhash, instructions: [instruction] }).compileToV0Message([input.lookup]);
-  const transaction = new VersionedTransaction(message);
-  transaction.sign([input.event]);
+  const transaction = new Transaction({ feePayer: input.owner, recentBlockhash: input.blockhash }).add(instruction);
+  transaction.partialSign(input.event);
   return transaction;
+}
+
+const buildBurnTransaction = buildSolanaCctpBurnTransaction;
+
+function serializedLength(transaction: Transaction) {
+  return transaction.serialize({ requireAllSignatures: false, verifySignatures: false }).length;
 }
 
 function concat(...parts: Uint8Array[]) {
