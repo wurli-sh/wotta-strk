@@ -31,6 +31,7 @@ type LinkPhase =
   | "idle"
   | "connecting"
   | "unlocking"
+  | "activating"
   | "binding"
   | "deploying"
   | "proving"
@@ -56,6 +57,7 @@ const phaseLabel: Record<LinkPhase, string> = {
   idle: "",
   connecting: "Connecting Ready…",
   unlocking: "Unlocking local privacy state…",
+  activating: "Activating Ready account…",
   binding: "Confirm wallet binding…",
   deploying: "Deploying private identity…",
   proving: "Generating privacy proof…",
@@ -160,7 +162,9 @@ export function WalletConnectModal({
     activeOperationRef.current = operation;
     setBusy(true);
     try {
+      setPhase("activating");
       await ensureReadyAccountDeployed(account, mode);
+      operation.assertActive();
       const session = createBrowserProductSession();
       setPhase("binding");
       await session.bindReadyAndIdentity(account, vault, undefined, { reconnect });

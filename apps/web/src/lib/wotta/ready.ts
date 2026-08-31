@@ -82,19 +82,60 @@ export async function ensureReadyChain(
   }
 }
 
+function isUndeployedAccountError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /contract not found|code\D*20\b|\b20:\s*contract/i.test(message);
+}
+
+function undeployedAccountError(mode: NetworkMode): Error {
+  return new Error(mode === "mainnet" ? "mainnet_wallet_not_deployed" : "testnet_wallet_not_deployed");
+}
+
+function isAccountAlreadyDeployedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /ACCOUNT_ALREADY_DEPLOYED|\b115\b/.test(message);
+}
+
+type ReadyAccountDeploymentData = {
+  address: string;
+  class_hash: string;
+  salt: string;
+  calldata: string[];
+};
+
 export async function ensureReadyAccountDeployed(
   account: WalletAccountV6,
   mode: NetworkMode,
 ): Promise<void> {
   try {
     await account.provider.getClassHashAt(account.address);
+    return;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/contract not found|code\D*20\b|\b20:\s*contract/i.test(message)) {
-      throw new Error(mode === "mainnet" ? "mainnet_wallet_not_deployed" : "testnet_wallet_not_deployed");
-    }
-    throw error;
+    if (!isUndeployedAccountError(error)) throw error;
   }
+
+  const wallet = findReadyWallet();
+  if (!wallet) throw undeployedAccountError(mode);
+
+  let deployment: ReadyAccountDeploymentData;
+  try {
+    deployment = await walletV6.deploymentData(wallet as never);
+  } catch (error) {
+    if (isAccountAlreadyDeployedError(error)) return;
+    throw undeployedAccountError(mode);
+  }
+
+  if (BigInt(deployment.address) !== BigInt(account.address)) {
+    throw new Error("Connect the Ready account linked to this Wotta profile");
+  }
+
+  const deployed = await account.deployAccount({
+    classHash: deployment.class_hash,
+    constructorCalldata: deployment.calldata,
+    addressSalt: deployment.salt,
+    contractAddress: deployment.address,
+  });
+  await account.provider.waitForTransaction(deployed.transaction_hash);
 }
 
 export async function connectReady(mode: NetworkMode = "testnet"): Promise<ConnectedReady> {

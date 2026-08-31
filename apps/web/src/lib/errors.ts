@@ -57,7 +57,7 @@ const APP_MESSAGES: Record<string, string> = {
   network_mode_mismatch: "This API serves the other Starknet network — switch mode or configure the mainnet API",
   mainnet_wallet_not_linked: "Link a Ready wallet on Mainnet from Account first",
   mainnet_wallet_not_deployed: "Activate this Ready Mainnet account first: add STRK and make one outgoing transaction, then retry",
-  testnet_wallet_not_deployed: "Activate this Ready Sepolia account first, then retry",
+  testnet_wallet_not_deployed: "Fund this Ready Sepolia account with STRK in Ready, then retry",
   mainnet_private_route_disabled: "The live-pool mainnet route is not verified",
   ready_network_mismatch: "Disconnect or switch Ready to the selected Starknet network, then reconnect",
   ready_mainnet_network_mismatch: "Disconnect or switch Ready to Starknet Mainnet, then reconnect",
