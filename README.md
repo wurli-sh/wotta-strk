@@ -1,6 +1,6 @@
 <img src="docs/assets/banner.png" width="100%" alt="Wotta — send like a message, settle privately on Starknet, from any chain" />
 
-[Live demo](https://wotta.vercel.app) · [Demo video](#) <!-- TODO: replace with YouTube/Loom URL -->
+[Live demo](https://wotta.vercel.app) · [Demo video](https://youtu.be/KqIuun51blI)
 
 ## Problem
 
@@ -135,8 +135,6 @@ wotta/
 
 ## Payment Workflow
 
-![Wotta workflow — resolve, quote, cross-chain funding, protected delivery, and private Starknet claim](docs/assets/cross-chain-send-arch.png)
-
 1. **Resolve** — the sender enters an `@handle` or email. Wotta returns a signed
    recipient descriptor when the recipient is registered.
 2. **Prepare** — the browser generates a claim secret, derives a claim hash, and
@@ -240,5 +238,15 @@ environment synchronization, and operational verification.
 - **Not production-ready** — this is unaudited hackathon software; live route evidence and operational safeguards remain required.
 
 More detail: [`docs/direct-privacy-sepolia.md`](docs/direct-privacy-sepolia.md) · [`docs/phase1-3-send-flow.md`](docs/phase1-3-send-flow.md) · [`docs/third-party-privacy-sdk.md`](docs/third-party-privacy-sdk.md)
+
+---
+
+## Future Plans
+
+- **Harden the core** — Make CCTP → Sepolia settlement, indexer/relayer, and claim/refund paths reliable under real load.
+- **Keep Starknet as settlement** — Grow source rails into one private receive surface, not fragmented pools.
+- **Make privacy feel like messaging** — Sharpen handle/email send, inbox unlock, Ready linking, and claim UX.
+- **Close the Mainnet gap** — Expand live STRK20 / Ready private sends beyond current demo evidence.
+- **Prepare for review** — Threat model, runbooks, and an audit / mainnet readiness plan before production claims.
 
 ---
