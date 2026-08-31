@@ -140,18 +140,10 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       );
       operation.assertActive();
       setTransactionHash(hash);
-      setPhase("confirming");
-      toast.success("Claim submitted");
-      // Same as Swoop: celebrate immediately on successful submit.
-      fireClaimConfetti(confettiRef.current);
-
-      const session = createBrowserProductSession();
-      for (let attempt = 0; attempt < 80; attempt += 1) {
-        const intent = await session.intent(claim.intentId);
-        if (intent.onchain_state === "claimed" || intent.state === "claimed") break;
-        await new Promise((resolve) => window.setTimeout(resolve, 3_000));
-      }
       setPhase("complete");
+      toast.success("Claimed privately");
+      fireClaimConfetti(confettiRef.current);
+      setClaim(null);
     } catch (caught) {
       const message = userFacingError(caught, "Couldn't claim this payment");
       setError(message);
