@@ -2,12 +2,19 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Account, RpcProvider, Signer, stark } from "starknet";
+import { Account, RpcProvider, Signer, shortString, stark } from "starknet";
 import {
   deploymentManifestSchema,
-  hashDeploymentManifest,
+  rehashDeploymentManifest,
   type DeploymentManifest,
 } from "../../packages/shared/src/index.ts";
+import {
+  CIRCLE_STARKNET_MAINNET_MESSAGE_TRANSMITTER,
+  CIRCLE_STARKNET_MAINNET_TOKEN_MESSENGER,
+  CIRCLE_STARKNET_MAINNET_USDC,
+  STARKNET_MAINNET_CHAIN_ID,
+} from "./mainnet-constants.ts";
+import { assertMainnetDeployerIdentity, assertMainnetDeployConfig, syncMainnetPilotIdentities } from "./mainnet-preflight.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../..");
@@ -18,34 +25,42 @@ async function loadManifest(): Promise<DeploymentManifest> {
   return deploymentManifestSchema.parse(JSON.parse(raw));
 }
 
+async function persistManifest(manifest: DeploymentManifest): Promise<void> {
+  manifest.generatedAt = new Date().toISOString();
+  manifest.manifestHash = rehashDeploymentManifest(manifest);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 function canDeploy(): { ok: boolean; reason?: string } {
-  if (!process.env.STARKNET_RPC_URL?.trim()) {
-    return { ok: false, reason: "missing STARKNET_RPC_URL" };
+  if (!process.env.STARKNET_MAINNET_RPC_URL?.trim()) {
+    return { ok: false, reason: "missing STARKNET_MAINNET_RPC_URL" };
   }
-  if (!process.env.STARKNET_DEPLOYER_PRIVATE_KEY?.trim()) {
+  if (!process.env.STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY?.trim()) {
     return {
       ok: false,
-      reason: "missing STARKNET_DEPLOYER_PRIVATE_KEY; manifest placeholders retained",
+      reason: "missing STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY",
     };
   }
-  if (!process.env.STARKNET_DEPLOYER_ADDRESS?.trim()) {
+  if (!process.env.STARKNET_MAINNET_DEPLOYER_ADDRESS?.trim()) {
     return {
       ok: false,
-      reason: "missing STARKNET_DEPLOYER_ADDRESS; manifest placeholders retained",
+      reason: "missing STARKNET_MAINNET_DEPLOYER_ADDRESS",
     };
   }
   return { ok: true };
 }
 
 async function instantiateAccount(): Promise<Account> {
+  const rpcUrl = process.env.STARKNET_MAINNET_RPC_URL?.trim();
+  if (!rpcUrl) throw new Error("mainnet_blocked:missing STARKNET_MAINNET_RPC_URL");
   const provider = new RpcProvider({
-    nodeUrl: process.env.STARKNET_RPC_URL!.trim(),
+    nodeUrl: rpcUrl,
   });
-  const signer = new Signer(normalizePrivateKey(process.env.STARKNET_DEPLOYER_PRIVATE_KEY!));
+  const signer = new Signer(normalizePrivateKey(process.env.STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY!));
   return new Account({
     provider,
     signer,
-    address: process.env.STARKNET_DEPLOYER_ADDRESS!.trim(),
+    address: process.env.STARKNET_MAINNET_DEPLOYER_ADDRESS!.trim(),
   });
 }
 
@@ -53,73 +68,160 @@ function normalizePrivateKey(value: string): string {
   const normalized = value.trim();
   if (/^[0-9a-fA-F]{64}$/.test(normalized)) return `0x${normalized}`;
   if (/^0x[0-9a-fA-F]{1,64}$/.test(normalized)) return normalized;
-  throw new Error("invalid STARKNET_DEPLOYER_PRIVATE_KEY");
+  throw new Error("invalid STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY");
 }
 
 async function main(): Promise<void> {
   await mkdir(path.dirname(manifestPath), { recursive: true });
-  const manifest = await loadManifest();
+  let manifest = await loadManifest();
+  const sepolia = JSON.parse(await readFile(path.join(root, "deployments", "sepolia.json"), "utf8")) as { deployer?: { address?: string } };
+  assertMainnetDeployerIdentity(process.env, sepolia.deployer?.address ?? "");
+  manifest = syncMainnetPilotIdentities(manifest, process.env);
+  await persistManifest(manifest);
+  assertMainnetDeployConfig(manifest);
   const deployCheck = canDeploy();
-  const now = new Date().toISOString();
 
   if (!deployCheck.ok) {
-    manifest.generatedAt = now;
-    manifest.router.address =
-      manifest.router.address === "UNDEPLOYED"
-        ? "UNDEPLOYED"
-        : manifest.router.address;
-    manifest.pools = manifest.pools.map((pool) => ({
-      ...pool,
-      address: pool.address === "UNDEPLOYED" ? "UNDEPLOYED" : pool.address,
-    }));
-    manifest.verificationNotes = [
-      "Phase 1 deploy scaffold wrote placeholder addresses only.",
-      deployCheck.reason,
-    ]
-      .filter(Boolean)
-      .join(" ");
-    manifest.manifestHash = hashDeploymentManifest({
-      ...manifest,
-      manifestHash: undefined as never,
-    });
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    process.stdout.write(
-      JSON.stringify(
-        {
-          status: "ok",
-          mode: "placeholder",
-          reason: deployCheck.reason,
-          manifestPath,
-        },
-        null,
-        2,
-      ) + "\n",
-    );
-    return;
+    throw new Error(`deployment_credentials_missing: ${deployCheck.reason}`);
   }
 
   const account = await instantiateAccount();
-  const salt = stark.randomAddress();
-  manifest.generatedAt = now;
-  manifest.deployer.address = account.address;
-  manifest.verificationNotes = [
-    "Live deployment key detected, but this scaffold does not submit mainnet transactions automatically.",
-    `Salt reserved for later live deploy: ${salt}`,
-  ].join(" ");
-  manifest.manifestHash = hashDeploymentManifest({
-    ...manifest,
-    manifestHash: undefined as never,
-  });
 
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  // Guard: must be SN_MAIN
+  const chainId = await account.provider.getChainId();
+  if (chainId !== STARKNET_MAINNET_CHAIN_ID) {
+    throw new Error(`wrong_network: expected SN_MAIN, got ${chainId}`);
+  }
+
+  if (process.env.MAINNET_DEPLOY_SUBMIT !== "1") {
+    process.stdout.write(`${JSON.stringify({
+      status: "ok",
+      mode: "ready_no_submit",
+      chainId,
+      owner: manifest.authority.owner,
+      deployer: manifest.deployer.address,
+      routerClassHash: manifest.router.classHash,
+      approvedPools: manifest.pools
+        .filter((pool) => manifest.approvedCctpDenominations.includes(pool.denomination))
+        .map((pool) => ({ key: pool.key, denomination: pool.denomination, classHash: pool.classHash })),
+      submitRequiredEnv: "MAINNET_DEPLOY_SUBMIT=1",
+    }, null, 2)}\n`);
+    return;
+  }
+
+  const ownerAddress = manifest.authority.owner;
+  if (BigInt(manifest.usdc) !== BigInt(CIRCLE_STARKNET_MAINNET_USDC)) {
+    throw new Error("mainnet manifest USDC does not match Circle native USDC");
+  }
+  const usdcAddress = manifest.usdc;
+
+  const notes: string[] = ["Phase 2 deploy."];
+
+  // Deploy router if not yet deployed
+  if (
+    manifest.router.classHash !== "UNDECLARED" &&
+    manifest.router.address === "UNDEPLOYED"
+  ) {
+    notes.push("deploying router…");
+    const routerConstructor = [
+      ownerAddress,
+      CIRCLE_STARKNET_MAINNET_MESSAGE_TRANSMITTER,
+      usdcAddress,
+      CIRCLE_STARKNET_MAINNET_TOKEN_MESSENGER,
+    ];
+    const { contract_address: routerAddress, transaction_hash: routerTxHash } =
+      await account.deployContract({
+        classHash: manifest.router.classHash,
+        constructorCalldata: routerConstructor,
+        salt: stark.randomAddress(),
+        unique: true,
+      });
+    manifest.router.address = routerAddress;
+    manifest.router.deployTxHash = routerTxHash;
+    manifest.router.deployedBlock = "PENDING";
+    manifest.router.constructorCalldata = routerConstructor;
+    notes.push(`router deployment submitted: ${routerTxHash}`);
+    manifest.verificationNotes = notes.join(" ");
+    await persistManifest(manifest);
+    await (account as unknown as { waitForTransaction(h: string): Promise<unknown> })
+      .waitForTransaction(routerTxHash);
+    const block = await (
+      account as unknown as { provider: { getTransactionReceipt(h: string): Promise<{ block_number?: number }> } }
+    ).provider.getTransactionReceipt(routerTxHash);
+    manifest.router.deployedBlock = block.block_number ?? "PENDING";
+    notes.push(`router deployed at ${routerAddress}`);
+    manifest.verificationNotes = notes.join(" ");
+    await persistManifest(manifest);
+  }
+
+  // Deploy each pool if not yet deployed and router is known
+  for (let i = 0; i < manifest.pools.length; i++) {
+    const pool = manifest.pools[i]!;
+    if (!manifest.approvedCctpDenominations.includes(pool.denomination)) continue;
+    if (pool.classHash !== "UNDECLARED" && pool.address === "UNDEPLOYED") {
+      if (manifest.router.address === "UNDEPLOYED") {
+        notes.push(`pool ${pool.key}: skipped — router not yet deployed`);
+        continue;
+      }
+      notes.push(`deploying pool ${pool.key}…`);
+      // pool constructor: (privacy_pool, usdc, router, denomination, chain_id_felt)
+      const poolConstructor = [
+        manifest.strk20Pool,
+        usdcAddress,
+        manifest.router.address,
+        pool.denomination,
+        shortString.encodeShortString("SN_MAIN"),
+      ];
+      const { contract_address: poolAddress, transaction_hash: poolTxHash } =
+        await account.deployContract({
+          classHash: pool.classHash,
+          constructorCalldata: poolConstructor,
+          salt: stark.randomAddress(),
+          unique: true,
+        });
+      manifest.pools[i] = {
+        ...pool,
+        address: poolAddress,
+        deployTxHash: poolTxHash,
+        deployedBlock: "PENDING",
+        constructorCalldata: poolConstructor,
+      };
+      notes.push(`pool ${pool.key} deployment submitted: ${poolTxHash}`);
+      manifest.verificationNotes = notes.join(" ");
+      await persistManifest(manifest);
+      await (account as unknown as { waitForTransaction(h: string): Promise<unknown> })
+        .waitForTransaction(poolTxHash);
+      const poolBlock = await (
+        account as unknown as { provider: { getTransactionReceipt(h: string): Promise<{ block_number?: number }> } }
+      ).provider.getTransactionReceipt(poolTxHash);
+      manifest.pools[i] = {
+        ...manifest.pools[i]!,
+        deployedBlock: poolBlock.block_number ?? "PENDING",
+      };
+      notes.push(`pool ${pool.key} deployed at ${poolAddress}`);
+      manifest.verificationNotes = notes.join(" ");
+      await persistManifest(manifest);
+    }
+  }
+
+  if (manifest.router.address === "UNDEPLOYED") throw new Error("router was not deployed");
+  const missingApprovedPools = manifest.pools.filter((pool) =>
+    manifest.approvedCctpDenominations.includes(pool.denomination)
+      && pool.address === "UNDEPLOYED");
+  if (missingApprovedPools.length > 0) {
+    throw new Error(`approved pools were not deployed: ${missingApprovedPools.map((pool) => pool.key).join(",")}`);
+  }
+
+  manifest.verificationNotes = notes.join(" ");
+  await persistManifest(manifest);
   process.stdout.write(
     JSON.stringify(
       {
         status: "ok",
-        mode: "ready_for_live_deploy",
+        mode: "deployed",
         manifestPath,
         deployer: account.address,
-        reservedSalt: salt,
+        router: manifest.router.address,
       },
       null,
       2,

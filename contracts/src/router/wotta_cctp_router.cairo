@@ -5,6 +5,12 @@ pub trait IWottaCctpRouter<TContractState> {
     fn message_transmitter(self: @TContractState) -> starknet::ContractAddress;
     fn token_messenger(self: @TContractState) -> starknet::ContractAddress;
     fn usdc(self: @TContractState) -> starknet::ContractAddress;
+    fn owner(self: @TContractState) -> starknet::ContractAddress;
+    fn paused(self: @TContractState) -> bool;
+    fn is_source_domain_admitted(self: @TContractState, domain: u32) -> bool;
+    fn pause(ref self: TContractState);
+    fn unpause(ref self: TContractState);
+    fn set_source_domain_admitted(ref self: TContractState, domain: u32, admitted: bool);
 }
 
 #[starknet::contract]
@@ -14,7 +20,7 @@ pub mod WottaCctpRouter {
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
-    use starknet::{ContractAddress, get_contract_address};
+    use starknet::{ContractAddress, get_contract_address, get_tx_info};
 
     use crate::interfaces::cctp::{
         IMessageTransmitterV2Dispatcher, IMessageTransmitterV2DispatcherTrait,
@@ -31,6 +37,9 @@ pub mod WottaCctpRouter {
         Settled: Settled,
         UnderfundedRefunded: UnderfundedRefunded,
         SurplusRefunded: SurplusRefunded,
+        Paused: Paused,
+        Unpaused: Unpaused,
+        SourceDomainAdmitted: SourceDomainAdmitted,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -56,30 +65,71 @@ pub mod WottaCctpRouter {
         pub refund_recipient: ContractAddress,
     }
 
+    #[derive(Drop, starknet::Event)]
+    pub struct Paused {
+        pub by: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct Unpaused {
+        pub by: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct SourceDomainAdmitted {
+        pub domain: u32,
+        pub admitted: bool,
+        pub by: ContractAddress,
+    }
+
     #[storage]
     struct Storage {
         messenger: ContractAddress,
         usdc: ContractAddress,
         token_messenger: ContractAddress,
         processed_intents: Map<felt252, bool>,
+        owner: ContractAddress,
+        paused: bool,
+        admitted_source_domains: Map<u32, bool>,
     }
 
     #[constructor]
     fn constructor(
         ref self: ContractState,
+        owner: ContractAddress,
         messenger: ContractAddress,
         usdc: ContractAddress,
         token_messenger: ContractAddress,
     ) {
+        assert(!owner.is_zero(), 'ZERO_OWNER');
+        assert(!messenger.is_zero(), 'ZERO_MESSENGER');
+        assert(!usdc.is_zero(), 'ZERO_USDC');
+        assert(!token_messenger.is_zero(), 'ZERO_TOKEN_MSG');
+        self.owner.write(owner);
         self.messenger.write(messenger);
         self.usdc.write(usdc);
         self.token_messenger.write(token_messenger);
+        // Always deploy paused. Mainnet admits no CCTP sources until the owner
+        // enables Base (6) / Solana (5) after evidence. Sepolia pre-registers the
+        // established testnet domain matrix so local smokes only need unpause.
+        self.paused.write(true);
+        if get_tx_info().unbox().chain_id != 'SN_MAIN' {
+            self.admitted_source_domains.write(0_u32, true);
+            self.admitted_source_domains.write(3_u32, true);
+            self.admitted_source_domains.write(5_u32, true);
+            self.admitted_source_domains.write(6_u32, true);
+            self.admitted_source_domains.write(27_u32, true);
+        }
     }
 
     #[abi(embed_v0)]
     impl RouterImpl of IWottaCctpRouter<ContractState> {
         fn settle(ref self: ContractState, message: ByteArray, attestation: ByteArray) {
+            assert(!self.paused.read(), 'PAUSED');
             let decoded = cctp_codec::decode(@message);
+            assert(
+                self.admitted_source_domains.read(decoded.source_domain), 'BAD_SOURCE_DOMAIN',
+            );
             validate_bindings(@self, decoded);
 
             assert(!self.processed_intents.read(decoded.hook.intent_id), 'INTENT_USED');
@@ -176,6 +226,47 @@ pub mod WottaCctpRouter {
 
         fn usdc(self: @ContractState) -> ContractAddress {
             self.usdc.read()
+        }
+
+        fn owner(self: @ContractState) -> ContractAddress {
+            self.owner.read()
+        }
+
+        fn paused(self: @ContractState) -> bool {
+            self.paused.read()
+        }
+
+        fn is_source_domain_admitted(self: @ContractState, domain: u32) -> bool {
+            self.admitted_source_domains.read(domain)
+        }
+
+        fn pause(ref self: ContractState) {
+            let caller = starknet::get_caller_address();
+            assert(caller == self.owner.read(), 'NOT_OWNER');
+            assert(!self.paused.read(), 'ALREADY_PAUSED');
+            self.paused.write(true);
+            self.emit(Event::Paused(Paused { by: caller }));
+        }
+
+        fn unpause(ref self: ContractState) {
+            let caller = starknet::get_caller_address();
+            assert(caller == self.owner.read(), 'NOT_OWNER');
+            assert(self.paused.read(), 'NOT_PAUSED');
+            self.paused.write(false);
+            self.emit(Event::Unpaused(Unpaused { by: caller }));
+        }
+
+        fn set_source_domain_admitted(ref self: ContractState, domain: u32, admitted: bool) {
+            let caller = starknet::get_caller_address();
+            assert(caller == self.owner.read(), 'NOT_OWNER');
+            let pilot_domain = domain == 5_u32 || domain == 6_u32;
+            let testnet_domain = domain == 0_u32 || domain == 3_u32 || domain == 27_u32;
+            let is_mainnet = get_tx_info().unbox().chain_id == 'SN_MAIN';
+            assert(pilot_domain || (!is_mainnet && testnet_domain), 'BAD_SOURCE_DOMAIN');
+            self.admitted_source_domains.write(domain, admitted);
+            self.emit(
+                Event::SourceDomainAdmitted(SourceDomainAdmitted { domain, admitted, by: caller }),
+            );
         }
     }
 

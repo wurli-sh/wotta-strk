@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Account, RpcProvider, Signer, constants, stark } from "starknet";
 import {
   deploymentManifestSchema,
-  hashDeploymentManifest,
+  rehashDeploymentManifest,
   type DeploymentManifest,
 } from "../../packages/shared/src/index.ts";
 
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     },
   };
   manifest.generatedAt = new Date().toISOString();
-  manifest.manifestHash = hashDeploymentManifest({ ...manifest, manifestHash: undefined as never });
+  manifest.manifestHash = rehashDeploymentManifest(manifest);
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   process.stdout.write(JSON.stringify({
     status: "deployed_and_verified",

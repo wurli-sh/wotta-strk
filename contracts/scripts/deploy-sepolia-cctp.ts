@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Account, RpcProvider, Signer, constants, hash, stark, type CompiledContract, type CompiledSierraCasm } from "starknet";
-import { deploymentManifestSchema, hashDeploymentManifest, type DeploymentManifest } from "../../packages/shared/src/index.ts";
+import { deploymentManifestSchema, rehashDeploymentManifest, type DeploymentManifest } from "../../packages/shared/src/index.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const manifestPath = path.join(root, "deployments/sepolia.json");
@@ -22,12 +22,14 @@ async function main() {
   const sierra = JSON.parse(await readFile(routerSierraPath, "utf8")) as CompiledContract;
   const casm = JSON.parse(await readFile(routerCasmPath, "utf8")) as CompiledSierraCasm;
   const computedClassHash = hash.computeContractClassHash(sierra);
+  const compiledClassHash = hash.computeCompiledClassHash(casm);
   if (process.argv.includes("--estimate")) {
     const fee = await account.estimateDeclareFee({ contract: sierra, casm });
     process.stdout.write(`${JSON.stringify({ classHash: computedClassHash, overallFeeFri: fee.overall_fee.toString() }, null, 2)}\n`);
     return;
   }
   let declareTxHash = "ALREADY_DECLARED";
+  let declaredBlock: number | "UNKNOWN" = "UNKNOWN";
   try {
     await account.provider.getClassByHash(computedClassHash);
   } catch {
@@ -35,11 +37,12 @@ async function main() {
     declareTxHash = declared.transaction_hash;
     const receipt = await account.provider.waitForTransaction(declared.transaction_hash);
     if (!receipt.isSuccess()) throw new Error("router declaration reverted");
+    if (typeof receipt.block_number === "number") declaredBlock = receipt.block_number;
   }
 
   const routerDeployment = await account.deployContract({
     classHash: computedClassHash,
-    constructorCalldata: [MESSAGE_TRANSMITTER, direct.usdc, TOKEN_MESSENGER],
+    constructorCalldata: [account.address, MESSAGE_TRANSMITTER, direct.usdc, TOKEN_MESSENGER],
     salt: stark.randomAddress(), unique: true,
   });
   const routerReceipt = await account.provider.waitForTransaction(routerDeployment.transaction_hash);
@@ -69,17 +72,19 @@ async function main() {
   manifest.strk20ClassHash = direct.poolClassHash;
   manifest.router = {
     classHash: computedClassHash,
+    compiledClassHash,
     address: routerDeployment.contract_address,
     declareTxHash,
+    declaredBlock,
     deployTxHash: routerDeployment.transaction_hash,
     deployedBlock: routerReceipt.block_number,
-    constructorCalldata: [MESSAGE_TRANSMITTER, direct.usdc, TOKEN_MESSENGER],
+    constructorCalldata: [account.address, MESSAGE_TRANSMITTER, direct.usdc, TOKEN_MESSENGER],
     verification: { status: "verified", checkedAt: new Date().toISOString(), notes: "Getter-verified Circle CCTP V2 MessageTransmitter, TokenMessengerMinter, and Starknet Sepolia USDC bindings." },
   };
   manifest.pools = pools;
   manifest.generatedAt = new Date().toISOString();
   manifest.verificationNotes = "Direct privacy and destination CCTP contracts are deployed on Sepolia. Source-chain live burns remain route-specific smoke evidence.";
-  manifest.manifestHash = hashDeploymentManifest({ ...manifest, manifestHash: undefined as never });
+  manifest.manifestHash = rehashDeploymentManifest(manifest);
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ status: "deployed_and_verified", router: manifest.router, pools: manifest.pools }, null, 2)}\n`);
 }

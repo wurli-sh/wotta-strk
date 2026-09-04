@@ -2,9 +2,9 @@
   "version": 1,
   "chainId": "SN_MAIN",
   "network": "mainnet",
-  "rpcUrlEnv": "STARKNET_RPC_URL",
-  "manifestHash": "614ee597b54234b40b5bb56548cfeee28352ce4cce45988b73c16e5fc226fcea",
-  "generatedAt": "2026-08-20T08:16:53.788Z",
+  "rpcUrlEnv": "STARKNET_MAINNET_RPC_URL",
+  "manifestHash": "dc0a8114afb0ce564556b7e7fe86179ee1ea8f677320de7eb2f0bd4f75598891",
+  "generatedAt": "2026-09-03T22:35:56.276Z",
   "verified": false,
   "verificationNotes": "Wotta contracts remain undeployed. The shared live STRK20 pool and native USDC are pinned for Ready wallet-managed mainnet actions.",
   "usdc": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
@@ -30,8 +30,8 @@
     "verificationNotes": "Pool class hash, version 2.0, unpaused state, native USDC, and the 6 STRK apply_actions fee were checked over SN_MAIN RPC. STRK20 actions accept felt-denominated token amounts; the UI allowlists 0.1, 1, 10, 50, and 100 USDC actions, with a mandatory Ready simulate=true preview before every selected-amount write."
   },
   "deployer": {
-    "address": "0xFbc83d9aDA8F06242a528b62A63728e1EF7DE066",
-    "keySource": "env:STARKNET_DEPLOYER_PRIVATE_KEY"
+    "address": "0x06F2b4B53A111de4b3aD59839144dE0648548f301A94a0E3b921168CA54AC060",
+    "keySource": "env:STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY"
   },
   "tooling": {
     "starknetJs": "10.5.0",
@@ -39,10 +39,19 @@
     "scarb": "2.17.0",
     "snforge": "0.59.0"
   },
+  "authority": {
+    "owner": "0x06F2b4B53A111de4b3aD59839144dE0648548f301A94a0E3b921168CA54AC060"
+  },
+  "approvedCctpDenominations": [
+    "100000",
+    "1000000"
+  ],
   "router": {
     "classHash": "UNDECLARED",
+    "compiledClassHash": "UNKNOWN",
     "address": "UNDEPLOYED",
     "declareTxHash": "PENDING",
+    "declaredBlock": "PENDING",
     "deployTxHash": "PENDING",
     "deployedBlock": "PENDING",
     "constructorCalldata": [],
@@ -55,8 +64,27 @@
   "pools": [
     {
       "classHash": "UNDECLARED",
+      "compiledClassHash": "UNKNOWN",
       "address": "UNDEPLOYED",
       "declareTxHash": "PENDING",
+      "declaredBlock": "PENDING",
+      "deployTxHash": "PENDING",
+      "deployedBlock": "PENDING",
+      "constructorCalldata": [],
+      "verification": {
+        "status": "pending",
+        "checkedAt": "2026-08-21T17:09:37.088Z",
+        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+      },
+      "key": "pool01",
+      "denomination": "100000"
+    },
+    {
+      "classHash": "UNDECLARED",
+      "compiledClassHash": "UNKNOWN",
+      "address": "UNDEPLOYED",
+      "declareTxHash": "PENDING",
+      "declaredBlock": "PENDING",
       "deployTxHash": "PENDING",
       "deployedBlock": "PENDING",
       "constructorCalldata": [],
@@ -70,8 +98,10 @@
     },
     {
       "classHash": "UNDECLARED",
+      "compiledClassHash": "UNKNOWN",
       "address": "UNDEPLOYED",
       "declareTxHash": "PENDING",
+      "declaredBlock": "PENDING",
       "deployTxHash": "PENDING",
       "deployedBlock": "PENDING",
       "constructorCalldata": [],
@@ -85,8 +115,10 @@
     },
     {
       "classHash": "UNDECLARED",
+      "compiledClassHash": "UNKNOWN",
       "address": "UNDEPLOYED",
       "declareTxHash": "PENDING",
+      "declaredBlock": "PENDING",
       "deployTxHash": "PENDING",
       "deployedBlock": "PENDING",
       "constructorCalldata": [],
@@ -100,8 +132,10 @@
     },
     {
       "classHash": "UNDECLARED",
+      "compiledClassHash": "UNKNOWN",
       "address": "UNDEPLOYED",
       "declareTxHash": "PENDING",
+      "declaredBlock": "PENDING",
       "deployTxHash": "PENDING",
       "deployedBlock": "PENDING",
       "constructorCalldata": [],

@@ -248,6 +248,10 @@ pub mod WottaEscrowPool {
             self.router.read()
         }
 
+        fn chain_id(self: @ContractState) -> felt252 {
+            self.chain_id.read()
+        }
+
         fn outstanding_liability(self: @ContractState) -> u256 {
             self.outstanding_liability.read()
         }

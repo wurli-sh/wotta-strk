@@ -3,8 +3,8 @@
   "chainId": "SN_SEPOLIA",
   "network": "sepolia",
   "rpcUrlEnv": "STARKNET_RPC_URL",
-  "manifestHash": "5c986947e0d31254a24aef4c9245a8595755c342275a974c43ed9282de7e229e",
-  "generatedAt": "2026-08-22T20:31:36.189Z",
+  "manifestHash": "5fa4c156fc19aec1a66cd0e7687e7beecfdf6b8abda2f893d328d6f4f7e7831d",
+  "generatedAt": "2026-09-03T22:10:08.060Z",
   "verified": false,
   "verificationNotes": "Direct privacy and destination CCTP contracts are deployed on Sepolia. Source-chain live burns remain route-specific smoke evidence.",
   "usdc": "0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343",
@@ -40,10 +40,21 @@
     "scarb": "2.17.0",
     "snforge": "0.59.0"
   },
+  "authority": {
+    "owner": "PENDING"
+  },
+  "approvedCctpDenominations": [
+    "1000000",
+    "10000000",
+    "50000000",
+    "100000000"
+  ],
   "router": {
     "classHash": "0x132709c9eba482a151e4f7929a7104f52d3c509d6552449455cc1ec2ae031a3",
+    "compiledClassHash": "UNKNOWN",
     "address": "0x26d49a2014db61fd072284cefa28c5d4a4ede40a2d90ed439ad3dfc0053d81b",
     "declareTxHash": "0x173ca3f767cb6bca587722edd6d4f25ccff0a9cb696033328d8dc854bafa6f1",
+    "declaredBlock": "UNKNOWN",
     "deployTxHash": "0x148b8cd9164c8782fc75318accbd5586fedadfc374c7c9afbcb2ae92fd2880b",
     "deployedBlock": 13886323,
     "constructorCalldata": [
@@ -60,8 +71,10 @@
   "pools": [
     {
       "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "compiledClassHash": "UNKNOWN",
       "address": "0x4759cd4021f96b10a36621230f12ff594cd1458f57f55e7601cadf40077c59",
       "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "declaredBlock": "UNKNOWN",
       "deployTxHash": "0x3fea8c8766a7711d5b79f6656e2aa943fa3e5a9769b4f619ef4c3f8cf8ee41",
       "deployedBlock": 13886338,
       "constructorCalldata": [
@@ -81,8 +94,10 @@
     },
     {
       "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "compiledClassHash": "UNKNOWN",
       "address": "0x7fd281314fe9ffd5222bea9fe4a9cf75e0e4344f64b60ba8e553bf22942db4d",
       "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "declaredBlock": "UNKNOWN",
       "deployTxHash": "0x3f41460d7fe967b30a191a720a541cb0bc90e0b37b4aa0ff6da978c2b44fc6c",
       "deployedBlock": 13886353,
       "constructorCalldata": [
@@ -102,8 +117,10 @@
     },
     {
       "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "compiledClassHash": "UNKNOWN",
       "address": "0x3798352d8be41e644d39a6ed1b383e6336c60dc66568490058fb93fecd23c4c",
       "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "declaredBlock": "UNKNOWN",
       "deployTxHash": "0x1b53a05e966ef6e4c178d8abf3c3d88b07128fc13b1e03edf673447e8e652d",
       "deployedBlock": 13886368,
       "constructorCalldata": [
@@ -123,8 +140,10 @@
     },
     {
       "classHash": "0x18a1db1ba11c8f047d4e715ebe2d0d717ab11f8032966c613ef21ec2b331394",
+      "compiledClassHash": "UNKNOWN",
       "address": "0x39baf8c5c7d908ced054b4702284545e70b44ef207830976d2bfb4d1b6e1fa5",
       "declareTxHash": "0x60a57d59b99b01cd082e2b0b27ab99496b194753b5491c3f4bff31bae0e4d74",
+      "declaredBlock": "UNKNOWN",
       "deployTxHash": "0x7ededbea2be40a3950245ea2f4f4e05d0273961678aeb2fdda294a72b1fb1a3",
       "deployedBlock": 13886383,
       "constructorCalldata": [

@@ -27,6 +27,7 @@ pub trait IWottaEscrowPool<TContractState> {
     fn privacy_pool(self: @TContractState) -> starknet::ContractAddress;
     fn usdc(self: @TContractState) -> starknet::ContractAddress;
     fn router(self: @TContractState) -> starknet::ContractAddress;
+    fn chain_id(self: @TContractState) -> felt252;
     /// Total USDC reserved for claims which have not been claimed or refunded.
     ///
     /// This is a solvency invariant, not a user balance: all Wotta escrow pools

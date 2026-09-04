@@ -28,6 +28,7 @@ pub fn decode(message: @ByteArray) -> CctpMessageV2 {
     assert(manifest_version == 1, 'BAD_MANIFEST');
 
     CctpMessageV2 {
+        source_domain: read_u32_be(message, 4),
         destination_domain: read_u32_be(message, 8),
         recipient: read_address32(message, 76),
         destination_caller: read_address32(message, 108),
@@ -111,20 +112,70 @@ pub fn encode_for_test(
     amount: u128,
     hook: WottaHookV1,
 ) -> ByteArray {
+    encode_for_test_with_bindings(
+        source_domain,
+        STARKNET_DOMAIN,
+        token_messenger,
+        router,
+        router,
+        amount,
+        1,
+        1,
+        hook,
+    )
+}
+
+pub fn encode_for_test_with_bindings(
+    source_domain: u32,
+    destination_domain: u32,
+    recipient: ContractAddress,
+    destination_caller: ContractAddress,
+    mint_recipient: ContractAddress,
+    amount: u128,
+    wrapper_version: u8,
+    hook_version: u8,
+    hook: WottaHookV1,
+) -> ByteArray {
+    encode_for_test_with_hook_magic(
+        source_domain,
+        destination_domain,
+        recipient,
+        destination_caller,
+        mint_recipient,
+        amount,
+        wrapper_version,
+        hook_version,
+        hook,
+        WOTTA_HOOK_MAGIC,
+    )
+}
+
+pub fn encode_for_test_with_hook_magic(
+    source_domain: u32,
+    destination_domain: u32,
+    recipient: ContractAddress,
+    destination_caller: ContractAddress,
+    mint_recipient: ContractAddress,
+    amount: u128,
+    wrapper_version: u8,
+    hook_version: u8,
+    hook: WottaHookV1,
+    hook_magic: u32,
+) -> ByteArray {
     let mut out: ByteArray = Default::default();
     append_u32_be(ref out, 0);
     append_u32_be(ref out, source_domain);
-    append_u32_be(ref out, STARKNET_DOMAIN);
+    append_u32_be(ref out, destination_domain);
     append_u256_be(ref out, 9);
     append_u256_be(ref out, 0x123);
-    append_address32(ref out, token_messenger);
-    append_address32(ref out, router);
+    append_address32(ref out, recipient);
+    append_address32(ref out, destination_caller);
     append_u32_be(ref out, 0);
     append_u32_be(ref out, 0);
 
     append_u32_be(ref out, 0);
     append_u256_be(ref out, 0x456);
-    append_address32(ref out, router);
+    append_address32(ref out, mint_recipient);
     append_u256_be(ref out, amount.into());
     append_u256_be(ref out, 0x123);
     append_u256_be(ref out, 0);
@@ -132,10 +183,10 @@ pub fn encode_for_test(
     append_u256_be(ref out, 0);
 
     append_u32_be(ref out, CCTP_WRAPPER_MAGIC);
-    out.append_byte(1);
+    out.append_byte(wrapper_version);
     append_u16_be(ref out, 129);
-    append_u32_be(ref out, WOTTA_HOOK_MAGIC);
-    out.append_byte(1);
+    append_u32_be(ref out, hook_magic);
+    out.append_byte(hook_version);
     append_u128_be(ref out, hook.intent_id.try_into().unwrap());
     append_u16_be(ref out, hook.denomination_code.try_into().unwrap());
     append_address32(ref out, hook.escrow_pool);

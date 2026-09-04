@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Account, RpcProvider, Signer, constants, hash, type CompiledContract, type CompiledSierraCasm } from "starknet";
 import {
   deploymentManifestSchema,
-  hashDeploymentManifest,
+  rehashDeploymentManifest,
   type DeploymentManifest,
 } from "../../packages/shared/src/index.ts";
 
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
       "Wotta Sepolia direct privacy row: STRK20 pool, Wotta-branded privacy identity class, hosted prover, discovery service, Circle CCTP router, and fixed-denomination Wotta escrows are getter-verified.",
   };
   manifest.generatedAt = new Date().toISOString();
-  manifest.manifestHash = hashDeploymentManifest({ ...manifest, manifestHash: undefined as never });
+  manifest.manifestHash = rehashDeploymentManifest(manifest);
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   process.stdout.write(JSON.stringify({
     status: "declared_and_pinned",

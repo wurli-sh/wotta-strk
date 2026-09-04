@@ -1,5 +1,6 @@
 use starknet::ContractAddress;
 
+pub const DENOMINATION_01: u128 = 100_000;
 pub const DENOMINATION_1: u128 = 1_000_000;
 pub const DENOMINATION_10: u128 = 10_000_000;
 pub const DENOMINATION_50: u128 = 50_000_000;
@@ -55,6 +56,7 @@ pub struct WottaHookV1 {
 
 #[derive(Copy, Drop, Serde)]
 pub struct CctpMessageV2 {
+    pub source_domain: u32,
     pub destination_domain: u32,
     pub recipient: ContractAddress,
     pub destination_caller: ContractAddress,
@@ -64,7 +66,8 @@ pub struct CctpMessageV2 {
 }
 
 pub fn is_supported_denomination(denomination: u128) -> bool {
-    denomination == DENOMINATION_1
+    denomination == DENOMINATION_01
+        || denomination == DENOMINATION_1
         || denomination == DENOMINATION_10
         || denomination == DENOMINATION_50
         || denomination == DENOMINATION_100
@@ -79,6 +82,8 @@ pub fn denomination_code_to_amount(code: felt252) -> u128 {
         DENOMINATION_50
     } else if code == 3 {
         DENOMINATION_100
+    } else if code == 4 {
+        DENOMINATION_01
     } else {
         assert(false, 'BAD_DENOM_CODE');
         0
@@ -94,6 +99,8 @@ pub fn denomination_amount_to_code(amount: u128) -> felt252 {
         2
     } else if amount == DENOMINATION_100 {
         3
+    } else if amount == DENOMINATION_01 {
+        4
     } else {
         assert(false, 'BAD_DENOM');
         0
