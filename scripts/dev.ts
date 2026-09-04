@@ -1,6 +1,16 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
 import { spawn, type ChildProcess } from "node:child_process";
+import { isLocalMainnetApiUrl, localMainnetApiEnv } from "./local-mainnet-api-env.ts";
+
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+if (!Number.isFinite(nodeMajor) || nodeMajor < 24) {
+  process.stderr.write(
+    `[dev] Node ${process.versions.node} is too old — need >= 24 (see .nvmrc).\n` +
+      "[dev] Fix: `nvm use` (or `nvm install` then `nvm use`) in this repo, then retry `pnpm dev`.\n",
+  );
+  process.exit(1);
+}
 
 // The root dev launcher needs these values too: Next and the API child each
 // load .env themselves, but this process decides whether to launch :8788.
@@ -12,8 +22,7 @@ type Service = {
   env?: NodeJS.ProcessEnv;
 };
 
-const mainnetApiUrl = process.env.NEXT_PUBLIC_MAINNET_API_URL?.replace(/\/$/, "");
-const startLocalMainnetApi = mainnetApiUrl === "http://127.0.0.1:8788" || mainnetApiUrl === "http://localhost:8788";
+const startLocalMainnetApi = isLocalMainnetApiUrl(process.env.NEXT_PUBLIC_MAINNET_API_URL);
 const mainnetRpcUrl = process.env.STARKNET_MAINNET_RPC_URL?.trim();
 
 if (startLocalMainnetApi && !mainnetRpcUrl) {
@@ -32,12 +41,10 @@ if (startLocalMainnetApi) {
   services.splice(2, 0, {
     name: "api-mainnet",
     args: ["--filter", "@wotta/api", "dev"],
-    env: {
-      STARKNET_NETWORK: "mainnet",
-      STARKNET_RPC_URL: mainnetRpcUrl,
-      DEPLOYMENT_MANIFEST_PATH: `${process.cwd()}/deployments/mainnet.json`,
-      PORT: "8788",
-    },
+    env: localMainnetApiEnv({
+      mainnetRpcUrl: mainnetRpcUrl!,
+      cwd: process.cwd(),
+    }),
   });
 }
 
