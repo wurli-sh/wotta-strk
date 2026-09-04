@@ -30,4 +30,9 @@ demo/
 iexec_WTF/
 limen/
 
+# Local agent/brainstorm artifacts (not versioned)
+.superpowers/
+superpowers/
+.superstack/
+
 improv-plan.md
