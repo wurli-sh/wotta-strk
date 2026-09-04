@@ -3,6 +3,12 @@ import { encodeFunctionData, getAddress, padHex, type Hex } from "viem";
 
 export const CIRCLE_STARKNET_DOMAIN = 25 as const;
 
+/** Circle TokenMessengerMinter contracts on the CCTP destination (Starknet). */
+export const CIRCLE_STARKNET_TOKEN_MESSENGER = {
+  testnet: "0x04bDdE1E09a4B09a2F95d893D94a967b7717eB85A3f6dEcA8c080Ee01fBc3370",
+  mainnet: "0x07d421B9cA8aA32DF259965cDA8ACb93F7599F69209A41872AE84638B2A20F2a",
+} as const;
+
 export type WottaSourceRoute = "ethereum" | "arbitrum" | "base" | "solana" | "stellar";
 export type CircleEnvironment = "testnet" | "mainnet";
 
@@ -18,6 +24,8 @@ export type CircleRouteConfig = {
   chainId?: number;
   networkPassphrase?: string;
   solanaGenesisHash?: string;
+  /** Canonical 32-byte token identifier emitted in Circle's burn message. */
+  burnTokenBytes32?: Hex;
 };
 
 /** Circle's current public CCTP V2 testnet deployments. */
@@ -43,6 +51,7 @@ export const CIRCLE_TESTNET_ROUTES: Readonly<Record<WottaSourceRoute, CircleRout
     tokenMessenger: "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
     messageTransmitter: "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC",
     solanaGenesisHash: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+    burnTokenBytes32: "0x3b442cb3912157f13a933d0134282d032b5ffecd01a2dbf1b7790608df002ea7",
   },
   stellar: {
     id: "stellar", environment: "testnet", family: "stellar", domain: 27, network: "Stellar Testnet",
@@ -67,6 +76,7 @@ export const CIRCLE_MAINNET_ROUTES: Partial<Readonly<Record<WottaSourceRoute, Ci
     tokenMessenger: "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe",
     messageTransmitter: "CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC",
     solanaGenesisHash: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    burnTokenBytes32: "0xc6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61",
   },
 };
 
