@@ -1,5 +1,6 @@
 import { createStore } from "@starknet-io/get-starknet-discovery";
 import { cairo, constants, walletV6, WalletAccountV6 } from "starknet";
+import mainnetDeployment from "../../../../../deployments/mainnet.json";
 import type { NetworkMode } from "@/lib/network-mode";
 
 const SEPOLIA_STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
@@ -17,6 +18,20 @@ function expectedChainId(mode: NetworkMode) {
   return mode === "mainnet"
     ? constants.StarknetChainId.SN_MAIN
     : constants.StarknetChainId.SN_SEPOLIA;
+}
+
+/**
+ * The activation invoke is signed and broadcast through the selected Ready
+ * account/provider. Keep its fee token network-scoped as well: a Mainnet
+ * counterfactual account must never be activated from a testnet token config.
+ */
+export function activationFeeToken(mode: NetworkMode): string {
+  if (mode === "testnet") return SEPOLIA_STRK;
+  const token = mainnetDeployment.walletManagedPrivacy?.feeToken;
+  if (!token || !/^0x[0-9a-f]+$/i.test(token)) {
+    throw new Error("mainnet_strk_token_not_configured");
+  }
+  return token;
 }
 
 function findReadyWallet() {
@@ -136,7 +151,7 @@ export async function ensureReadyAccountDeployed(
   // wallet invoke instead.
   const { low, high } = cairo.uint256(1n);
   const activated = await account.execute({
-    contractAddress: SEPOLIA_STRK,
+    contractAddress: activationFeeToken(mode),
     entrypoint: "transfer",
     calldata: [account.address, low.toString(), high.toString()],
   });
