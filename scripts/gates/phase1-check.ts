@@ -166,6 +166,10 @@ async function main(): Promise<void> {
   const failures = checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`);
   const payload = {
     gate: `Hard Gate 1 (${network})`,
+    purpose: network === "mainnet"
+      ? "mainnet_route_admission_after_deploy — does NOT block contracts:declare / deploy:mainnet"
+      : "sepolia_testnet_admission — run before mainnet declare for product confidence",
+    doesNotBlock: network === "mainnet" ? ["contracts:declare", "deploy:mainnet", "contracts:preflight"] : [],
     status: failures.length === 0 ? "pass" : "fail",
     checks,
     missing: failures,
@@ -173,7 +177,9 @@ async function main(): Promise<void> {
 
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   if (failures.length > 0) {
-    process.stderr.write(`FAIL CLOSED\n${failures.map((item) => `- ${item}`).join("\n")}\n`);
+    process.stderr.write(
+      `FAIL CLOSED (${payload.purpose})\n${failures.map((item) => `- ${item}`).join("\n")}\n`,
+    );
     process.exit(1);
   }
 }

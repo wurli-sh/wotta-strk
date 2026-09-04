@@ -24,9 +24,24 @@ test("local mainnet API env stays closed and isolated from Sepolia admissions", 
   assert.equal(env.DEPLOYMENT_MANIFEST_PATH, "/repo/deployments/mainnet.json");
   assert.equal(env.PORT, "8788");
   assert.equal(env.API_ORIGIN, "http://127.0.0.1:8788");
+  assert.equal(env.MAINNET_FORCE_ADMIT, "false");
   assert.equal(env.CCTP_ADMITTED_ROUTES, "");
   assert.equal(env.STARKNET_PRIVATE_ADMITTED, "false");
   assert.equal(env.RUN_INDEXER, "false");
   assert.equal(env.RUN_RELAYER, "false");
   assert.equal(env.CIRCLE_IRIS_BASE_URL, "https://iris-api.circle.com");
+});
+
+test("local mainnet force-admit unlocks Base, Solana, private, and workers", () => {
+  const env = localMainnetApiEnv({
+    mainnetRpcUrl: "https://starknet-rpc.publicnode.com",
+    cwd: "/repo",
+    forceAdmit: true,
+  });
+
+  assert.equal(env.MAINNET_FORCE_ADMIT, "true");
+  assert.equal(env.CCTP_ADMITTED_ROUTES, "base,solana");
+  assert.equal(env.STARKNET_PRIVATE_ADMITTED, "true");
+  assert.equal(env.RUN_INDEXER, "true");
+  assert.equal(env.RUN_RELAYER, "true");
 });

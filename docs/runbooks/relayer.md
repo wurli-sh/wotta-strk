@@ -4,7 +4,7 @@ The Wotta relayer sponsors Starknet gas for `settle`. It cannot divert funds. Co
 
 ## Dependencies
 
-- Funded STRK on `STARKNET_RELAYER_ADDRESS` (alert threshold `STARKNET_RELAYER_ALERT_BALANCE_WEI`, default 10 STRK)
+- Funded STRK on `STARKNET_RELAYER_ADDRESS` (pre-burn threshold `STARKNET_RELAYER_ALERT_BALANCE_WEI`, default 15 STRK)
 - Circle Iris (`CIRCLE_IRIS_BASE_URL`)
 - Primary `STARKNET_RPC_URL` and distinct-hostname `STARKNET_FALLBACK_RPC_URL` when workers run on mainnet
 - Indexer + relayer flags together on mainnet (`assertMainnetWorkerReadiness`)

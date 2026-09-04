@@ -44,6 +44,7 @@ if (startLocalMainnetApi) {
     env: localMainnetApiEnv({
       mainnetRpcUrl: mainnetRpcUrl!,
       cwd: process.cwd(),
+      forceAdmit: process.env.MAINNET_FORCE_ADMIT?.trim().toLowerCase() === "true",
     }),
   });
 }

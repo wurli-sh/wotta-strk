@@ -8,11 +8,14 @@ const root = path.resolve(import.meta.dirname, "../..");
 const envPath = path.join(root, ".env");
 const local = parseEnv(readFileSync(envPath, "utf8"));
 const env = { ...local, ...process.env };
-const webOrigin = cleanOrigin(env.PROD_WEB_ORIGIN || "https://wotta.vercel.app", "PROD_WEB_ORIGIN");
-const testnetApiOrigin = cleanOrigin(env.PROD_TESTNET_API_ORIGIN || "https://wotta-api-testnet.onrender.com", "PROD_TESTNET_API_ORIGIN");
-const mainnetApiOrigin = cleanOrigin(env.PROD_MAINNET_API_ORIGIN || "https://wotta-api-mainnet.onrender.com", "PROD_MAINNET_API_ORIGIN");
+const args = new Set(process.argv.slice(2));
+const webOrigin = cleanOrigin(argumentValue("--web-origin") || env.PROD_WEB_ORIGIN || "https://wotta.vercel.app", "PROD_WEB_ORIGIN");
+const testnetApiOrigin = cleanOrigin(argumentValue("--testnet-api-origin") || env.PROD_TESTNET_API_ORIGIN || "https://wotta-api-testnet.onrender.com", "PROD_TESTNET_API_ORIGIN");
+const mainnetApiOrigin = cleanOrigin(argumentValue("--mainnet-api-origin") || env.PROD_MAINNET_API_ORIGIN || "https://wotta-api-mainnet.onrender.com", "PROD_MAINNET_API_ORIGIN");
 const scope = env.VERCEL_SCOPE || "wurli-shs-projects";
 const project = env.VERCEL_PROJECT || "wotta";
+const dryRun = args.has("--dry-run");
+const renderDeploy = args.has("--render-deploy");
 
 const commonApi = required({
   NODE_ENV: "production",
@@ -83,23 +86,32 @@ const web = required({
   STARKNET_DEPLOYER_PRIVATE_KEY: pick("STARKNET_DEPLOYER_PRIVATE_KEY"),
 });
 
-const args = new Set(process.argv.slice(2));
-if (!args.has("--vercel-only")) syncRender();
-if (!args.has("--render-only")) syncVercel();
+if (args.has("--render-only") && args.has("--vercel-only")) {
+  throw new Error("--render-only and --vercel-only cannot be used together");
+}
+if (dryRun) printPlan();
+else {
+  if (!args.has("--vercel-only")) syncRender();
+  if (!args.has("--render-only")) syncVercel();
+}
 
 console.log(`Production origins configured: ${webOrigin}, ${testnetApiOrigin}, ${mainnetApiOrigin}`);
 
 function syncRender() {
   const result = run("render", ["services", "--output", "json"], { capture: true });
   const services = JSON.parse(result.stdout || "[]");
-  createRenderServiceIfMissing(services, "wotta-api-testnet", testnetApi);
-  createRenderServiceIfMissing(services, "wotta-api-mainnet", mainnetApi);
-  console.log("Render services exist. For an existing service, verify its dashboard env against docs/DEPLOYMENT.md before redeploying.");
+  const testnet = createRenderServiceIfMissing(services, "wotta-api-testnet", testnetApi);
+  const mainnet = createRenderServiceIfMissing(services, "wotta-api-mainnet", mainnetApi);
+  if (renderDeploy) deployExistingRenderService(mainnet, "wotta-api-mainnet");
+  console.log("Render environment variables for existing services are managed by the Blueprint/dashboard. This command can explicitly redeploy the current Git commit, but never changes route admission flags.");
 }
 
 function createRenderServiceIfMissing(services, name, values) {
-  const found = services.some((entry) => (entry.service?.name || entry.name) === name);
-  if (found) return console.log(`Render: ${name} already exists`);
+  const found = services.find((entry) => (entry.service?.name || entry.name) === name);
+  if (found) {
+    console.log(`Render: ${name} already exists`);
+    return found.service ?? found;
+  }
   const command = [
     "services", "create", "--confirm", "--output", "json",
     "--name", name, "--type", "web_service", "--repo", "https://github.com/wurli-sh/wotta-strk",
@@ -109,6 +121,32 @@ function createRenderServiceIfMissing(services, name, values) {
   for (const [key, value] of Object.entries(values)) command.push("--env-var", `${key}=${value}`);
   run("render", command);
   console.log(`Render: created ${name}`);
+  return undefined;
+}
+
+function deployExistingRenderService(service, name) {
+  const id = service?.id ?? service?.service?.id;
+  if (!id) {
+    console.log(`Render: ${name} was just created; its initial deploy will use the configured branch.`);
+    return;
+  }
+  const commit = run("git", ["rev-parse", "HEAD"], { capture: true }).stdout.trim();
+  if (!/^[0-9a-f]{40}$/i.test(commit)) throw new Error("cannot resolve current Git commit for Render deploy");
+  run("render", ["deploys", "create", id, "--commit", commit, "--wait", "--confirm"]);
+  console.log(`Render: deployed ${name} at ${commit}`);
+}
+
+function printPlan() {
+  const redact = (values) => Object.keys(values).sort();
+  console.log(JSON.stringify({
+    dryRun: true,
+    render: {
+      testnetEnvKeys: redact(testnetApi),
+      mainnetEnvKeys: redact(mainnetApi),
+      deployCurrentCommit: renderDeploy,
+    },
+    vercel: { productionEnvKeys: redact(web) },
+  }, null, 2));
 }
 
 function syncVercel() {
@@ -150,6 +188,14 @@ function cleanOrigin(value, name) {
   const url = new URL(value);
   if (url.protocol !== "https:" || ["localhost", "127.0.0.1", "::1"].includes(url.hostname)) throw new Error(`${name} must be a public HTTPS origin`);
   return url.origin;
+}
+
+function argumentValue(flag) {
+  const index = process.argv.indexOf(flag);
+  if (index < 0) return "";
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
+  return value;
 }
 
 function parseEnv(source) {

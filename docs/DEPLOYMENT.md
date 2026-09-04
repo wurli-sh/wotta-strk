@@ -51,7 +51,33 @@ Required by Mainnet Render API:
 - Starknet escrow pilot only after its gate: `RUN_INDEXER=true`, `RUN_RELAYER=false`, `STARKNET_PRIVATE_ADMITTED=true`
 - CCTP pilot only after Phase 2/3 gates: `RUN_INDEXER=true`, `RUN_RELAYER=true`, route-specific `CCTP_ADMITTED_ROUTES`, dedicated relayer credentials, and independent fallback RPCs
 
-Mainnet contract declaration/deployment uses only `STARKNET_MAINNET_RPC_URL`, `STARKNET_MAINNET_DEPLOYER_ADDRESS`, and `STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY`. Pilot policy keeps `authority.owner` identical to the deployer: `pnpm contracts:sync-manifest` (also the first step of `pnpm contracts:preflight`) writes both from `.env` and rehashes `deployments/mainnet.json`. Declare/deploy scripts re-sync the same way before gating. The preflight rejects reuse of the Sepolia deployer, estimates both declarations with bounded fees, and requires the balance to cover both bounds. `STARKNET_MAINNET_RELAYER_ADDRESS` / `STARKNET_MAINNET_RELAYER_PRIVATE_KEY` are required only when the mainnet CCTP relayer is enabled.
+Verified Mainnet contracts (source of truth: `deployments/mainnet.json` — no `ROUTER_*` / `ESCROW_*` env vars):
+
+| Artifact | Address |
+|---|---|
+| Router | `0x024a2c1a79b97794ed4d143ff0f6f5b05b3569832c85957aa10bc7c3dcc000fd` |
+| 0.1 USDC escrow | `0x0656a3300531b45f559e51120b0cb9bcea8c6c4e626ebef6c46c184da08c0a06` |
+| 1 USDC escrow | `0x041a7424a3779e15d68f7a1da96b7cf95a196563bcfc3ff81eeb8735c4368f0c` |
+
+Approved dens are `100000` / `1000000` only. On-chain posture stays paused with Base domain 6 and Solana domain 5 unadmitted until controlled activation. Indexer must watch only verified approved pools (never `UNDEPLOYED` 10/50/100 placeholders).
+
+Activation after evidence (separate operator authorization):
+
+1. Code merged with fail-closed local Mainnet defaults.
+2. Deploy API with workers/admissions off; confirm closed `/v1/routes`.
+3. Retain Phase 1 + `starknet-private-mainnet` evidence → `RUN_INDEXER=true` + `STARKNET_PRIVATE_ADMITTED=true`.
+4. Per CCTP rail: relayer + source RPC + Iris production → admit one of `base`/`solana` → owner `set_source_domain_admitted` then `unpause` → retain route evidence → `pnpm check:phase3` → public exposure.
+
+Mainnet contract declaration/deployment uses only `STARKNET_MAINNET_RPC_URL`, `STARKNET_MAINNET_DEPLOYER_ADDRESS`, and `STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY`. An Argent X 5.16.3 deployer with a guardian additionally requires `STARKNET_MAINNET_DEPLOYER_GUARDIAN_PRIVATE_KEY`; the scripts verify it matches the on-chain guardian and compose the required owner-plus-guardian signature. Pilot policy keeps `authority.owner` identical to the deployer: `pnpm contracts:sync-manifest` (also the first step of `pnpm contracts:preflight`) writes both from `.env` and rehashes `deployments/mainnet.json`. Declare/deploy scripts re-sync the same way before gating. The preflight rejects reuse of the Sepolia deployer, estimates both declarations with bounded fees, and requires the balance to cover both bounds. `STARKNET_MAINNET_RELAYER_ADDRESS` / `STARKNET_MAINNET_RELAYER_PRIVATE_KEY` are required only when the mainnet CCTP relayer is enabled.
+
+**Evidence is not a declare/deploy prerequisite.** Requiring mainnet CCTP / Starknet-private evidence *before* `contracts:declare` is a chicken-and-egg loop (those flows need the live router/escrow). Order of operations:
+
+1. **Sepolia / testnet** — prove product paths with `pnpm check:phase1:sepolia` / `pnpm check:phase2:sepolia` (and existing testnet route smoke).
+2. **Mainnet declare + deploy** — `pnpm contracts:preflight` then `MAINNET_DECLARE_SUBMIT=1` / `MAINNET_DEPLOY_SUBMIT=1` (fee, identity, RPC gates only).
+3. **Mainnet live smoke + evidence** — materialize `evidence/<manifestHash>/…` from real Ready/CCTP/private runs.
+4. **Admit routes** — `pnpm check:phase1` / `pnpm check:phase3`, then set `STARKNET_PRIVATE_ADMITTED` / `CCTP_ADMITTED_ROUTES` and enable workers.
+
+`pnpm check:phase1` (mainnet) and `pnpm check:phase3` fail closed on missing mainnet evidence by design — they gate **route admission**, not contract publication.
 
 Run the automated declaration preflight with one command:
 
@@ -88,7 +114,14 @@ git push origin main
 vercel --prod --yes --scope wurli-shs-projects
 ```
 
-`render.yaml` is the infrastructure declaration. The first `pnpm deploy:env` creates missing services through the configured Render CLI. For existing Render services, compare their dashboard variables with the checklist before triggering a deploy; Render CLI currently does not update service environment variables.
+`render.yaml` is the infrastructure declaration. The first `pnpm deploy:env` creates missing services through the configured Render CLI. Existing Render environment variables remain Blueprint/dashboard-managed because the Render CLI does not expose an environment-variable update command. After the verified manifest has been committed and pushed, deploy that exact commit explicitly, then verify the running API rather than assuming the service updated:
+
+```bash
+pnpm deploy:env -- --render-only --render-deploy
+pnpm deploy:check-mainnet
+```
+
+`deploy:check-mainnet` compares `/v1/health` and `/v1/routes` with the checked-in verified `deployments/mainnet.json`: `SN_MAIN`, manifest hash, router, and the approved verified escrow set must all match. It is read-only and does not admit routes or enable workers. Use `--origin <URL>` for a non-default service and `--timeout-ms <1000..120000>` while diagnosing a cold start.
 
 ## Live verification
 

@@ -109,7 +109,7 @@ apps/api (Fastify)     handles · quotes · intents · delivery · indexer · re
 Supabase               auth · handles · wallets · encrypted inbox · intent state
   ↓
 Starknet Sepolia       CCTP V2 router · denomination escrows · STRK20 private pool
-Starknet Mainnet       Ready live-pool private send / balance (no Wotta CCTP escrow)
+Starknet Mainnet       Verified Wotta CCTP router + 0.1/1 USDC escrows (routes evidence-gated)
 ```
 
 ```text
@@ -203,7 +203,9 @@ for full integration · Ready wallet for private flows
 | `pnpm test:contracts` | Runs Cairo contract tests |
 | `pnpm check:phase1:sepolia` | Runs Sepolia phase-1 hard-gate checks |
 | `pnpm check:phase2:sepolia` | Runs Sepolia phase-2 hard-gate checks |
-| `pnpm deploy:env` | Syncs production env to Vercel / Render from local `.env` |
+| `pnpm deploy:env` | Syncs Vercel variables; creates missing Render services (existing Render env remains Blueprint/dashboard-managed) |
+| `pnpm deploy:env -- --render-only --render-deploy` | Explicitly deploys the current Git commit to the existing Mainnet Render service |
+| `pnpm deploy:check-mainnet` | Fails if the hosted Mainnet API does not match the verified local router, escrows, or manifest hash |
 | `pnpm check` | Runs lint, typecheck, tests, and build |
 
 Copy [`.env.example`](.env.example) to `.env`, then follow [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).

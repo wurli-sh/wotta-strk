@@ -108,8 +108,19 @@ async function main(): Promise<void> {
       : `missing or invalid evidence/${manifest.manifestHash}/starknet-private-mainnet/summary.json`,
   });
   const missing = checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`);
-  process.stdout.write(`${JSON.stringify({ gate: "Hard Gate 3 (mainnet)", status: missing.length ? "fail" : "pass", checks, missing }, null, 2)}\n`);
-  if (missing.length) process.exitCode = 1;
+  const payload = {
+    gate: "Hard Gate 3 (mainnet)",
+    purpose: "mainnet_route_admission_after_deploy — CCTP/private evidence requires live router+escrow; does NOT block contracts:declare / deploy:mainnet",
+    doesNotBlock: ["contracts:declare", "deploy:mainnet", "contracts:preflight"],
+    status: missing.length ? "fail" : "pass",
+    checks,
+    missing,
+  };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  if (missing.length) {
+    process.stderr.write(`FAIL CLOSED (${payload.purpose})\n`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch((error) => { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exit(1); });

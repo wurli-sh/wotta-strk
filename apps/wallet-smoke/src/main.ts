@@ -106,6 +106,8 @@ const readyManagedFlows = new Set<SmokeFlowId>([
   "balances",
   "direct_transfer",
 ]);
+const escrowFlows = new Set<SmokeFlowId>(["private_fund", "claim_release"]);
+const helperConfigured = Boolean(config.helperAddress);
 const flowUi = Object.fromEntries(
   flows.map((id) => [id, getFlowUi(id)]),
 ) as Record<SmokeFlowId, FlowUi>;
@@ -133,18 +135,20 @@ function refreshSessionSummary(): void {
 
 function setFlowsEnabled(enabled: boolean): void {
   for (const id of flows) {
-    flowUi[id].run.disabled = !enabled || !readyManagedFlows.has(id);
+    const escrowReady = escrowFlows.has(id) && helperConfigured;
+    const readyReady = readyManagedFlows.has(id);
+    flowUi[id].run.disabled = !enabled || !(readyReady || escrowReady);
   }
-  if (enabled) {
+  if (enabled && !helperConfigured) {
     setStatus(
       flowUi.private_fund,
       "error",
-      "Gated until Ready pool binding and escrow calldata are verified",
+      "Gated until VITE_HELPER_ADDRESS points at a verified Wotta escrow",
     );
     setStatus(
       flowUi.claim_release,
       "error",
-      "Gated until Ready pool binding and escrow calldata are verified",
+      "Gated until VITE_HELPER_ADDRESS points at a verified Wotta escrow",
     );
   }
 }
@@ -167,7 +171,11 @@ async function handle(ui: FlowUi, work: () => Promise<void>): Promise<void> {
     refreshSessionSummary();
   } finally {
     ui.run.setAttribute("aria-busy", "false");
-    if (connected) ui.run.disabled = false;
+    if (connected) {
+      const id = ui.id as SmokeFlowId;
+      const allowed = readyManagedFlows.has(id) || (escrowFlows.has(id) && helperConfigured);
+      ui.run.disabled = !allowed;
+    }
   }
 }
 
@@ -188,7 +196,7 @@ connectButton.addEventListener("click", () => {
       connectButton.textContent = "Connected";
       session.record({
         at: new Date().toISOString(),
-        flow: "capabilities",
+        flow: "connect",
         status: "ok",
         message:
           "Ready connected; STRK20 methods gated behind Wallet API 0.10.3",
@@ -202,6 +210,18 @@ connectButton.addEventListener("click", () => {
       refreshSessionSummary();
       setFlowsEnabled(true);
       setStatus(flowUi.balances, "success", "Capability gate passed");
+      if (helperConfigured) {
+        setStatus(
+          flowUi.private_fund,
+          "idle",
+          `Helper ${truncate(config.helperAddress!)} · amount ${config.smokeAmount}`,
+        );
+        setStatus(
+          flowUi.claim_release,
+          "idle",
+          "Enter the claim secret from private_fund, then run claim/release",
+        );
+      }
     } catch (error) {
       connectButton.textContent = "Retry Ready";
       connectButton.disabled = false;
@@ -368,6 +388,10 @@ function wireRiskyFlow(flow: Exclude<SmokeFlowId, "balances">): void {
 
 wireRiskyFlow("direct_transfer");
 wireRiskyFlow("shield_register");
+if (helperConfigured) {
+  wireRiskyFlow("private_fund");
+  wireRiskyFlow("claim_release");
+}
 
 exportButton.addEventListener("click", () => {
   const blob = new Blob([session.exportJson()], { type: "application/json" });

@@ -103,7 +103,7 @@ Contributor note: Node 24 is pinned in the root `.nvmrc` in addition to the work
 - Hosted discovery `/health` returned `200`, status `OK`, with a five-second index lag during verification.
 - `pnpm check` exits 0 with 25 wallet-smoke tests.
 - `pnpm contracts:build` and `pnpm test:contracts` exit 0 (4 Cairo tests).
-- `pnpm check:phase1` still fails closed only on the intentionally absent live mainnet Ready evidence artifacts.
+- Prefer `pnpm check:phase1:sepolia` for pre-deploy confidence. Mainnet `pnpm check:phase1` fails closed without Ready evidence by design — that gates **route admission after deploy**, not `contracts:declare`.
 
 ## Phase 1 contract + gate record (2026-08-20 continuation)
 
@@ -112,5 +112,5 @@ Contributor note: Node 24 is pinned in the root `.nvmrc` in addition to the work
 - `pnpm test:contracts` exit 0 — 3 integration tests (public deposit/refund, CCTP settle→pool, claim/refund hash domain separation).
 - `pnpm --filter @wotta/shared test` exit 0 — claim/hook/CCTP fixtures + mutation tests.
 - `pnpm --filter @wotta/wallet-smoke test` exit 0 — 17 pure-logic tests.
-- `pnpm check:phase1` fails closed until live Ready evidence is materialized (expected): missing `wallet-smoke-artifacts` / materialized `manifestHash`.
-- Live mainnet declare/deploy and Ready browser proof remain manual; do not invent evidence.
+- Mainnet `pnpm check:phase1` fails closed until live Ready evidence is materialized (expected for admission). Use Sepolia gate + `contracts:preflight` before declare; do not invent evidence to unblock deploy.
+- Live mainnet Ready browser proof remains manual after declare/deploy.
