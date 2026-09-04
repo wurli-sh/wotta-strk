@@ -56,7 +56,7 @@ import { fetchMe, getAccessToken } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { MAINNET_DISPLAY_DENS, coerceMainnetDenomination, denominationBaseUnits, isMainnetDenomination, type Dens } from "@/lib/denoms";
 import { userFacingError } from "@/lib/errors";
-import { starkscanTransactionUrl, readNetworkMode, type NetworkMode } from "@/lib/network-mode";
+import { starkscanTransactionUrl, type NetworkMode } from "@/lib/network-mode";
 import { requireSourceWallet } from "@/lib/wallet-install";
 import type { ProofPhase } from "@/lib/wotta/privacy-proof";
 import {
@@ -195,6 +195,7 @@ function preferredPublicRoute(routes: RouteRow[]): SourceRail | null {
 
 function SendForm({ mode }: { mode: NetworkMode }) {
   const mainnet = mode === "mainnet";
+  const { ready: networkReady } = useNetworkMode();
   const {
     setSource: rememberSource,
     getSource,
@@ -732,7 +733,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           />
         </div>
         <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
-          {!mainnet ? (
+          {networkReady && !mainnet ? (
             routesReady ? (
               <PrivateRouteToggle
                 enabled={confidentialMode}
@@ -930,12 +931,9 @@ function SendPageInner() {
 }
 
 export function SendPage() {
-  const { mode } = useNetworkMode();
-  const skeletonMode = mode === "mainnet" || readNetworkMode() === "mainnet"
-    ? "mainnet"
-    : "testnet";
+  const { mode, ready } = useNetworkMode();
   return (
-    <Suspense fallback={<SendPageSkeleton mode={skeletonMode} />}>
+    <Suspense fallback={<SendPageSkeleton mode={ready ? mode : "mainnet"} />}>
       <SendPageInner />
     </Suspense>
   );

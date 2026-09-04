@@ -7,15 +7,11 @@ import { IslandNav } from "@/components/IslandNav";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { RouteSkeletonGate } from "@/components/RouteSkeletonGate";
 import { SendPageSkeleton } from "@/components/ui/Skeleton";
-import { readNetworkMode } from "@/lib/network-mode";
 
 function NetworkAwareSendPageSkeleton() {
-  const { mode } = useNetworkMode();
-  // Prefer stored mode so mainnet doesn't flash the testnet private-route toggle skeleton.
-  const skeletonMode = mode === "mainnet" || readNetworkMode() === "mainnet"
-    ? "mainnet"
-    : "testnet";
-  return <SendPageSkeleton mode={skeletonMode} />;
+  const { mode, ready } = useNetworkMode();
+  // Until mode is hydrated, prefer the mainnet skeleton (no private-route toggle).
+  return <SendPageSkeleton mode={ready ? mode : "mainnet"} />;
 }
 
 export function AppChrome({ children }: { children: ReactNode }) {
