@@ -41,8 +41,11 @@ export const deploymentToolingSchema = z.object({
 
 export const deploymentArtifactSchema = z.object({
   classHash: optionalHashSchema.default("UNDECLARED"),
+  /** CASM hash retained alongside the Sierra class hash for reproducible verification. */
+  compiledClassHash: optionalHashSchema.default("UNKNOWN"),
   address: optionalAddressSchema.default("UNDEPLOYED"),
   declareTxHash: txHashSchema.default("PENDING"),
+  declaredBlock: optionalBlockSchema.default("PENDING"),
   deployTxHash: txHashSchema.default("PENDING"),
   deployedBlock: optionalBlockSchema.default("PENDING"),
   constructorCalldata: z.array(z.string()).default([]),
@@ -54,7 +57,7 @@ export const deploymentArtifactSchema = z.object({
 });
 
 export const deploymentPoolSchema = deploymentArtifactSchema.extend({
-  key: z.enum(["pool1", "pool10", "pool50", "pool100"]),
+  key: z.enum(["pool01", "pool1", "pool10", "pool50", "pool100"]),
   denomination: z.enum(DENOMINATIONS),
 });
 
@@ -99,11 +102,16 @@ export const walletManagedPrivacyManifestSchema = z.object({
   verificationNotes: z.string().min(1),
 }).strict();
 
+export const deploymentAuthoritySchema = z.object({
+  /** The on-chain owner address used in the router constructor. Must not be "PENDING" before deployment. */
+  owner: z.string().min(1).default("PENDING"),
+}).strict().default({ owner: "PENDING" });
+
 export const deploymentManifestSchema = z.object({
   version: z.literal(1),
   chainId: z.enum(["SN_MAIN", "SN_SEPOLIA"]),
   network: z.enum(["mainnet", "sepolia"]),
-  rpcUrlEnv: z.literal("STARKNET_RPC_URL").default("STARKNET_RPC_URL"),
+  rpcUrlEnv: z.enum(["STARKNET_RPC_URL", "STARKNET_MAINNET_RPC_URL"]).default("STARKNET_RPC_URL"),
   manifestHash: z.string().regex(/^[a-f0-9]{64}$/).or(z.literal("PENDING")),
   generatedAt: optionalIsoSchema.default("PENDING"),
   verified: z.boolean().default(false),
@@ -120,8 +128,11 @@ export const deploymentManifestSchema = z.object({
     scarb: "2.17.0",
     snforge: "0.59.0",
   }),
+  authority: deploymentAuthoritySchema,
+  /** The escrow denominations actually deployed and eligible for route admission. */
+  approvedCctpDenominations: z.array(z.enum(DENOMINATIONS)).default([]),
   router: deploymentArtifactSchema,
-  pools: z.array(deploymentPoolSchema).length(4),
+  pools: z.array(deploymentPoolSchema).min(4),
   evidence: z.object({
     root: z.string().min(1).default("evidence"),
     walletSmokeFlow: z.string().min(1).default("phase1-wallet-api"),
@@ -151,4 +162,10 @@ export function hashDeploymentManifest(
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .parse(bytesToHex(sha256(new TextEncoder().encode(JSON.stringify(manifest)))));
+}
+
+/** Hash an already-parsed manifest without including its previous digest. */
+export function rehashDeploymentManifest(manifest: DeploymentManifest): string {
+  const { manifestHash: _previousHash, ...unsignedManifest } = manifest;
+  return hashDeploymentManifest(unsignedManifest);
 }

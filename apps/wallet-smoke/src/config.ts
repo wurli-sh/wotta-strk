@@ -30,7 +30,7 @@ export type DirectPrivacyEscrowManifest = {
   status: "verified";
   address: string;
   classHash: string;
-  denomination: "1000000" | "10000000" | "50000000" | "100000000";
+  denomination: "100000" | "1000000" | "10000000" | "50000000" | "100000000";
   deploymentTxHash: string;
   deployedBlock: number;
   verificationNotes: string;

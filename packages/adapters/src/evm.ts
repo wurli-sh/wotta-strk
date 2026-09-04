@@ -1,5 +1,5 @@
 import { decodeFunctionData, decodeFunctionResult, encodeFunctionData, parseAbi, type Hex } from "viem";
-import type { EvmCctpBurnPlan } from "./index.ts";
+import { CIRCLE_ROUTE_REGISTRY, type CircleEnvironment, type EvmCctpBurnPlan } from "./index.ts";
 
 type Eip1193 = { request(input: { method: string; params?: unknown[] }): Promise<unknown> };
 const erc20 = parseAbi([
@@ -8,11 +8,13 @@ const erc20 = parseAbi([
   "function approve(address spender,uint256 amount) returns (bool)",
 ]);
 const CHAINS: Record<number, { chainName: string; nativeCurrency: { name: string; symbol: string; decimals: number }; rpcUrls: string[]; blockExplorerUrls: string[] }> = {
+  // Testnet
   11155111: { chainName: "Ethereum Sepolia", nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com"], blockExplorerUrls: ["https://sepolia.etherscan.io"] },
   421614: { chainName: "Arbitrum Sepolia", nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://sepolia-rollup.arbitrum.io/rpc"], blockExplorerUrls: ["https://sepolia.arbiscan.io"] },
   84532: { chainName: "Base Sepolia", nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://sepolia.base.org"], blockExplorerUrls: ["https://sepolia.basescan.org"] },
+  // Mainnet
+  8453: { chainName: "Base", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"] },
 };
-const ROUTE_CHAIN_IDS = { ethereum: 11155111, arbitrum: 421614, base: 84532 } as const;
 
 export async function executeEvmCctpBurn(input: {
   plan: EvmCctpBurnPlan;
@@ -63,8 +65,16 @@ export async function executeEvmCctpBurn(input: {
   return approvalTxHash ? { txHash, approvalTxHash, sourceAccount } : { txHash, sourceAccount };
 }
 
-export async function connectEvmSource(routeId: "ethereum" | "arbitrum" | "base", provider: Eip1193 = injectedProvider()) {
-  const chainId = ROUTE_CHAIN_IDS[routeId];
+export async function connectEvmSource(
+  routeId: "ethereum" | "arbitrum" | "base",
+  environment: CircleEnvironment,
+  provider: Eip1193 = injectedProvider(),
+) {
+  const route = CIRCLE_ROUTE_REGISTRY[environment][routeId];
+  const chainId = route?.chainId;
+  if (!route || route.family !== "evm" || !chainId) {
+    throw new Error(`Route "${routeId}" is not configured for the "${environment}" environment`);
+  }
   await ensureChain(provider, chainId);
   const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
   const address = accounts[0];

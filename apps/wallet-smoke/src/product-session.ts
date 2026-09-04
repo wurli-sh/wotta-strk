@@ -230,7 +230,7 @@ class WottaProductSession {
       ? await connectSolanaSource()
       : input.route === "stellar"
         ? await connectStellarSource()
-        : await connectEvmSource(input.route);
+        : await connectEvmSource(input.route, "testnet");
     const intentId = crypto.randomUUID();
     const claimSecret = randomFelt();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString();

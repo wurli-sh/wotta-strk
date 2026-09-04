@@ -23,7 +23,7 @@ test("recipient identifiers accept canonical email and X namespaces", () => {
   assert.equal(identifierSchema.parse({ provider: "x", identifier: "@user" }).provider, "x");
 });
 
-test("deployment manifest schema accepts four pool placeholders", () => {
+test("deployment manifest schema accepts pool placeholders", () => {
   const parsed = deploymentManifestSchema.parse({
     version: 1,
     chainId: "SN_MAIN",
@@ -37,8 +37,10 @@ test("deployment manifest schema accepts four pool placeholders", () => {
     strk20Pool: "0x2",
     router: {
       classHash: "UNDECLARED",
+      compiledClassHash: "UNKNOWN",
       address: "UNDEPLOYED",
       declareTxHash: "PENDING",
+      declaredBlock: "PENDING",
       deployTxHash: "PENDING",
       deployedBlock: "PENDING",
       constructorCalldata: [],
@@ -49,11 +51,13 @@ test("deployment manifest schema accepts four pool placeholders", () => {
       },
     },
     pools: DENOMINATIONS.map((denomination, index) => ({
-      key: ["pool1", "pool10", "pool50", "pool100"][index],
+      key: ["pool01", "pool1", "pool10", "pool50", "pool100"][index],
       denomination,
       classHash: "UNDECLARED",
+      compiledClassHash: "UNKNOWN",
       address: "UNDEPLOYED",
       declareTxHash: "PENDING",
+      declaredBlock: "PENDING",
       deployTxHash: "PENDING",
       deployedBlock: "PENDING",
       constructorCalldata: [],
@@ -64,8 +68,15 @@ test("deployment manifest schema accepts four pool placeholders", () => {
       },
     })),
   });
-  assert.equal(parsed.pools.length, 4);
+  assert.equal(parsed.pools.length, 5);
   assert.equal(parsed.router.address, "UNDEPLOYED");
+  assert.throws(
+    () => deploymentManifestSchema.parse({
+      ...parsed,
+      authority: { ...parsed.authority, model: "policy prose does not belong here" },
+    }),
+    /Unrecognized key/,
+  );
 });
 
 test("deployment manifest hash returns sha256 hex", () => {
@@ -80,6 +91,10 @@ test("deployment manifest hash returns sha256 hex", () => {
     usdc: "0x1",
     strk20Pool: "0x2",
     strk20ClassHash: "UNKNOWN",
+    authority: {
+      owner: "PENDING",
+    },
+    approvedCctpDenominations: [],
     deployer: {
       address: "UNKNOWN",
       keySource: "env:STARKNET_DEPLOYER_PRIVATE_KEY",
@@ -92,8 +107,10 @@ test("deployment manifest hash returns sha256 hex", () => {
     },
     router: {
       classHash: "UNDECLARED",
+      compiledClassHash: "UNKNOWN",
       address: "UNDEPLOYED",
       declareTxHash: "PENDING",
+      declaredBlock: "PENDING",
       deployTxHash: "PENDING",
       deployedBlock: "PENDING",
       constructorCalldata: [],
@@ -104,16 +121,19 @@ test("deployment manifest hash returns sha256 hex", () => {
       },
     },
     pools: [
+      "pool01",
       "pool1",
       "pool10",
       "pool50",
       "pool100",
     ].map((key, index) => ({
-      key: key as "pool1" | "pool10" | "pool50" | "pool100",
+      key: key as "pool01" | "pool1" | "pool10" | "pool50" | "pool100",
       denomination: DENOMINATIONS[index]!,
       classHash: "UNDECLARED",
+      compiledClassHash: "UNKNOWN",
       address: "UNDEPLOYED",
       declareTxHash: "PENDING",
+      declaredBlock: "PENDING",
       deployTxHash: "PENDING",
       deployedBlock: "PENDING",
       constructorCalldata: [],

@@ -161,25 +161,35 @@ export function encodeCircleCctpMessageV2ForTest(input: {
   router: string;
   amount: bigint;
   hook: WottaHookV1Input;
+  destinationDomain?: number;
+  destinationCaller?: string;
+  mintRecipient?: string;
+  burnToken?: string;
+  maxFee?: bigint;
+  feeExecuted?: bigint;
+  minFinalityThreshold?: number;
+  finalityThresholdExecuted?: number;
 }): Uint8Array {
   const address = (value: string, label: string) => u256ToBytes(BigInt(value), label);
+  const caller = input.destinationCaller ?? input.router;
+  const mintRecipient = input.mintRecipient ?? input.router;
   return concatBytes(
     u32ToBytes(0, "version"),
     u32ToBytes(input.sourceDomain, "sourceDomain"),
-    u32ToBytes(CCTP_STARKNET_DOMAIN, "destinationDomain"),
+    u32ToBytes(input.destinationDomain ?? CCTP_STARKNET_DOMAIN, "destinationDomain"),
     u256ToBytes(9n, "nonce"),
     u256ToBytes(0x123n, "sender"),
     address(input.tokenMessenger, "tokenMessenger"),
-    address(input.router, "destinationCaller"),
-    u32ToBytes(0, "minFinalityThreshold"),
-    u32ToBytes(0, "finalityThresholdExecuted"),
+    address(caller, "destinationCaller"),
+    u32ToBytes(input.minFinalityThreshold ?? 0, "minFinalityThreshold"),
+    u32ToBytes(input.finalityThresholdExecuted ?? 0, "finalityThresholdExecuted"),
     u32ToBytes(0, "burnVersion"),
-    u256ToBytes(0x456n, "burnToken"),
-    address(input.router, "mintRecipient"),
+    u256ToBytes(BigInt(input.burnToken ?? "0x456"), "burnToken"),
+    address(mintRecipient, "mintRecipient"),
     u256ToBytes(input.amount, "amount"),
     u256ToBytes(0x123n, "messageSender"),
-    u256ToBytes(0n, "maxFee"),
-    u256ToBytes(0n, "feeExecuted"),
+    u256ToBytes(input.maxFee ?? 0n, "maxFee"),
+    u256ToBytes(input.feeExecuted ?? 0n, "feeExecuted"),
     u256ToBytes(0n, "expirationBlock"),
     encodeCctpHookWrapperV1(input.hook),
   );

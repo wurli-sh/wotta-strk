@@ -89,6 +89,7 @@ export function renderDirectApp(app: HTMLElement): DirectUi {
         <label>
           <span class="label">Recipient amount</span>
           <select id="source-denomination">
+            <option value="100000">0.1 USDC</option>
             <option value="1000000">1 USDC</option>
             <option value="10000000">10 USDC</option>
             <option value="50000000">50 USDC</option>

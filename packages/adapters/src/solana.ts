@@ -40,6 +40,7 @@ export async function executeSolanaCctpBurn(input: {
   }
   const connection = new Connection(input.rpcUrl, "confirmed");
   if (input.plan.route.family !== "solana") throw new Error("Solana plan required");
+  await assertSolanaClusterForPlan(input.plan, await connection.getGenesisHash());
   const messenger = new PublicKey(input.plan.route.tokenMessenger);
   const transmitterValue = input.plan.route.messageTransmitter;
   if (!transmitterValue) throw new Error("Solana MessageTransmitter is missing");
@@ -90,6 +91,17 @@ export async function executeSolanaCctpBurn(input: {
 
 export async function connectSolanaSource() {
   return (await phantom().connect()).publicKey.toBase58();
+}
+
+/** Fail closed when a private/custom RPC serves a different cluster than the signed burn plan. */
+export function assertSolanaClusterForPlan(
+  plan: NonEvmCctpBurnPlan,
+  actualGenesisHash: string,
+): void {
+  const expected = plan.route.solanaGenesisHash;
+  if (plan.route.family !== "solana" || !expected || actualGenesisHash !== expected) {
+    throw new Error("Solana RPC network does not match the CCTP route environment");
+  }
 }
 
 function phantom(): Phantom {

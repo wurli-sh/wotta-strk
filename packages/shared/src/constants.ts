@@ -21,6 +21,7 @@ export const USDC_MAINNET_ADDRESS = mainnetDeployment.usdc;
 export const MAINNET_ESCROW_POOL_ADDRESS = mainnetDeployment.strk20Pool;
 
 export const DENOMINATIONS = [
+  "100000",
   "1000000",
   "10000000",
   "50000000",
@@ -29,11 +30,13 @@ export const DENOMINATIONS = [
 
 export type Denomination = (typeof DENOMINATIONS)[number];
 
+/** Codes 0–3 match the live Sepolia hook encoding; 0.1 USDC is code 4. */
 export const DENOMINATION_CODES = {
   "1000000": 0,
   "10000000": 1,
   "50000000": 2,
   "100000000": 3,
+  "100000": 4,
 } as const satisfies Record<Denomination, number>;
 
 export const DENOMINATION_BY_CODE = Object.freeze(
