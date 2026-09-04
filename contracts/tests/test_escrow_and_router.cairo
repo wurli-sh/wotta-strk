@@ -33,12 +33,14 @@ fn deploy_pool(
     router: ContractAddress,
     denomination: u128,
 ) -> ContractAddress {
+    start_cheat_chain_id_global('SN_MAIN');
     let class = declare("WottaEscrowPool").unwrap().contract_class();
     let (address, _) = class
         .deploy(
             @array![privacy.into(), usdc.into(), router.into(), denomination.into(), 'SN_MAIN'],
         )
         .unwrap();
+    stop_cheat_chain_id_global();
     address
 }
 
@@ -167,6 +169,54 @@ fn public_deposit_rejects_zero_claim_commitment() {
     snforge_std::start_cheat_block_timestamp(pool, 1_700_000_000);
     snforge_std::start_cheat_caller_address(pool, depositor);
     pool_disp.deposit_public(0, refund, 1_700_000_100);
+}
+
+#[test]
+fn escrow_constructor_rejects_unsupported_chain_id() {
+    let class = declare("WottaEscrowPool").unwrap().contract_class();
+    let privacy = contract_address_const::<0x111>();
+    let usdc = contract_address_const::<0x222>();
+    let router = contract_address_const::<0x333>();
+    let result = class
+        .deploy(
+            @array![privacy.into(), usdc.into(), router.into(), DENOMINATION_1.into(), 'BADNET'],
+        );
+    assert(result.is_err(), 'expected BAD_CHAIN');
+}
+
+#[test]
+fn escrow_constructor_rejects_zero_router_on_mainnet() {
+    start_cheat_chain_id_global('SN_MAIN');
+    let class = declare("WottaEscrowPool").unwrap().contract_class();
+    let privacy = contract_address_const::<0x111>();
+    let usdc = contract_address_const::<0x222>();
+    let result = class
+        .deploy(
+            @array![
+                privacy.into(), usdc.into(), contract_address_const::<0>().into(),
+                DENOMINATION_1.into(), 'SN_MAIN',
+            ],
+        );
+    stop_cheat_chain_id_global();
+    assert(result.is_err(), 'expected ZERO_ROUTER');
+}
+
+#[test]
+fn escrow_constructor_rejects_sepolia_chain_id_on_mainnet_tx() {
+    // Cannot bypass ZERO_ROUTER by lying about chain_id in calldata while on SN_MAIN.
+    start_cheat_chain_id_global('SN_MAIN');
+    let class = declare("WottaEscrowPool").unwrap().contract_class();
+    let privacy = contract_address_const::<0x111>();
+    let usdc = contract_address_const::<0x222>();
+    let result = class
+        .deploy(
+            @array![
+                privacy.into(), usdc.into(), contract_address_const::<0>().into(),
+                DENOMINATION_1.into(), 'SN_SEPOLIA',
+            ],
+        );
+    stop_cheat_chain_id_global();
+    assert(result.is_err(), 'expected CHAIN_MISMATCH');
 }
 
 #[test]

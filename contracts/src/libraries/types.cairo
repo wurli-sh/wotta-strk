@@ -73,6 +73,11 @@ pub fn is_supported_denomination(denomination: u128) -> bool {
         || denomination == DENOMINATION_100
 }
 
+/// Escrow claim hashes bind to SN_MAIN / SN_SEPOLIA only.
+pub fn is_supported_chain_id(chain_id: felt252) -> bool {
+    chain_id == 'SN_MAIN' || chain_id == 'SN_SEPOLIA'
+}
+
 pub fn denomination_code_to_amount(code: felt252) -> u128 {
     if code == 0 {
         DENOMINATION_1

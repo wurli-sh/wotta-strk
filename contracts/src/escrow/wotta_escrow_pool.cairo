@@ -5,7 +5,7 @@ pub mod WottaEscrowPool {
         StoragePointerWriteAccess,
     };
     use core::num::traits::Zero;
-    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address, get_tx_info};
 
     use crate::interfaces::cctp::IWottaEscrowPool;
     use crate::interfaces::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
@@ -14,7 +14,7 @@ pub mod WottaEscrowPool {
     use crate::libraries::types::{
         ClaimRecord, OpenNoteDeposit, CLAIM, FUNDING_CCTP, FUNDING_PRIVATE, FUNDING_PUBLIC_DIRECT,
         PRIVATE_FUND, PRIVATE_REFUND, STATUS_CLAIMED, STATUS_FUNDED, STATUS_NONE, STATUS_REFUNDED,
-        is_supported_denomination,
+        is_supported_chain_id, is_supported_denomination,
     };
 
     #[event]
@@ -87,6 +87,11 @@ pub mod WottaEscrowPool {
         assert(is_supported_denomination(denomination), 'BAD_DENOM');
         assert(!privacy_pool.is_zero(), 'ZERO_PRIVACY');
         assert(!usdc.is_zero(), 'ZERO_USDC');
+        assert(is_supported_chain_id(chain_id), 'BAD_CHAIN');
+        let live_chain_id = get_tx_info().unbox().chain_id;
+        assert(chain_id == live_chain_id, 'CHAIN_MISMATCH');
+        // Zero router only on live Sepolia (direct-privacy). Calldata cannot fake Sepolia on Mainnet.
+        assert(!router.is_zero() || live_chain_id == 'SN_SEPOLIA', 'ZERO_ROUTER');
         self.privacy_pool.write(privacy_pool);
         self.usdc.write(usdc);
         self.router.write(router);
