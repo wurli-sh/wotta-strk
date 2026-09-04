@@ -1,4 +1,4 @@
-<img src="docs/assets/banner.png" width="100%" alt="Wotta — send like a message, settle privately on Starknet, from any chain" />
+<img src="docs/assets/banner.png" width="100%" alt="Wotta — send from any chain, claim private on Starknet, earn on Vesu" />
 
 [Live demo](https://wotta.vercel.app) · [Demo video](https://youtu.be/KqIuun51blI)
 
@@ -11,15 +11,15 @@ side should not force a public destination balance.
 
 ## Solution
 
-**Sending money should feel like sending a message — Wotta makes it so.** You
-send to a handle or email, not an address; the transport and private settlement
-are Wotta’s job, not yours.
+**Send from any chain. Claim private on Starknet. Earn on Vesu.** You send to a
+handle or email, not an address; the transport and private settlement are Wotta’s
+job, not yours.
 
 Wotta lets anyone send USDC to an `@handle` or email. It resolves the recipient,
 creates a signed claim, transports USDC from supported source chains with Circle
 CCTP V2, and delivers a protected claim notice. Registered recipients receive an
-encrypted inbox note; claims settle into Wotta escrow on **Starknet Sepolia** and
-can be redeemed into a private Ready balance.
+encrypted inbox note; claims settle privately on **Starknet Sepolia** and can be
+redeemed into a private Ready balance — then put to work on Vesu.
 
 On **Starknet Mainnet**, Wotta focuses on Ready wallet-managed live-pool private
 sends and balance (no CCTP escrow inbox). Switch networks from the signed-in
@@ -52,7 +52,7 @@ Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
 | Circle Sepolia USDC | [`0x0512…8343`](https://sepolia.starkscan.co/contract/0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343) |
 | Wotta CCTP Router | [`0x26d4…d81b`](https://sepolia.starkscan.co/contract/0x26d49a2014db61fd072284cefa28c5d4a4ede40a2d90ed439ad3dfc0053d81b) |
 | Direct privacy escrow (1 USDC) | [`0x7e5b…e8c`](https://sepolia.starkscan.co/contract/0x7e5b61d637f7c5c557ac4814202a7c922ebfe3233d51c9ec266a6c3c3826e8c) |
-| STRK20 privacy pool (Sepolia) | [`0x0254…0d91`](https://sepolia.starkscan.co/contract/0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91) |
+| STRK20 private pool (Sepolia) | [`0x0254…0d91`](https://sepolia.starkscan.co/contract/0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91) |
 | Sepolia deployment manifest | [`deployments/sepolia.json`](deployments/sepolia.json) |
 | Mainnet deployment manifest | [`deployments/mainnet.json`](deployments/mainnet.json) |
 
@@ -108,7 +108,7 @@ apps/api (Fastify)     handles · quotes · intents · delivery · indexer · re
   ↓
 Supabase               auth · handles · wallets · encrypted inbox · intent state
   ↓
-Starknet Sepolia       CCTP V2 router · denomination escrows · STRK20 privacy pool
+Starknet Sepolia       CCTP V2 router · denomination escrows · STRK20 private pool
 Starknet Mainnet       Ready live-pool private send / balance (no Wotta CCTP escrow)
 ```
 
@@ -160,7 +160,7 @@ maps to one of those three promises:
 
 - **Handle-first payments** — send to `@handle` or email without requesting a destination address *(like a message)*
 - **Multi-chain source funding** — Ethereum, Arbitrum, Base, Solana, Stellar testnets, plus Starknet public / private routes *(from any chain)*
-- **Private post-claim balance** — Ready + STRK20 privacy pool on Sepolia; live-pool private send / balance on Mainnet *(settle privately)*
+- **Private post-claim balance** — Ready private USDC on Sepolia; live-pool private send / balance on Mainnet *(settle privately)*; earn on Vesu
 - **Protected delivery** — encrypted registered inbox notes
 - **Exact-net quotes** — quote includes the desired receive amount, maximum CCTP fee, and finality threshold
 - **One-time claims** — claim-hash commitments, expiry, and replay protection
