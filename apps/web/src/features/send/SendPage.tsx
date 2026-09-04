@@ -36,22 +36,19 @@ import { TextShimmer } from "@/components/ui/TextShimmer";
 import { ConfidentialToggle } from "@/features/send/ConfidentialToggle";
 import { NOX_ROUTE_ID, PUBLIC_DEFAULT_ROUTE_ID } from "@/features/send/routeIds";
 import {
+  irisMessageUrl,
   sourceTxExplorerLabel,
   sourceTxExplorerUrl,
 } from "@/features/send/sourceExplorer";
 import { useRoutesHealth } from "@/features/send/useRoutesHealth";
 import { apiFetch } from "@/lib/api/client";
-import { fetchMe, getAccessToken, syncWottaSession } from "@/lib/auth";
+import { fetchMe, getAccessToken } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { MAINNET_DENS, denominationBaseUnits, type Dens } from "@/lib/denoms";
 import { userFacingError } from "@/lib/errors";
 import { starkscanTransactionUrl, type NetworkMode } from "@/lib/network-mode";
 import { requireSourceWallet } from "@/lib/wallet-install";
-import { createPrivacyClient, isIdentityRegistered } from "@/lib/wotta/privacy-account";
-import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
-import { privateTransfer } from "@/lib/wotta/privacy-flow";
 import type { ProofPhase } from "@/lib/wotta/privacy-proof";
-import { unlockPrivacyVault } from "@/lib/wotta/privacy-state";
 import {
   createBrowserProductSession,
   type FundingStage,
@@ -59,17 +56,7 @@ import {
 import { connectReady } from "@/lib/wotta/ready";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { beginNetworkOperation, type NetworkOperation } from "@/lib/network-operations";
-import { WrongModeNotice } from "@/components/WrongModeNotice";
-import {
-  MAINNET_USDC_PRIVACY_FEE_RESERVE,
-  mainnetPrivacyConfig,
-  readMainnetPrivateBalance,
-  readMainnetPublicStrkBalance,
-  readMainnetPublicUsdcBalance,
-  submitMainnetPrivacyAction,
-  submitMainnetShieldedTransfer,
-} from "@/lib/wotta/mainnet-privacy";
-import { recordMainnetEvidence } from "@/lib/wotta/mainnet-evidence";
+import { mainnetPrivacyConfig } from "@/lib/wotta/mainnet-privacy";
 
 type Lookup =
   | { status: "idle" }
@@ -80,7 +67,7 @@ type Lookup =
   | { status: "invalid" | "error" };
 
 type SendStage = "idle" | FundingStage | ProofPhase | "unlocking_private" | "shielding_private" | "complete";
-type DeliveryMode = "inbox" | "pending" | "direct";
+type DeliveryMode = "inbox" | "pending";
 
 const PENDING_TTL_DAYS = 7;
 const CROSS_CHAIN_ROUTES = new Set<WottaSourceRoute>([
@@ -90,16 +77,10 @@ const CROSS_CHAIN_ROUTES = new Set<WottaSourceRoute>([
   "solana",
   "stellar",
 ]);
+const KEEPER_DELAY_MS = 900_000;
+const CCTP_PRIVACY_DISCLOSURE =
+  "The source wallet, amount, network fee, CCTP burn, and timing are public. Wotta protects delivery to the resolved recipient and supports private receiving and subsequent private activity on Starknet. Wotta provides confidentiality, not anonymity.";
 
-const MAINNET_SOURCE_ROUTES: RouteRow[] = [
-  { key: "ethereum", label: "Ethereum", status: "soon", selectable: false, reason: "Not available on Mainnet" },
-  { key: "arbitrum", label: "Arbitrum", status: "soon", selectable: false, reason: "Not available on Mainnet" },
-  { key: "base", label: "Base", status: "soon", selectable: false, reason: "Not available on Mainnet" },
-  { key: "solana", label: "Solana", status: "soon", selectable: false, reason: "Not available on Mainnet" },
-  { key: "stellar", label: "Stellar", status: "soon", selectable: false, reason: "Not available on Mainnet" },
-  { key: "starknet-public", label: "Starknet", status: "live", selectable: false, reason: "Mainnet uses the private Starknet route" },
-  { key: "starknet-private", label: "Starknet", status: "live", selectable: true },
-];
 
 function parseRecipient(raw: string): { provider: "email" | "x"; identifier: string } | null {
   const value = raw.trim();
@@ -156,7 +137,7 @@ function LookupStatus({ lookup, onRetry, mode }: { lookup: Lookup; onRetry: () =
     idle: { label: "Required", detail: "Enter an @handle or email" },
     checking: { label: "Checking", detail: "Looking up this recipient…" },
     registered: mainnet
-      ? { label: "Mainnet ready", detail: "Private payment goes directly to their Ready balance" }
+      ? { label: "Mainnet ready", detail: "Claim goes to their encrypted inbox, then private balance" }
       : { label: "On Wotta", detail: "Claim goes to their encrypted inbox" },
     linked: { label: "Ready linked", detail: "Enable private tokens in Ready, then refresh" },
     pending: mainnet
@@ -204,11 +185,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     getSource,
     matchesRoute,
   } = useSourceWallet();
-  const testnetRoutes = useRoutesHealth(!mainnet);
-  const routes = mainnet ? MAINNET_SOURCE_ROUTES : testnetRoutes.routes;
-  const routesHealth = testnetRoutes.routesHealth;
-  const routesReady = mainnet || testnetRoutes.routesReady;
-  const retryRoutesHealth = testnetRoutes.retryRoutesHealth;
+  const { routes, routesHealth, routesReady, retryRoutesHealth } = useRoutesHealth(mode);
   const [denom, setDenom] = useState<Dens>(mainnet ? "0.1" : 1n);
   const [recipient, setRecipient] = useState("");
   const [confidentialMode, setConfidentialMode] = useState(mainnet);
@@ -223,9 +200,11 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   const [successRecipient, setSuccessRecipient] = useState("");
   const [successTx, setSuccessTx] = useState<string | null>(null);
   const [successRoute, setSuccessRoute] = useState<SourceRail | null>(null);
+  const [pendingSourceTx, setPendingSourceTx] = useState<string | null>(null);
+  const [keeperStartedAt, setKeeperStartedAt] = useState<number | null>(null);
+  const [showSelfSettle, setShowSelfSettle] = useState(false);
   const [resolvedPrivateRecipient, setResolvedPrivateRecipient] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const [mainnetShieldedDuringSend, setMainnetShieldedDuringSend] = useState(false);
   const lookupRequest = useRef(0);
   const activeSendOperation = useRef<NetworkOperation | null>(null);
 
@@ -310,10 +289,36 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     !confidentialMode
     || routes.some((route) => route.key === NOX_ROUTE_ID && route.selectable);
   const sourceReady = routes.some((route) => route.key === source && route.selectable);
-  const recipientReady = lookup.status === "registered" || (!mainnet && lookup.status === "pending");
+  const recipientReady = lookup.status === "registered" || (!confidentialMode && !mainnet && lookup.status === "pending");
   const formLocked = busy || stage === "complete";
+  const selfSettleUrl = pendingSourceTx ? irisMessageUrl(source, pendingSourceTx, mode) : null;
 
   useEffect(() => () => activeSendOperation.current?.cancel(), []);
+
+  useEffect(() => {
+    const keeperStage = stage === "confirming" || stage === "attesting" || stage === "settling";
+    if (keeperStage) {
+      setKeeperStartedAt((current) => current ?? Date.now());
+      return;
+    }
+    if (stage === "complete") {
+      setShowSelfSettle(false);
+      setKeeperStartedAt(null);
+      return;
+    }
+    // Keep self-settle visible after timeout/error while a burn hash is known.
+    if (stage === "idle" && !pendingSourceTx) {
+      setShowSelfSettle(false);
+      setKeeperStartedAt(null);
+    }
+  }, [stage, pendingSourceTx]);
+
+  useEffect(() => {
+    if (keeperStartedAt == null) return;
+    const remaining = KEEPER_DELAY_MS - (Date.now() - keeperStartedAt);
+    const timer = window.setTimeout(() => setShowSelfSettle(true), Math.max(0, remaining));
+    return () => window.clearTimeout(timer);
+  }, [keeperStartedAt]);
 
   function unlockAfterReadyClosed() {
     const operation = activeSendOperation.current;
@@ -456,7 +461,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
         ? await connectSolanaSource()
         : route === "stellar"
           ? await connectStellarSource()
-          : await connectEvmSource(route);
+          : await connectEvmSource(route, mainnet ? "mainnet" : "testnet");
       rememberSource({
         routeKey: source,
         family: familyForRoute(source),
@@ -474,22 +479,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     }
   }
 
-  async function connectedMainnetAccount() {
-    const token = await getAccessToken();
-    if (!token) throw new Error("sign_in_required");
-    await syncWottaSession({ notify: false });
-    const meResult = await fetchMe(token, "mainnet");
-    if (!meResult.ok || !meResult.data.wallet) {
-      throw new Error("Link your Ready mainnet wallet from Account first");
-    }
-    if (meResult.data.wallet.chain_id !== "SN_MAIN") throw new Error("mainnet_wallet_not_linked");
-    const connected = await connectReady("mainnet");
-    if (BigInt(connected.address) !== BigInt(meResult.data.wallet.address)) {
-      throw new Error("Connect the Ready mainnet account linked to this Wotta profile");
-    }
-    return { token, me: meResult.data, connected };
-  }
-
   async function run() {
     const parsed = parseRecipient(recipient);
     if (!parsed) {
@@ -499,154 +488,68 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     activeSendOperation.current = operation;
     setBusy(true);
-    setMainnetShieldedDuringSend(false);
     setInlineError(null);
     setDelivery(null);
+    setPendingSourceTx(null);
+    setKeeperStartedAt(null);
+    setShowSelfSettle(false);
     try {
-      if (mainnet) {
-        if (!resolvedPrivateRecipient || lookup.status !== "registered") {
-          throw new Error("Recipient isn’t mainnet-ready yet");
-        }
-        setStage("connecting_source");
-        const { token, connected } = await connectedMainnetAccount();
-        operation.assertActive();
-        setStage("resolving");
-        const resolved = await apiFetch<{ descriptor: {
-          privateReady?: boolean;
-          recipientPrivateIdentityAddress?: string;
-          privacyPoolAddress?: string;
-        } }>("/v1/resolve", {
-          token,
-          method: "POST",
-          body: parsed,
-          network: "mainnet",
-          signal: operation.signal,
-        });
-        operation.assertActive();
-        const descriptor = resolved.descriptor;
-        const config = mainnetPrivacyConfig();
-        let poolMatches = false;
-        try {
-          poolMatches = Boolean(descriptor.privacyPoolAddress)
-            && BigInt(descriptor.privacyPoolAddress!) === BigInt(config.poolAddress);
-        } catch {
-          poolMatches = false;
-        }
-        if (!descriptor.privateReady || !descriptor.recipientPrivateIdentityAddress || !poolMatches) {
-          throw new Error("Recipient isn’t ready for private payments on Starknet Mainnet");
-        }
-        const amount = denominationBaseUnits(denom);
-        setStage("unlocking_private");
-        const [privateBalance, publicBalance, strkBalance] = await Promise.all([
-          readMainnetPrivateBalance(connected.account),
-          readMainnetPublicUsdcBalance(connected.account),
-          readMainnetPublicStrkBalance(connected.account),
-        ]);
-        operation.assertActive();
-        const requiredPrivateBalance = amount + MAINNET_USDC_PRIVACY_FEE_RESERVE;
-        const needsShield = privateBalance < requiredPrivateBalance;
-        const shieldAmount = needsShield ? requiredPrivateBalance - privateBalance : 0n;
-        if (needsShield && publicBalance < shieldAmount) {
-          const requiredPublicUsdc = Number(shieldAmount) / 1_000_000;
-          throw new Error(`Need at least ${requiredPublicUsdc} native USDC in Ready to cover the payment and privacy fee reserve`);
-        }
-        if (strkBalance < config.protocolFeeStrk) throw new Error("Need at least 6 STRK plus network gas in this Ready mainnet account");
-        setStage(needsShield ? "shielding_private" : "building_proof");
-        const transactionHash = needsShield
-          ? await submitMainnetShieldedTransfer(
-              connected.account,
-              descriptor.recipientPrivateIdentityAddress,
-              operation.signal,
-              amount,
-              shieldAmount,
-            )
-          : await submitMainnetPrivacyAction(
-              connected.account,
-              "transfer",
-              descriptor.recipientPrivateIdentityAddress,
-              operation.signal,
-              amount,
-            );
-        operation.assertActive();
-        recordMainnetEvidence(needsShield ? "shield-transfer" : "transfer", transactionHash);
-        setMainnetShieldedDuringSend(needsShield);
-        if (needsShield) {
-          try {
-            await apiFetch("/v1/wallet/private-identity", {
-              token,
-              method: "POST",
-              body: { identityAddress: connected.address },
-              network: "mainnet",
-              signal: operation.signal,
-            });
-            setLookupRetry((value) => value + 1);
-          } catch {
-            // The payment is already confirmed. A later Account reconnect can
-            // repair this sender's Wotta recipient-readiness metadata.
-          }
-        }
-        setDelivery("direct");
-        setSuccessRecipient(parsed.identifier);
-        setSuccessTx(transactionHash);
-        setSuccessRoute(NOX_ROUTE_ID);
-        setStage("complete");
-        toast.success(needsShield ? "USDC shielded and sent privately" : "Private Mainnet transfer confirmed");
-        return;
-      }
       const session = createBrowserProductSession();
       await session.syncSession();
       operation.assertActive();
       const me = await session.me();
       if (!me.wallet?.address) throw new Error("Link your Ready wallet from Account first");
-      if (source === "starknet-private") {
-        setStage("connecting_source");
-        const connected = await connectReady();
-        if (BigInt(connected.address) !== BigInt(me.wallet.address)) {
-          throw new Error("Connect the Ready account linked to this Wotta profile");
+      if (mainnet) {
+        if (!resolvedPrivateRecipient || lookup.status !== "registered") {
+          throw new Error("Recipient isn’t mainnet-ready yet");
         }
-        const config = directPrivacyConfig();
-        setStage("unlocking_private");
-        const vault = await unlockPrivacyVault(connected.account, config);
-        if (!vault.state.identityAddress) {
-          throw new Error("Register your private identity from Account first");
-        }
-        const transfers = createPrivacyClient(
-          vault.state.identityAddress,
-          BigInt(vault.state.viewingKey),
-          config,
-        );
-        setStage("resolving");
-        const recipientIdentity = await session.resolvePrivateRecipient(
-          parsed.identifier,
-          config.poolAddress,
-        );
-        if (!await isIdentityRegistered(connected.account, config, recipientIdentity)) {
-          throw new Error("Recipient private identity is not registered");
-        }
-        const transactionHash = await privateTransfer(
-          connected.account,
-          transfers,
-          config.usdc,
-          recipientIdentity,
-          BigInt(testnetDenomination(denom)),
-          (next) => setStage(next),
-        );
-        setDelivery("direct");
+        const result = await session.fundFromStarknetEscrow({
+          denomination: denominationBaseUnits(denom).toString() as Denomination,
+          recipient: parsed.identifier,
+          publicRefundRecipient: me.wallet.address,
+          linkedReadyAddress: me.wallet.address,
+          onStage: setStage,
+        });
+        operation.assertActive();
+        setDelivery("inbox");
         setSuccessRecipient(parsed.identifier);
-        setSuccessTx(transactionHash);
+        setSuccessTx(result.sourceTxHash);
+        setSuccessRoute(NOX_ROUTE_ID);
+        rememberSource({
+          routeKey: NOX_ROUTE_ID,
+          family: "starknet",
+          address: result.sourceAccount,
+          label: "Starknet escrow",
+        });
+        setStage("complete");
+        toast.success("Escrowed and delivered to their encrypted inbox");
+        return;
+      }
+      if (source === "starknet-private") {
+        const result = await session.fundFromStarknetEscrow({
+          denomination: testnetDenomination(denom),
+          recipient: parsed.identifier,
+          publicRefundRecipient: me.wallet.address,
+          linkedReadyAddress: me.wallet.address,
+          privateDelivery: true,
+          onStage: setStage,
+        });
+        setDelivery("inbox");
+        setSuccessRecipient(parsed.identifier);
+        setSuccessTx(result.sourceTxHash);
         setSuccessRoute(source);
         rememberSource({
           routeKey: source,
           family: "starknet",
-          address: connected.address,
-          label: "Private Starknet",
+          address: result.sourceAccount,
+          label: "Starknet escrow",
         });
         setStage("complete");
-        toast.success("Private transfer confirmed");
+        toast.success("Escrowed and delivered to their encrypted inbox");
         return;
       }
       if (source === "starknet-public") {
-        const result = await session.fundFromStarknetPublic({
+        const result = await session.fundFromStarknetEscrow({
           denomination: testnetDenomination(denom),
           recipient: parsed.identifier,
           publicRefundRecipient: me.wallet.address,
@@ -675,7 +578,13 @@ function SendForm({ mode }: { mode: NetworkMode }) {
         denomination: testnetDenomination(denom),
         recipient: parsed.identifier,
         publicRefundRecipient: me.wallet.address,
-        onStage: setStage,
+        onStage: (next) => {
+          setStage(next);
+          if (next === "confirming" || next === "attesting" || next === "settling") {
+            setKeeperStartedAt((current) => current ?? Date.now());
+          }
+        },
+        onSourceTxHash: setPendingSourceTx,
       });
       setDelivery(lookup.status === "registered" ? "inbox" : "pending");
       setSuccessRecipient(parsed.identifier);
@@ -712,27 +621,27 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     return (
       <div className="mx-auto max-w-lg space-y-4">
         <NoteVisaCard
-          label={delivery === "direct" ? "Private transfer" : delivery === "inbox" ? "In their inbox" : "Waiting for join"}
+          label={delivery === "inbox" ? "In their inbox" : "Waiting for join"}
           amount={String(denom)}
           recipient={successRecipient}
-          status={delivery === "direct" ? "Received privately" : delivery === "inbox" ? "Claimable" : "On hold"}
+          status={delivery === "inbox" ? "Claimable" : "On hold"}
           note={delivery === "pending"
             ? `Held until ${heldUntil.toLocaleDateString()}`
-            : delivery === "direct"
-              ? mainnet && mainnetShieldedDuringSend
-                ? "Ready USDC → shielded → recipient private balance"
-                : "Private balance → private balance"
-              : "Claim → private Starknet balance"}
+            : "Escrow → encrypted inbox → private Starknet claim"}
           footer={
             <div className="space-y-2">
-              <MotionPillButton className="w-full" onClick={() => { setStage("idle"); setDelivery(null); setSuccessTx(null); setSuccessRoute(null); setMainnetShieldedDuringSend(false); }}>
+              <MotionPillButton className="w-full" onClick={() => { setStage("idle"); setDelivery(null); setSuccessTx(null); setSuccessRoute(null); }}>
                 Send another
               </MotionPillButton>
               {successTx ? (
                 <Button
                   variant="outline"
                   className="w-full"
-                  href={mainnet ? starkscanTransactionUrl("mainnet", successTx) : sourceTxExplorerUrl(successRoute, successTx)}
+                  href={
+                    mainnet && successRoute && isStarknetSource(successRoute)
+                      ? starkscanTransactionUrl("mainnet", successTx)
+                      : sourceTxExplorerUrl(successRoute, successTx, mode)
+                  }
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -760,7 +669,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
         <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
           {mainnet ? (
             <div className="radius-surface-inner border border-warning-border bg-warning-surface px-4 py-3 text-xs leading-5 text-warning-foreground" role="status">
-              Mainnet uses real funds. Wotta automatically tops up the selected amount plus a private-fee reserve, then sends the selected amount privately. Each private transaction incurs the live pool fee plus network gas.
+              Mainnet uses real funds. Your Ready wallet makes a public fixed-denomination USDC deposit into a verified Wotta escrow; the recipient then claims it into their private balance.
             </div>
           ) : null}
           <ConfidentialToggle
@@ -777,7 +686,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
               onChange={setSource}
               disabled={formLocked}
               privateMode={confidentialMode}
-              unavailableReason={mainnet ? "Not available on Mainnet" : undefined}
             />
           ) : (
             <div
@@ -828,6 +736,16 @@ function SendForm({ mode }: { mode: NetworkMode }) {
             />
             <LookupStatus lookup={lookup} mode={mode} onRetry={() => setLookupRetry((value) => value + 1)} />
           </div>
+          {CROSS_CHAIN_ROUTES.has(source as WottaSourceRoute) || source === NOX_ROUTE_ID ? (
+            <p className="text-xs leading-5 text-muted-foreground" role="note">
+              {source === NOX_ROUTE_ID
+                ? "The source wallet, fixed denomination, network fee, deposit transaction, and timing are public. Wotta encrypts delivery to the recipient; the claim and later private activity use STRK20. Wotta provides confidentiality, not anonymity."
+                : CCTP_PRIVACY_DISCLOSURE}{" "}
+              <a className="font-medium text-foreground underline underline-offset-4" href="/privacy">
+                Privacy details
+              </a>
+            </p>
+          ) : null}
           {inlineError ? (
             <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3" role="alert">
               <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
@@ -859,6 +777,26 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                     <><Send className="size-4" aria-hidden />{stageLabel("idle", denom)}</>
                   )}
                 </MotionPillButton>
+                {showSelfSettle && pendingSourceTx ? (
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground" role="status">
+                    Taking longer than expected. Your burn is complete and cannot be cancelled.
+                    Closing this page does not cancel it.
+                    {selfSettleUrl ? (
+                      <>
+                        {" "}You can{" "}
+                        <a
+                          className="font-medium text-foreground underline underline-offset-4"
+                          href={selfSettleUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          settle this yourself
+                        </a>{" "}
+                        using your Circle message.
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
                 {busy && mainnet ? (
                   <button
                     type="button"
@@ -921,7 +859,7 @@ function SendPageInner() {
       subtitle={
         tab === "claim"
           ? mode === "mainnet"
-            ? "Claim flows are not available on Mainnet."
+            ? "Claim escrowed USDC from your encrypted inbox into your private Starknet balance."
             : "Claim USDC from your inbox into your private Starknet balance."
           : mode === "mainnet"
             ? "Pay an email or @handle privately through Starknet Mainnet."
@@ -938,14 +876,7 @@ function SendPageInner() {
         />
       </div>
       {tab === "claim" ? (
-        mode === "mainnet" ? (
-          <WrongModeNotice
-            feature="Claim"
-            detail="Not available on Mainnet. Private payments settle directly to registered Ready balances; switch to Testnet beta for escrow claims."
-          />
-        ) : (
-          <ClaimView embedded noteId={noteId} />
-        )
+        <ClaimView embedded noteId={noteId} />
       ) : (
         <SendForm key={mode} mode={mode} />
       )}

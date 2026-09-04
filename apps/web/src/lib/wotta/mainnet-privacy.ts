@@ -76,6 +76,44 @@ export function mainnetShieldedTransferActions(
   ];
 }
 
+export function mainnetEscrowClaimActions(input: {
+  recipient: string;
+  escrow: { address: string; classHash: string; denomination: bigint };
+  claimSecret: string;
+}): STRK20_ACTION[] {
+  const config = mainnetPrivacyConfig();
+  if (!mainnetDeployment.verified) throw new Error("mainnet_escrow_manifest_not_verified");
+  const pool = mainnetDeployment.pools.find((candidate) =>
+    candidate.verification.status === "verified"
+    && BigInt(candidate.address) === BigInt(input.escrow.address)
+    && BigInt(candidate.classHash) === BigInt(input.escrow.classHash)
+    && BigInt(candidate.denomination) === input.escrow.denomination);
+  if (!pool || !(mainnetDeployment.approvedCctpDenominations as string[]).includes(pool.denomination)) {
+    throw new Error("mainnet_escrow_not_verified");
+  }
+  if (!/^0x[0-9a-f]+$/i.test(input.recipient) || !/^0x[0-9a-f]+$/i.test(input.claimSecret) || BigInt(input.claimSecret) === 0n) {
+    throw new Error("invalid_mainnet_escrow_claim");
+  }
+  return buildEscrowClaimActions(config.usdc, input.recipient, pool.address, input.claimSecret);
+}
+
+/** Deterministic Wallet API encoding; admission is enforced by mainnetEscrowClaimActions. */
+export function buildEscrowClaimActions(
+  usdc: string,
+  recipient: string,
+  escrow: string,
+  claimSecret: string,
+): STRK20_ACTION[] {
+  return [
+    { type: "transfer", token: usdc, amount: "OPEN", recipient },
+    {
+      type: "invoke",
+      contract: escrow,
+      calldata: ["0x2", "0x0", "0x0", "0x0", "0x0", claimSecret, "${openNoteIds[0]}", "0x0"],
+    },
+  ];
+}
+
 function sameFelt(left: string, right: string): boolean {
   try { return BigInt(left) === BigInt(right); } catch { return false; }
 }
@@ -210,6 +248,18 @@ export async function submitMainnetShieldedTransfer(
   return submitMainnetPrivacyActions(
     account,
     mainnetShieldedTransferActions(recipient, amount, shieldAmount),
+    signal,
+  );
+}
+
+export async function submitMainnetEscrowClaim(
+  account: WalletAccountV6,
+  input: { escrow: { address: string; classHash: string; denomination: bigint }; claimSecret: string },
+  signal?: AbortSignal,
+): Promise<string> {
+  return submitMainnetPrivacyActions(
+    account,
+    mainnetEscrowClaimActions({ ...input, recipient: account.address }),
     signal,
   );
 }

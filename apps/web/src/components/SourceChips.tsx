@@ -26,7 +26,7 @@ export type SourceChipKey =
 
 export type RouteRow = {
   key: SourceRail;
-  status: "live" | "soon";
+  status: "live" | "soon" | "paused";
   selectable: boolean;
   label: string;
   reason?: string | null;
@@ -67,18 +67,34 @@ export function resolveSourceRail(chip: SourceChipKey, privateMode: boolean): So
   return chip;
 }
 
+/** Maps API machine-reason codes to user-safe display copy. */
+const REASON_COPY: Partial<Record<string, string>> = {
+  coming_soon: "Coming soon",
+  awaiting_mainnet_destination: "Verifying destination — coming soon",
+  awaiting_route_evidence: "Awaiting route verification — coming soon",
+  worker_unavailable: "Settlement service unavailable — coming soon",
+  dependency_unhealthy: "Route dependency unavailable — coming soon",
+  route_paused: "Paused",
+  // Legacy testnet reason codes — kept for backwards compatibility
+  awaiting_verified_destination: "Verifying destination — coming soon",
+  awaiting_route_specific_live_evidence: "Awaiting route verification — coming soon",
+  awaiting_verified_escrow_deployment: "Awaiting verified escrow — coming soon",
+};
+
 export function buildSourceRoutes(
   capabilities: Array<{ id: string; enabled: boolean; reason?: string }> = [],
 ): RouteRow[] {
   const byId = new Map(capabilities.map((route) => [route.id, route]));
   return (Object.keys(LABELS) as SourceRail[]).map((key) => {
     const capability = byId.get(key);
+    const rawReason = capability?.reason;
+    const paused = rawReason === "route_paused";
     return {
       key,
-      status: capability?.enabled ? "live" : "soon",
+      status: capability?.enabled ? "live" : paused ? "paused" : "soon",
       selectable: capability?.enabled === true,
       label: LABELS[key],
-      reason: capability?.reason ?? "Awaiting verified testnet evidence",
+      reason: REASON_COPY[rawReason ?? ""] ?? rawReason ?? "Awaiting verified testnet evidence",
     };
   });
 }
@@ -174,7 +190,11 @@ export function SourceChips({
                 className="size-6 shrink-0"
               />
               {chip === "starknet" ? "Starknet" : route?.label ?? chip}
-              {route?.status === "soon" ? (
+              {route?.status === "paused" ? (
+                <span className="text-[10px] font-medium uppercase tracking-wide text-warning">
+                  paused
+                </span>
+              ) : route?.status === "soon" ? (
                 <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                   soon
                 </span>

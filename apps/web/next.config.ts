@@ -122,7 +122,7 @@ const nextConfig: NextConfig = {
       ],
     },
     {
-      source: "/(register|send|inbox|claim|balance|withdraw|account)/:path*",
+      source: "/(register|send|inbox|claim|withdraw|account)/:path*",
       headers: [{ key: "Cache-Control", value: "no-store" }],
     },
   ],

@@ -19,6 +19,29 @@ import { createClient } from "@/lib/supabase/client";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { WrongModeNotice } from "@/components/WrongModeNotice";
 import { beginNetworkOperation } from "@/lib/network-operations";
+import { irisMessageUrl, sourceTxExplorerUrl } from "@/features/send/sourceExplorer";
+import type { SourceRail } from "@/components/SourceChips";
+import { starkscanTransactionUrl } from "@/lib/network-mode";
+import type { NetworkMode } from "@/lib/network-mode";
+import { useRoutesHealth } from "@/features/send/useRoutesHealth";
+
+const SELF_SETTLE_MS = 900_000;
+
+function recoveryHintForSent(intent: {
+  state: string;
+  onchain_state?: string | null;
+  updated_at?: string;
+  created_at?: string;
+  route_id: string;
+}): string | null {
+  if (intent.route_id === "starknet-public" || intent.route_id === "starknet-private") return null;
+  if (intent.state === "failed_recoverable") return "failed_recoverable";
+  if (intent.state === "attestation_ready" || intent.state === "destination_submitted") {
+    const anchor = intent.updated_at ?? intent.created_at;
+    if (anchor && Date.now() - Date.parse(anchor) >= SELF_SETTLE_MS) return "self_settle";
+  }
+  return null;
+}
 
 type Row = {
   itemId: string;
@@ -27,7 +50,10 @@ type Row = {
   expiresAt: number;
   status: string;
   counterparty: string;
-  txHash?: string | null;
+  sourceTxHash?: string | null;
+  destTxHash?: string | null;
+  routeId?: string | null;
+  recoveryHint?: string | null;
 };
 type Tab = "incoming" | "sent" | "history";
 type ApiIntent = {
@@ -39,6 +65,8 @@ type ApiIntent = {
   source_tx_hash?: string | null;
   onchain_tx_hash?: string | null;
   expires_at: string;
+  created_at?: string;
+  updated_at?: string;
 };
 type ApiNote = {
   id: string;
@@ -127,7 +155,7 @@ function TableShell({
   );
 }
 
-function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
+function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode: NetworkMode }) {
   const router = useRouter();
   const { vault, unlocking, unlock, sessionReady } = usePrivacyVault();
   const [tab, setTab] = useState<Tab>("incoming");
@@ -138,7 +166,7 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   const refresh = useCallback(async (hold = true) => {
-    const operation = beginNetworkOperation("testnet");
+    const operation = beginNetworkOperation(mode);
     setBusy(true);
     try {
       const work = async () => {
@@ -155,8 +183,8 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
         await syncWottaSession();
         operation.assertActive();
         const [notesResult, intentsResult] = await Promise.all([
-          apiFetch<{ notes: ApiNote[] }>("/v1/notes", { token, network: "testnet", signal: operation.signal }),
-          apiFetch<{ intents: ApiIntent[] }>("/v1/intents", { token, network: "testnet", signal: operation.signal }),
+          apiFetch<{ notes: ApiNote[] }>("/v1/notes", { token, network: mode, signal: operation.signal }),
+          apiFetch<{ intents: ApiIntent[] }>("/v1/intents", { token, network: mode, signal: operation.signal }),
         ]);
         operation.assertActive();
         const noteReceivedAt = (note: ApiNote) => note.delivered_at ?? note.created_at;
@@ -167,7 +195,7 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
           expiresAt: Math.floor(Date.parse(note.intent.expires_at) / 1_000),
           status: normalizedStatus(note.intent),
           counterparty: "Encrypted sender",
-          txHash: note.intent.onchain_tx_hash,
+          destTxHash: note.intent.onchain_tx_hash,
         }));
         setIncoming(noteRows.filter((row) => ["funded", "delivered", "claimable"].includes(row.status)));
         setHistory(noteRows.filter((row) => ["claimed", "completed", "refunded"].includes(row.status)));
@@ -178,7 +206,10 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
           expiresAt: Math.floor(Date.parse(intent.expires_at) / 1_000),
           status: normalizedStatus(intent),
           counterparty: intent.route_id,
-          txHash: intent.source_tx_hash,
+          sourceTxHash: intent.source_tx_hash,
+          destTxHash: intent.onchain_tx_hash,
+          routeId: intent.route_id,
+          recoveryHint: recoveryHintForSent(intent),
         })));
       };
       if (hold) await withMinSkeleton(work, SKELETON_MAX_MS); else await work();
@@ -190,7 +221,7 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
       operation.finish();
       setBusy(false);
     }
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     void (async () => {
@@ -274,9 +305,29 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const counterpartyLabel = tab === "sent" ? "Source" : tab === "history" ? "From" : null;
   const timeColumnLabel = tab === "sent" ? "Sent" : "Received";
   const columns = counterpartyLabel
-    ? ["Amount", counterpartyLabel, timeColumnLabel, "Expires at", "Status"]
+    ? ["Amount", counterpartyLabel, timeColumnLabel, "Expires at", "Status", "Links"]
     : ["Amount", timeColumnLabel, "Expires at", "Status", ""];
   const emptyMessage = tab === "incoming" ? "No live claims right now." : tab === "sent" ? "Nothing sent yet." : "Nothing claimed yet.";
+  const networkMode = mode;
+
+  function sentLinks(row: Row) {
+    const sourceUrl = row.sourceTxHash
+      ? sourceTxExplorerUrl(row.routeId as SourceRail, row.sourceTxHash, networkMode)
+      : null;
+    const destUrl = row.destTxHash ? starkscanTransactionUrl(networkMode, row.destTxHash) : null;
+    const irisUrl = row.sourceTxHash && row.routeId
+      ? irisMessageUrl(row.routeId as SourceRail, row.sourceTxHash, networkMode)
+      : null;
+    return (
+      <div className="flex flex-col items-start gap-1 text-xs">
+        {sourceUrl ? <a className="underline underline-offset-2" href={sourceUrl} target="_blank" rel="noreferrer">Source burn</a> : null}
+        {destUrl ? <a className="underline underline-offset-2" href={destUrl} target="_blank" rel="noreferrer">Starknet settle</a> : null}
+        {row.recoveryHint === "self_settle" && irisUrl ? (
+          <a className="font-medium text-foreground underline underline-offset-2" href={irisUrl} target="_blank" rel="noreferrer">Settle yourself</a>
+        ) : null}
+      </div>
+    );
+  }
 
   const table = (
     <TableShell
@@ -296,6 +347,7 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
           <p className="text-xs text-muted-foreground">{timeColumnLabel} {formatRowTime(row.at)}</p>
           <p className="text-xs text-muted-foreground">Expires at {formatRowTime(row.expiresAt)}</p>
           {tab === "incoming" ? <Button className="w-full" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button> : null}
+          {tab === "sent" ? sentLinks(row) : null}
         </li>
       ))}
     >
@@ -306,6 +358,7 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
           <td className="px-5 py-4 tabular-nums text-muted-foreground">{formatRowTime(row.at)}</td>
           <td className="px-5 py-4 tabular-nums text-muted-foreground">{formatRowTime(row.expiresAt)}</td>
           <td className="px-5 py-4"><StatusPill status={row.status} /></td>
+          {tab === "sent" ? <td className="px-5 py-4">{sentLinks(row)}</td> : null}
           {!counterpartyLabel ? <td className="px-5 py-4 text-right"><Button size="sm" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button></td> : null}
         </tr>
       ))}
@@ -344,12 +397,20 @@ function TestnetInboxPage({ embedded = false }: { embedded?: boolean } = {}) {
 
 export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { mode } = useNetworkMode();
-  if (mode === "mainnet") {
+  const { routes, routesReady } = useRoutesHealth(mode, mode === "mainnet");
+  const mainnetEscrowReady = routes.some((route) => route.key === "starknet-private" && route.selectable);
+  if (mode === "mainnet" && !routesReady) {
+    const loading = <InboxMobileRowsSkeleton rows={2} />;
+    return embedded ? loading : (
+      <PageShell title="Inbox" subtitle="Checking the verified Mainnet escrow route." maxWidth="lg">{loading}</PageShell>
+    );
+  }
+  if (mode === "mainnet" && routesReady && !mainnetEscrowReady) {
     const blocked = (
       <WrongModeNotice
         feature="Inbox"
-        detail="Not available on Mainnet. Switch to Testnet beta for escrow inbox and claim rows, or use Balance for your live-pool private balance."
-        mainnetHref="/balance"
+        detail="Mainnet inbox delivery stays disabled until the Wotta escrow and Ready privacy manifests pass on-chain verification."
+        mainnetHref="/account?tab=wallet"
         mainnetLabel="View Mainnet balance"
       />
     );
@@ -359,5 +420,5 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
       </PageShell>
     );
   }
-  return <TestnetInboxPage embedded={embedded} />;
+  return <EscrowInboxPage embedded={embedded} mode={mode} />;
 }

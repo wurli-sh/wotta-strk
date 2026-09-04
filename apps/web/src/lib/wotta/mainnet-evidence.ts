@@ -5,6 +5,7 @@ export type MainnetEvidenceAction = MainnetPrivacyAction | "shield-transfer";
 export type MainnetEvidence = {
   action: MainnetEvidenceAction;
   transactionHash: string;
+  destinationTxHash?: string;
   createdAt: string;
 };
 
@@ -20,9 +21,18 @@ export function readMainnetEvidence(): MainnetEvidence[] {
   }
 }
 
-export function recordMainnetEvidence(action: MainnetEvidenceAction, transactionHash: string): void {
+export function recordMainnetEvidence(
+  action: MainnetEvidenceAction,
+  transactionHash: string,
+  destinationTxHash?: string,
+): void {
   const next = [
-    { action, transactionHash, createdAt: new Date().toISOString() },
+    {
+      action,
+      transactionHash,
+      ...(destinationTxHash ? { destinationTxHash } : {}),
+      createdAt: new Date().toISOString(),
+    },
     ...readMainnetEvidence().filter((item) => item.transactionHash !== transactionHash),
   ].slice(0, 20);
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));

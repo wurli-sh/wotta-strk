@@ -18,7 +18,7 @@
     "@starkware-libs/starknet-privacy-sdk": "file:../../vendor/starkware-libs-starknet-privacy-sdk-0.14.3-rc.2.tgz",
     "@stellar/freighter-api": "6.0.1",
     "@supabase/ssr": "0.6.1",
-    "@supabase/supabase-js": "2.49.4",
+    "@supabase/supabase-js": "2.115.0",
     "@wotta/adapters": "workspace:*",
     "@wotta/crypto": "workspace:*",
     "@wotta/shared": "workspace:*",

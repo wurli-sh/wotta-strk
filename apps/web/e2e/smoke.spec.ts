@@ -13,9 +13,10 @@ test("landing + Send shell", async ({ page }) => {
   await expect(page.getByText(/admitted testnet source/i)).toBeVisible();
 });
 
-test("balance route shows private balance", async ({ page }) => {
+test("balance route redirects to Account wallet", async ({ page }) => {
   await page.goto("/balance");
-  await expect(page.getByRole("heading", { level: 1, name: "Private balance" })).toBeVisible();
+  await expect(page).toHaveURL(/\/account\?tab=wallet/);
+  await expect(page.getByRole("heading", { level: 1, name: "Account" })).toBeVisible();
 });
 
 test("withdraw route redirects to Claim", async ({ page }) => {
@@ -62,9 +63,11 @@ test.describe("Mainnet mode isolation", () => {
     for (const source of ["ethereum", "arbitrum", "base", "solana", "stellar"]) {
       await expect(page.getByTestId(`source-${source}`)).toBeDisabled();
     }
-    await expect(page.getByTestId("source-starknet")).toBeEnabled();
+    // Mainnet Starknet escrow is intentionally unavailable until the verified
+    // router/pool/indexer/evidence gate passes; do not make a route selectable
+    // merely because Ready's standalone private pool is available.
+    await expect(page.getByTestId("source-starknet")).toBeDisabled();
     await expect(page.getByTestId("handle-input")).toBeVisible();
-    await expect(page.getByText(/selected amount plus a private-fee reserve/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /^Shield / })).toHaveCount(0);
     await expect(page.getByTestId("connect-source")).toContainText("Connect Ready wallet");
   });
@@ -76,6 +79,10 @@ test.describe("Mainnet mode isolation", () => {
     });
     await page.goto("/inbox");
     await expect(page.getByText("Inbox is not available on Mainnet")).toBeVisible();
+    await expect(page.getByRole("link", { name: "View Mainnet balance" })).toHaveAttribute(
+      "href",
+      "/account?tab=wallet",
+    );
     expect(testnetReads).toEqual([]);
   });
 

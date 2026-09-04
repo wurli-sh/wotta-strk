@@ -8,6 +8,7 @@ import {
   type RouteRow,
 } from "@/components/SourceChips";
 import type { RouteManifest } from "@/lib/wotta/product-session";
+import type { NetworkMode } from "@/lib/network-mode";
 
 export type RoutesHealth = "loading" | "ready" | "waking";
 
@@ -40,7 +41,7 @@ function dismissRouteHealthToast(): void {
   toast.dismiss(ROUTE_HEALTH_TOAST_ID);
 }
 
-export function useRoutesHealth(enabled = true) {
+export function useRoutesHealth(network: NetworkMode, enabled = true) {
   const [routes, setRoutes] = useState<RouteRow[]>(() => buildSourceRoutes());
   const [routesHealth, setRoutesHealth] = useState<RoutesHealth>("loading");
   const [retryNonce, setRetryNonce] = useState(0);
@@ -71,6 +72,9 @@ export function useRoutesHealth(enabled = true) {
       clearRouteToast();
       return;
     }
+    setRoutes(buildSourceRoutes());
+    setRoutesHealth("loading");
+    startedAt.current = Date.now();
     let active = true;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (startedAt.current == null) startedAt.current = Date.now();
@@ -81,6 +85,7 @@ export function useRoutesHealth(enabled = true) {
       try {
         const manifest = await apiFetch<RouteManifest>("/v1/routes", {
           suppressServiceStatus: true,
+          network,
         });
         if (!active) return;
         setRoutes(buildSourceRoutes(manifest.routes));
@@ -108,7 +113,7 @@ export function useRoutesHealth(enabled = true) {
       if (retryTimer) clearTimeout(retryTimer);
       clearRouteToast();
     };
-  }, [enabled, retryNonce, scheduleRouteToast, clearRouteToast]);
+  }, [network, enabled, retryNonce, scheduleRouteToast, clearRouteToast]);
 
   const retryRoutesHealth = useCallback(() => {
     startedAt.current = Date.now();

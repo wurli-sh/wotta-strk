@@ -44,7 +44,7 @@ Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
 
 | Resource | Value |
 | -------- | ----- |
-| Frontend | [wotta.vercel.app](https://wotta.vercel.app) — `/` · `/send` · `/inbox` · `/account` · `/balance` · `/claim` |
+| Frontend | [wotta.vercel.app](https://wotta.vercel.app) — `/` · `/send` · `/inbox` · `/account` · `/claim` |
 | Testnet API | [wotta-api-testnet.onrender.com](https://wotta-api-testnet.onrender.com) |
 | Mainnet API | [wotta-api-mainnet.onrender.com](https://wotta-api-mainnet.onrender.com) |
 | Settlement network (testnet) | Starknet Sepolia (`SN_SEPOLIA`) |

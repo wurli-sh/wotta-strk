@@ -18,6 +18,9 @@ import { claimPrivateFund } from "@/lib/wotta/privacy-flow";
 import { createBrowserProductSession } from "@/lib/wotta/product-session";
 import { connectReady } from "@/lib/wotta/ready";
 import { beginNetworkOperation } from "@/lib/network-operations";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { starkscanTransactionUrl } from "@/lib/network-mode";
+import { submitMainnetEscrowClaim } from "@/lib/wotta/mainnet-privacy";
 
 type ClaimRow = {
   noteId: string;
@@ -58,6 +61,7 @@ type Props = {
 };
 
 export function ClaimView({ embedded = false, noteId = null }: Props) {
+  const { mode } = useNetworkMode();
   const { vault } = usePrivacyVault();
   const confettiRef = useRef<ConfettiRef>(null);
   const [claim, setClaim] = useState<ClaimRow | null>(null);
@@ -70,7 +74,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
 
   const loadFromVault = useCallback(async () => {
     if (!vault) return;
-    const operation = beginNetworkOperation("testnet");
+    const operation = beginNetworkOperation(mode);
     setLoading(true);
     setError(null);
     try {
@@ -89,7 +93,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       operation.finish();
       setLoading(false);
     }
-  }, [noteId, vault]);
+  }, [mode, noteId, vault]);
 
   useEffect(() => {
     void (async () => {
@@ -116,28 +120,32 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       toast.error("Unlock your inbox from Inbox first");
       return;
     }
-    const operation = beginNetworkOperation("testnet", { blocksNetworkSwitch: true });
+    const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     setBusy(true);
     setError(null);
     try {
       setPhase("connecting");
-      const connected = await connectReady();
-      const baseConfig = directPrivacyConfig();
-      if (!vault.state.identityAddress) {
-        throw new Error("Register your private identity from Account before claiming");
-      }
-      const transfers = createPrivacyClient(
-        vault.state.identityAddress,
-        BigInt(vault.state.viewingKey),
-        { ...baseConfig, escrow: claim.escrow },
-      );
-      const hash = await claimPrivateFund(
-        connected.account,
-        transfers,
-        { ...baseConfig, escrow: claim.escrow },
-        claim.claimSecret,
-        (next) => setPhase(next),
-      );
+      const connected = await connectReady(mode);
+      const hash = mode === "mainnet"
+        ? await submitMainnetEscrowClaim(connected.account, claim, operation.signal)
+        : await (async () => {
+            const baseConfig = directPrivacyConfig();
+            if (!vault.state.identityAddress) {
+              throw new Error("Register your private identity from Account before claiming");
+            }
+            const transfers = createPrivacyClient(
+              vault.state.identityAddress,
+              BigInt(vault.state.viewingKey),
+              { ...baseConfig, escrow: claim.escrow },
+            );
+            return claimPrivateFund(
+              connected.account,
+              transfers,
+              { ...baseConfig, escrow: claim.escrow },
+              claim.claimSecret,
+              (next) => setPhase(next),
+            );
+          })();
       operation.assertActive();
       setTransactionHash(hash);
       setPhase("complete");
@@ -176,7 +184,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
               <Button
                 variant="outline"
                 className="w-full"
-                href={`https://sepolia.voyager.online/tx/${transactionHash}`}
+                href={starkscanTransactionUrl(mode, transactionHash)}
                 target="_blank"
                 rel="noreferrer"
               >

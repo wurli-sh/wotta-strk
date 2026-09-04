@@ -135,7 +135,8 @@ function AccountContent() {
     const raw = params.get("tab");
     if (raw !== "balance" && raw !== "identity") return;
     const query = new URLSearchParams(params.toString());
-    query.delete("tab");
+    if (raw === "balance") query.set("tab", "wallet");
+    else query.delete("tab");
     router.replace(query.size ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });

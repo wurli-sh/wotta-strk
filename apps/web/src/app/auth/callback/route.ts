@@ -12,7 +12,6 @@ const ALLOWED = new Set([
   "/c",
   "/privacy",
   "/withdraw",
-  "/balance",
 ]);
 
 function safeNext(next: string | null): string {
@@ -20,6 +19,7 @@ function safeNext(next: string | null): string {
   if (!next.startsWith("/") || next.startsWith("//")) return "/inbox";
   const path = next.split("?")[0] ?? next;
   if (path === "/register") return "/account?tab=wallet&setup=wallet";
+  if (path === "/balance") return "/account?tab=wallet";
   if (ALLOWED.has(path) || path.startsWith("/account") || path.startsWith("/send")) {
     return next;
   }

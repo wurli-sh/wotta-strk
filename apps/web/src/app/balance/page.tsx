@@ -1,5 +1,5 @@
-import { BalancePage } from "@/features/balance/BalancePage";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <BalancePage />;
+  redirect("/account?tab=wallet");
 }

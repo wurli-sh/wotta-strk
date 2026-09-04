@@ -3,7 +3,9 @@ import { constants, type WalletAccountV6 } from "starknet";
 import {
   MAINNET_USDC_AMOUNT,
   MAINNET_USDC_PRIVACY_FEE_RESERVE,
+  buildEscrowClaimActions,
   mainnetActions,
+  mainnetEscrowClaimActions,
   mainnetShieldedTransferActions,
   mainnetPrivacyConfig,
   readMainnetPrivateBalance,
@@ -30,6 +32,25 @@ describe("Ready-managed mainnet privacy", () => {
     expect(mainnetActions("shield")[0]).toMatchObject({ type: "deposit", amount: "0x186a0" });
     expect(mainnetActions("transfer", recipient)[0]).toMatchObject({ type: "transfer", amount: "0x186a0", recipient });
     expect(mainnetActions("withdraw", recipient)[0]).toMatchObject({ type: "withdraw", amount: "0x186a0", recipient });
+  });
+
+  it("builds escrow claim as an OPEN note followed by the existing claim invoke", () => {
+    expect(buildEscrowClaimActions("0x1", "0x2", "0x3", "0x4")).toEqual([
+      { type: "transfer", token: "0x1", amount: "OPEN", recipient: "0x2" },
+      {
+        type: "invoke",
+        contract: "0x3",
+        calldata: ["0x2", "0x0", "0x0", "0x0", "0x0", "0x4", "${openNoteIds[0]}", "0x0"],
+      },
+    ]);
+  });
+
+  it("rejects mainnet escrow claims until the Wotta escrow manifest is verified", () => {
+    expect(() => mainnetEscrowClaimActions({
+      recipient: "0x2",
+      escrow: { address: "0x3", classHash: "0x4", denomination: 1_000_000n },
+      claimSecret: "0x5",
+    })).toThrow("mainnet_escrow_manifest_not_verified");
   });
 
   it("bundles the selected transfer with a private-fee reserve in order", () => {

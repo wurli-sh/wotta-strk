@@ -87,7 +87,9 @@ export function createBrowserProductSession(): ProductSession {
     network,
     supabaseUrl,
     supabasePublishableKey,
-    solanaRpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
+    solanaRpcUrl: network === "mainnet"
+      ? (process.env.NEXT_PUBLIC_SOLANA_MAINNET_RPC_URL ?? "")
+      : (process.env.NEXT_PUBLIC_SOLANA_TESTNET_RPC_URL ?? process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com"),
     stellarRpcUrl: process.env.NEXT_PUBLIC_STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org",
   });
   browserProductSessions[network] = session;
@@ -118,7 +120,7 @@ type ClaimEnvelope = {
   escrow: string;
   denomination: Denomination;
   expiresAt: string;
-  chainId: "SN_SEPOLIA";
+  chainId: "SN_MAIN" | "SN_SEPOLIA";
 };
 
 export class WottaProductSession {
@@ -299,19 +301,21 @@ export class WottaProductSession {
     return descriptor.recipientPrivateIdentityAddress;
   }
 
-  async fundFromStarknetPublic(input: {
+  async fundFromStarknetEscrow(input: {
     denomination: Denomination;
     recipient: string;
     publicRefundRecipient: string;
     linkedReadyAddress: string;
+    privateDelivery?: boolean;
     onStage?: (stage: FundingStage) => void;
     onRecovery?: (recovery: { claimSecret: string; escrow: string; expiresAt: string }) => void;
   }): Promise<{ intentId: string; sourceTxHash: string; sourceAccount: string; claimSecret: string; escrow: string; expiresAt: string; escrowed: true }> {
     const recipient = recipientIdentifier(input.recipient);
     input.onStage?.("resolving");
     const routes = await this.request<RouteManifest>("/v1/routes");
-    const route = routes.routes.find((candidate) => candidate.id === "starknet-public");
-    if (!route?.enabled) throw new Error(`Cross-chain route unavailable: ${route?.reason ?? "not configured"}`);
+    const routeId = this.config.network === "mainnet" || input.privateDelivery ? "starknet-private" : "starknet-public";
+    const route = routes.routes.find((candidate) => candidate.id === routeId);
+    if (!route?.enabled) throw new Error(`Starknet escrow route unavailable: ${route?.reason ?? "not configured"}`);
     const escrow = routes.escrows.find((candidate) => candidate.denomination === input.denomination);
     if (!escrow) throw new Error("Verified denomination escrow is unavailable");
     const resolved = await this.request<{ descriptor: RecipientDescriptor }>("/v1/resolve", {
@@ -322,9 +326,12 @@ export class WottaProductSession {
       ? resolved.descriptor.inboxEncryptionPublicKey
       : routes.pendingDeliveryPublicKey;
     if (!recipientKey) throw new Error("Recipient inbox key is unavailable");
+    if (routeId === "starknet-private" && !resolved.descriptor.registered) {
+      throw new Error("Private escrow delivery requires a registered recipient inbox");
+    }
 
     input.onStage?.("connecting_source");
-    const connected = await connectReady();
+    const connected = await connectReady(this.config.network);
     if (BigInt(connected.address) !== BigInt(input.linkedReadyAddress)) {
       throw new Error("Connect the Ready account linked to this Wotta profile");
     }
@@ -332,13 +339,14 @@ export class WottaProductSession {
     const intentId = crypto.randomUUID();
     const claimSecret = randomFelt();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString();
-    const claimHash = computeClaimHash({ chainId: "SN_SEPOLIA", poolAddress: escrow.address, secret: claimSecret });
+    const destinationChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+    const claimHash = computeClaimHash({ chainId: destinationChainId, poolAddress: escrow.address, secret: claimSecret });
     const intent = {
       id: intentId,
-      mode: "standard" as const,
+      mode: routeId === "starknet-private" ? "private" as const : "standard" as const,
       deliveryKind: resolved.descriptor.registered ? "registered" as const : "pending" as const,
       denomination: input.denomination,
-      routeId: "starknet-public" as const,
+      routeId,
       claimHash,
       publicRefundRecipient: input.publicRefundRecipient,
       expiresAt,
@@ -362,7 +370,7 @@ export class WottaProductSession {
       escrow: escrow.address,
       denomination: input.denomination,
       expiresAt,
-      chainId: "SN_SEPOLIA",
+      chainId: destinationChainId,
     } satisfies ClaimEnvelope, recipientKey);
     await this.request(`/v1/intents/${intentId}/delivery`, {
       method: "POST",
@@ -411,8 +419,18 @@ export class WottaProductSession {
     recipient: string;
     publicRefundRecipient: string;
     onStage?: (stage: FundingStage) => void;
+    onSourceTxHash?: (txHash: string) => void;
     onRecovery?: (recovery: { claimSecret: string; escrow: string; expiresAt: string }) => void;
-  }): Promise<{ intentId: string; sourceTxHash: string; sourceAccount: string; claimSecret: string; escrow: string; expiresAt: string; escrowed: true }> {
+  }): Promise<{
+    intentId: string;
+    sourceTxHash: string;
+    destinationTxHash?: string;
+    sourceAccount: string;
+    claimSecret: string;
+    escrow: string;
+    expiresAt: string;
+    escrowed: true;
+  }> {
     const recipient = recipientIdentifier(input.recipient);
     input.onStage?.("resolving");
     const routes = await this.request<RouteManifest>("/v1/routes");
@@ -431,15 +449,19 @@ export class WottaProductSession {
 
     input.onStage?.("connecting_source");
     await requireSourceWallet(input.route);
+    if (input.route === "solana" && !this.config.solanaRpcUrl) {
+      throw new Error("Solana RPC is not configured for this network");
+    }
     const sourceAccount = input.route === "solana"
       ? await connectSolanaSource()
       : input.route === "stellar"
         ? await connectStellarSource()
-        : await connectEvmSource(input.route);
+        : await connectEvmSource(input.route, this.config.network);
     const intentId = crypto.randomUUID();
     const claimSecret = randomFelt();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString();
-    const claimHash = computeClaimHash({ chainId: "SN_SEPOLIA", poolAddress: escrow.address, secret: claimSecret });
+    const destinationChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+    const claimHash = computeClaimHash({ chainId: destinationChainId, poolAddress: escrow.address, secret: claimSecret });
     const intent = {
       id: intentId,
       mode: "standard" as const,
@@ -471,7 +493,7 @@ export class WottaProductSession {
       escrow: escrow.address,
       denomination: input.denomination,
       expiresAt,
-      chainId: "SN_SEPOLIA",
+      chainId: destinationChainId,
     } satisfies ClaimEnvelope, recipientKey);
     await this.request(`/v1/intents/${intentId}/delivery`, {
       method: "POST",
@@ -516,9 +538,19 @@ export class WottaProductSession {
       headers: { "idempotency-key": crypto.randomUUID() },
       body: JSON.stringify({ expectedVersion: 1, txHash: result.txHash }),
     });
+    input.onSourceTxHash?.(result.txHash);
     input.onStage?.("attesting");
-    await this.waitForEscrow(intentId, undefined, input.onStage);
-    return { intentId, sourceTxHash: result.txHash, sourceAccount, claimSecret, escrow: escrow.address, expiresAt, escrowed: true };
+    const settled = await this.waitForEscrow(intentId, undefined, input.onStage);
+    return {
+      intentId,
+      sourceTxHash: result.txHash,
+      destinationTxHash: settled.onchain_tx_hash,
+      sourceAccount,
+      claimSecret,
+      escrow: escrow.address,
+      expiresAt,
+      escrowed: true,
+    };
   }
 
   async intent(intentId: string) {
@@ -595,7 +627,8 @@ export class WottaProductSession {
       } catch {
         continue;
       }
-      if (payload.v !== 1 || payload.chainId !== "SN_SEPOLIA" || payload.intentId !== note.intent_id) continue;
+      const expectedChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+      if (payload.v !== 1 || payload.chainId !== expectedChainId || payload.intentId !== note.intent_id) continue;
       if (Date.parse(payload.expiresAt) <= Date.now()) continue;
       const escrow = routes.escrows.find((candidate) =>
         candidate.denomination === payload.denomination && sameFelt(candidate.address, payload.escrow));

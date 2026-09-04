@@ -14,7 +14,7 @@ function PrivacyContent() {
       <div className="space-y-8" data-testid="privacy-page">
         <p className="text-sm leading-relaxed text-muted-foreground">
           {mode === "mainnet"
-            ? "Mainnet mode uses real funds and only Ready’s wallet-managed live STRK20 pool. It supports allowlisted USDC shield amounts, registered-recipient private transfer, and public withdrawal. The system is unaudited; use only the minimum demo funds."
+            ? "Mainnet private send uses a public fixed-denomination USDC deposit into a verified Wotta escrow, encrypted inbox delivery, and a Ready/STRK20 claim into the recipient’s private balance. Shield and withdraw remain wallet-managed STRK20 actions. The system is unaudited; use only the minimum demo funds."
             : "Testnet beta uses public source testnets, Starknet Sepolia contracts, the Starknet privacy SDK, and a hosted prover. The system is unaudited and is not suitable for meaningful funds."}
         </p>
 
@@ -93,7 +93,7 @@ function PrivacyContent() {
             </li>
             <li>
               {mode === "mainnet"
-                ? "Not audited production infrastructure: Mainnet remains limited to Ready’s direct Starknet private route and allowlisted amounts."
+                ? "Not audited production infrastructure: Mainnet private send stays gated on verified escrow/privacy manifests and is escrow → inbox → claim, not a direct private-balance transfer."
                 : "Not a production deployment: contracts, relayers, adapters, and the hosted prover require independent audit and retained live test evidence before broader mainnet use."}
             </li>
           </ul>
