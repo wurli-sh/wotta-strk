@@ -1,6 +1,9 @@
-export function formatUsdc(value: bigint): string {
-  const whole = value / 1_000_000n;
-  const fraction = (value % 1_000_000n)
+/** Integer-only USDC formatter (6 decimals). Never use Number for money. */
+export function formatUsdc(value: bigint | string | number): string {
+  const amount = typeof value === "bigint" ? value : BigInt(value);
+  if (amount < 0n) throw new Error("invalid_usdc_amount");
+  const whole = amount / 1_000_000n;
+  const fraction = (amount % 1_000_000n)
     .toString()
     .padStart(6, "0")
     .replace(/0+$/, "");
