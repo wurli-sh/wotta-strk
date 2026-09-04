@@ -126,7 +126,7 @@ function mainnetPrivacyRegistrationRequired(): Error {
   return new Error("mainnet_privacy_registration_required");
 }
 
-async function withBalanceReadTimeout<T>(request: Promise<T>): Promise<T> {
+async function withBalanceReadTimeout<T>(request: Promise<T>, timeoutMs = READY_BALANCE_TIMEOUT_MS): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -134,7 +134,7 @@ async function withBalanceReadTimeout<T>(request: Promise<T>): Promise<T> {
       new Promise<never>((_, reject) => {
         timeout = setTimeout(
           () => reject(new Error("balance_check_unresponsive")),
-          READY_BALANCE_TIMEOUT_MS,
+          timeoutMs,
         );
       }),
     ]);
@@ -150,11 +150,17 @@ export async function assertMainnetPrivacyRuntime(account: WalletAccountV6): Pro
   if (!sameFelt(classHash, config.poolClassHash)) throw new Error("mainnet_pool_class_mismatch");
 }
 
-export async function readMainnetPrivateBalance(account: WalletAccountV6): Promise<bigint> {
+export async function readMainnetPrivateBalance(
+  account: WalletAccountV6,
+  options?: { timeoutMs?: number },
+): Promise<bigint> {
   const config = mainnetPrivacyConfig();
   let entries;
   try {
-    entries = await withBalanceReadTimeout(account.strk20Balances([config.usdc]));
+    entries = await withBalanceReadTimeout(
+      account.strk20Balances([config.usdc]),
+      options?.timeoutMs ?? READY_BALANCE_TIMEOUT_MS,
+    );
   } catch (error) {
     // The Wallet API has no dapp registration method. Until the user enables
     // Shielded tokens in Ready, an unregistered account has no private balance.

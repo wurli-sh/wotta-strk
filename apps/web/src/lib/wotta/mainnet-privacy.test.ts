@@ -45,12 +45,12 @@ describe("Ready-managed mainnet privacy", () => {
     ]);
   });
 
-  it("rejects mainnet escrow claims until the Wotta escrow manifest is verified", () => {
+  it("rejects an escrow claim that is not one of the verified mainnet pools", () => {
     expect(() => mainnetEscrowClaimActions({
       recipient: "0x2",
       escrow: { address: "0x3", classHash: "0x4", denomination: 1_000_000n },
       claimSecret: "0x5",
-    })).toThrow("mainnet_escrow_manifest_not_verified");
+    })).toThrow("mainnet_escrow_not_verified");
   });
 
   it("bundles the selected transfer with a private-fee reserve in order", () => {

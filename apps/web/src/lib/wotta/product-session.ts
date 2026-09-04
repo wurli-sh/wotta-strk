@@ -442,6 +442,9 @@ export class WottaProductSession {
       method: "POST",
       body: JSON.stringify(recipient),
     });
+    if (this.config.network === "mainnet" && !resolved.descriptor.registered) {
+      throw new Error("Private escrow delivery requires a registered recipient inbox");
+    }
     const recipientKey = resolved.descriptor.registered
       ? resolved.descriptor.inboxEncryptionPublicKey
       : routes.pendingDeliveryPublicKey;
@@ -610,12 +613,21 @@ export class WottaProductSession {
         nonce: string;
         sender_public_key: string;
         algorithm: "x25519-xsalsa20-poly1305";
-        intent?: { state?: string; onchain_state?: string };
+        intent?: { state?: string; onchain_state?: string; denomination?: string };
       }> }>("/v1/notes"),
     ]);
+    const expectedChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+    let targetSeen = false;
+    let targetFailure: string | null = null;
+
     for (const note of inbox.notes) {
       if (noteId && note.id !== noteId) continue;
-      if (note.intent && !["funded", "delivered", "claimable"].includes(note.intent.onchain_state ?? note.intent.state ?? "")) continue;
+      if (noteId) targetSeen = true;
+      const onchain = note.intent?.onchain_state ?? note.intent?.state ?? "";
+      if (note.intent && !["funded", "delivered", "claimable"].includes(onchain)) {
+        if (noteId) targetFailure = `This payment isn’t claimable yet (status: ${onchain || "unknown"}).`;
+        continue;
+      }
       let payload: ClaimEnvelope;
       try {
         payload = decryptEnvelope<ClaimEnvelope>({
@@ -625,14 +637,38 @@ export class WottaProductSession {
           ephemeralPublicKey: note.sender_public_key,
         }, inboxSecretKey);
       } catch {
+        if (noteId) {
+          targetFailure =
+            "This payment was encrypted to a different inbox key. Re-link won’t recover it — open Claim on the device/browser that originally linked Ready, or ask for a new send.";
+        }
         continue;
       }
-      const expectedChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
-      if (payload.v !== 1 || payload.chainId !== expectedChainId || payload.intentId !== note.intent_id) continue;
-      if (Date.parse(payload.expiresAt) <= Date.now()) continue;
+      if (payload.v !== 1 || payload.intentId !== note.intent_id) {
+        if (noteId) targetFailure = "This payment’s claim envelope is invalid.";
+        continue;
+      }
+      if (payload.chainId !== expectedChainId) {
+        if (noteId) {
+          targetFailure = payload.chainId === "SN_MAIN"
+            ? "This payment is on Mainnet — switch Wotta to Mainnet, then claim again."
+            : "This payment is on Testnet — switch Wotta to Testnet, then claim again.";
+        }
+        continue;
+      }
+      if (Date.parse(payload.expiresAt) <= Date.now()) {
+        if (noteId) targetFailure = "This payment’s claim window expired.";
+        continue;
+      }
       const escrow = routes.escrows.find((candidate) =>
-        candidate.denomination === payload.denomination && sameFelt(candidate.address, payload.escrow));
-      if (!escrow) continue;
+        String(candidate.denomination) === String(payload.denomination)
+        && sameFelt(candidate.address, payload.escrow));
+      if (!escrow) {
+        if (noteId) {
+          targetFailure =
+            "This payment’s escrow isn’t available on the current network API. Confirm Mainnet/Testnet matches the send.";
+        }
+        continue;
+      }
       await this.request(`/v1/notes/${note.id}/delivered`, { method: "POST" });
       return {
         noteId: note.id,
@@ -641,6 +677,11 @@ export class WottaProductSession {
         intentId: payload.intentId,
       };
     }
+
+    if (noteId && !targetSeen) {
+      throw new Error("That payment isn’t in this inbox — refresh Inbox or confirm you’re on the right network.");
+    }
+    if (targetFailure) throw new Error(targetFailure);
     throw new Error("No unexpired claim for a verified Wotta private escrow was found");
   }
 

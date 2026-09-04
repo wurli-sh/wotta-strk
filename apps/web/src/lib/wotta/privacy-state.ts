@@ -125,7 +125,7 @@ export async function unlockPrivacyVault(
 /** Restore an inbox unlock from this browser tab without re-signing Ready. */
 export async function restorePrivacyVaultFromSession(
   wallet: string,
-  config: DirectPrivacyConfig,
+  config: PrivacyVaultUnlockConfig & { identityClassHash?: string },
 ): Promise<PrivacyVault | null> {
   const signature = readUnlockSession(wallet, config.poolAddress);
   if (!signature) return null;
@@ -133,7 +133,10 @@ export async function restorePrivacyVaultFromSession(
   if (!localStorage.getItem(storageKey)) return null;
   try {
     const vault = await vaultFromSignature(wallet, config.poolAddress, signature);
-    if (isStalePrivacyState(vault.state, config)) {
+    if (
+      config.identityClassHash
+      && isStalePrivacyState(vault.state, { identityClassHash: config.identityClassHash })
+    ) {
       clearPrivacyVaultLocalState(wallet, config.poolAddress);
       return null;
     }
@@ -161,7 +164,7 @@ export function clearAllPrivacyVaultLocalState(): void {
 
 export function isStalePrivacyState(
   state: PrivacyState | LegacyPrivacyState,
-  config: DirectPrivacyConfig,
+  config: { identityClassHash: string },
 ): boolean {
   if (state.version !== 2) return true;
   if (!state.identityAddress) return false;

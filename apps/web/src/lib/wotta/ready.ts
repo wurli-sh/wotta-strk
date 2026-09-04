@@ -38,12 +38,6 @@ function findReadyWallet() {
   return createStore().getWallets().find((candidate) => /ready/i.test(candidate.name));
 }
 
-function connectedWalletAddress(wallet: unknown): string | undefined {
-  const accounts = (wallet as { accounts?: ReadonlyArray<{ address?: unknown }> }).accounts;
-  const address = accounts?.[0]?.address;
-  return typeof address === "string" && /^0x[0-9a-f]+$/i.test(address) ? address : undefined;
-}
-
 async function withReadyConnectTimeout<T>(request: Promise<T>): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -172,10 +166,12 @@ export async function connectReady(mode: NetworkMode = "testnet"): Promise<Conne
   if (!rpcUrl) throw new Error(`${mode === "mainnet" ? "Mainnet" : "Sepolia"} Starknet RPC is not configured`);
   const wallet = findReadyWallet();
   if (!wallet) throw new Error("Ready wallet was not found. Install or unlock Ready and retry");
-  const connectedAddress = connectedWalletAddress(wallet);
-  const account = connectedAddress
-    ? new WalletAccountV6({ provider: { nodeUrl: rpcUrl }, walletProvider: wallet as never, address: connectedAddress })
-    : await withReadyConnectTimeout(WalletAccountV6.connect({ nodeUrl: rpcUrl }, wallet as never));
+  // Always go through WalletAccountV6.connect. Reusing discovery `accounts[0]`
+  // after SPA navigations leaves a stale provider where Wallet API calls
+  // (especially strk20Balances) hang until the timeout.
+  const account = await withReadyConnectTimeout(
+    WalletAccountV6.connect({ nodeUrl: rpcUrl }, wallet as never),
+  );
   await ensureReadyChain(account, mode);
   const supportedWalletApi = (await walletV6.supportedWalletApi(wallet as never)).map(String);
   if (mode === "mainnet" && !supportedWalletApi.includes("0.10.3")) {
