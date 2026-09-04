@@ -37,6 +37,12 @@ services:
         sync: false
       - key: STARKNET_MAINNET_RPC_URL
         sync: false
+      - key: STARKNET_FALLBACK_RPC_URL
+        sync: false
+      - key: BASE_MAINNET_RPC_URL
+        sync: false
+      - key: SOLANA_MAINNET_RPC_URL
+        sync: false
       - key: RESOLVER_SIGNING_KEY
         sync: false
       - key: IDENTITY_LOOKUP_KEY
@@ -78,6 +84,8 @@ services:
         value: https://iris-api.circle.com
       - key: CCTP_ADMITTED_ROUTES
         value: ""
+      - key: STARKNET_PRIVATE_ADMITTED
+        value: "false"
       - key: LOG_LEVEL
         value: info
       - key: API_ORIGIN
@@ -91,6 +99,12 @@ services:
       - key: STARKNET_RPC_URL
         sync: false
       - key: STARKNET_MAINNET_RPC_URL
+        sync: false
+      - key: STARKNET_FALLBACK_RPC_URL
+        sync: false
+      - key: BASE_MAINNET_RPC_URL
+        sync: false
+      - key: SOLANA_MAINNET_RPC_URL
         sync: false
       - key: RESOLVER_SIGNING_KEY
         sync: false

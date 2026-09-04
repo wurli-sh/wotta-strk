@@ -21,6 +21,7 @@ COPY packages/crypto packages/crypto
 COPY packages/adapters packages/adapters
 COPY apps/api apps/api
 COPY deployments deployments
+COPY evidence evidence
 
 WORKDIR /app/apps/api
 

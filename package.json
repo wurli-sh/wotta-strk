@@ -14,6 +14,8 @@
     "test": "pnpm -r --no-bail --filter @wotta/shared --filter @wotta/crypto --filter @wotta/adapters --filter @wotta/wallet-smoke --filter @wotta/api --filter @wotta/web run test",
     "contracts:build": "pnpm --filter @wotta/contracts build",
     "contracts:declare": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/declare.ts",
+    "contracts:sync-manifest": "cd contracts && node --env-file=../.env --experimental-strip-types scripts/sync-mainnet-manifest.ts",
+    "contracts:preflight": "pnpm contracts:sync-manifest && pnpm contracts:build && pnpm test:contracts && pnpm contracts:declare",
     "test:contracts": "pnpm --filter @wotta/contracts test",
     "smoke:wallet-api": "bash scripts/e2e/wallet-api-smoke.sh",
     "smoke:phase1-live": "node --experimental-strip-types scripts/smoke/phase1-live-smoke.ts",
@@ -39,6 +41,8 @@
     "check:phase1": "node --experimental-strip-types scripts/gates/phase1-check.ts",
     "check:phase1:sepolia": "node --experimental-strip-types scripts/gates/phase1-check.ts --sepolia",
     "check:phase2:sepolia": "node --experimental-strip-types scripts/gates/phase2-check.ts",
+    "check:phase3": "node --experimental-strip-types scripts/gates/phase3-check.ts",
+    "check:phase4": "node --experimental-strip-types scripts/gates/phase4-check.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
