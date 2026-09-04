@@ -27,7 +27,7 @@ create table public.wallet_challenges (
 );
 create table public.intents (
   id uuid primary key, owner_id uuid not null references public.profiles(id), mode text not null check(mode in ('standard','private')),
-  delivery_kind text not null check(delivery_kind in ('registered','pending','direct')), denomination numeric(78,0) not null check(denomination in (1000000,10000000,50000000,100000000)),
+  delivery_kind text not null check(delivery_kind in ('registered','pending','direct')), denomination numeric(78,0) not null check(denomination in (100000,1000000,10000000,50000000,100000000)),
   route_id text not null, claim_hash text not null unique, refund_hash text unique, public_refund_recipient text, expires_at timestamptz not null,
   state text not null default 'draft', version integer not null default 0, source_tx_hash text, quote jsonb, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
