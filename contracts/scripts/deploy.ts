@@ -2,7 +2,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Account, RpcProvider, Signer, shortString, stark } from "starknet";
+import { Account, RpcProvider, shortString, stark } from "starknet";
 import {
   deploymentManifestSchema,
   rehashDeploymentManifest,
@@ -15,6 +15,7 @@ import {
   STARKNET_MAINNET_CHAIN_ID,
 } from "./mainnet-constants.ts";
 import { assertMainnetDeployerIdentity, assertMainnetDeployConfig, syncMainnetPilotIdentities } from "./mainnet-preflight.ts";
+import { assertMainnetDeployerSignerReady, createMainnetDeployerAccount } from "./mainnet-rpc.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../..");
@@ -53,22 +54,46 @@ function canDeploy(): { ok: boolean; reason?: string } {
 async function instantiateAccount(): Promise<Account> {
   const rpcUrl = process.env.STARKNET_MAINNET_RPC_URL?.trim();
   if (!rpcUrl) throw new Error("mainnet_blocked:missing STARKNET_MAINNET_RPC_URL");
-  const provider = new RpcProvider({
-    nodeUrl: rpcUrl,
-  });
-  const signer = new Signer(normalizePrivateKey(process.env.STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY!));
-  return new Account({
-    provider,
-    signer,
-    address: process.env.STARKNET_MAINNET_DEPLOYER_ADDRESS!.trim(),
-  });
+  return createMainnetDeployerAccount(rpcUrl);
 }
 
-function normalizePrivateKey(value: string): string {
-  const normalized = value.trim();
-  if (/^[0-9a-fA-F]{64}$/.test(normalized)) return `0x${normalized}`;
-  if (/^0x[0-9a-fA-F]{1,64}$/.test(normalized)) return normalized;
-  throw new Error("invalid STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY");
+/** Record accepted deployments left pending if a process exits while waiting. */
+async function reconcileAcceptedDeployments(manifest: DeploymentManifest, provider: RpcProvider): Promise<boolean> {
+  let changed = false;
+  const acceptedBlock = async (label: string, txHash: string): Promise<number> => {
+    const receipt = await provider.getTransactionReceipt(txHash);
+    if (
+      !("execution_status" in receipt) ||
+      !("finality_status" in receipt) ||
+      receipt.execution_status !== "SUCCEEDED" ||
+      receipt.finality_status !== "ACCEPTED_ON_L2" ||
+      !("block_number" in receipt) ||
+      typeof receipt.block_number !== "number"
+    ) {
+      throw new Error(`mainnet_blocked:${label}_deployment_not_accepted:${txHash}`);
+    }
+    return receipt.block_number;
+  };
+
+  if (
+    manifest.router.address !== "UNDEPLOYED" &&
+    manifest.router.deployTxHash !== "PENDING" &&
+    manifest.router.deployedBlock === "PENDING"
+  ) {
+    manifest.router.deployedBlock = await acceptedBlock("router", manifest.router.deployTxHash);
+    changed = true;
+  }
+  for (let i = 0; i < manifest.pools.length; i++) {
+    const pool = manifest.pools[i]!;
+    if (pool.address !== "UNDEPLOYED" && pool.deployTxHash !== "PENDING" && pool.deployedBlock === "PENDING") {
+      manifest.pools[i] = {
+        ...pool,
+        deployedBlock: await acceptedBlock(`pool_${pool.key}`, pool.deployTxHash),
+      };
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 async function main(): Promise<void> {
@@ -77,7 +102,8 @@ async function main(): Promise<void> {
   const sepolia = JSON.parse(await readFile(path.join(root, "deployments", "sepolia.json"), "utf8")) as { deployer?: { address?: string } };
   assertMainnetDeployerIdentity(process.env, sepolia.deployer?.address ?? "");
   manifest = syncMainnetPilotIdentities(manifest, process.env);
-  await persistManifest(manifest);
+  manifest.generatedAt = new Date().toISOString();
+  manifest.manifestHash = rehashDeploymentManifest(manifest);
   assertMainnetDeployConfig(manifest);
   const deployCheck = canDeploy();
 
@@ -92,8 +118,10 @@ async function main(): Promise<void> {
   if (chainId !== STARKNET_MAINNET_CHAIN_ID) {
     throw new Error(`wrong_network: expected SN_MAIN, got ${chainId}`);
   }
+  await assertMainnetDeployerSignerReady(account);
 
-  if (process.env.MAINNET_DEPLOY_SUBMIT !== "1") {
+  const submit = process.env.MAINNET_DEPLOY_SUBMIT === "1";
+  if (!submit) {
     process.stdout.write(`${JSON.stringify({
       status: "ok",
       mode: "ready_no_submit",
@@ -108,6 +136,11 @@ async function main(): Promise<void> {
     }, null, 2)}\n`);
     return;
   }
+
+  if (await reconcileAcceptedDeployments(manifest, account.provider)) {
+    manifest.verificationNotes = "Phase 2 deploy reconciliation completed.";
+  }
+  await persistManifest(manifest);
 
   const ownerAddress = manifest.authority.owner;
   if (BigInt(manifest.usdc) !== BigInt(CIRCLE_STARKNET_MAINNET_USDC)) {
@@ -143,12 +176,11 @@ async function main(): Promise<void> {
     notes.push(`router deployment submitted: ${routerTxHash}`);
     manifest.verificationNotes = notes.join(" ");
     await persistManifest(manifest);
-    await (account as unknown as { waitForTransaction(h: string): Promise<unknown> })
-      .waitForTransaction(routerTxHash);
-    const block = await (
-      account as unknown as { provider: { getTransactionReceipt(h: string): Promise<{ block_number?: number }> } }
-    ).provider.getTransactionReceipt(routerTxHash);
-    manifest.router.deployedBlock = block.block_number ?? "PENDING";
+    await account.provider.waitForTransaction(routerTxHash);
+    const block = await account.provider.getTransactionReceipt(routerTxHash);
+    manifest.router.deployedBlock = "block_number" in block && typeof block.block_number === "number"
+      ? block.block_number
+      : "PENDING";
     notes.push(`router deployed at ${routerAddress}`);
     manifest.verificationNotes = notes.join(" ");
     await persistManifest(manifest);
@@ -189,14 +221,13 @@ async function main(): Promise<void> {
       notes.push(`pool ${pool.key} deployment submitted: ${poolTxHash}`);
       manifest.verificationNotes = notes.join(" ");
       await persistManifest(manifest);
-      await (account as unknown as { waitForTransaction(h: string): Promise<unknown> })
-        .waitForTransaction(poolTxHash);
-      const poolBlock = await (
-        account as unknown as { provider: { getTransactionReceipt(h: string): Promise<{ block_number?: number }> } }
-      ).provider.getTransactionReceipt(poolTxHash);
+      await account.provider.waitForTransaction(poolTxHash);
+      const poolBlock = await account.provider.getTransactionReceipt(poolTxHash);
       manifest.pools[i] = {
         ...manifest.pools[i]!,
-        deployedBlock: poolBlock.block_number ?? "PENDING",
+        deployedBlock: "block_number" in poolBlock && typeof poolBlock.block_number === "number"
+          ? poolBlock.block_number
+          : "PENDING",
       };
       notes.push(`pool ${pool.key} deployed at ${poolAddress}`);
       manifest.verificationNotes = notes.join(" ");

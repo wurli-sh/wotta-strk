@@ -48,7 +48,15 @@ test("deploy config requires only concrete constructor inputs", async () => {
   const openOwner = { ...value, authority: { ...value.authority, owner: "PENDING" } };
   openOwner.manifestHash = rehashDeploymentManifest(openOwner);
   assert.throws(() => assertMainnetDeployConfig(openOwner), /authority_owner_open/);
-  assert.throws(() => assertMainnetDeployConfig(source), /router_declaration_missing/);
+  const undeclared = {
+    ...source,
+    router: { ...source.router, classHash: "UNDECLARED", declareTxHash: "PENDING" },
+    pools: source.pools.map((pool) => source.approvedCctpDenominations.includes(pool.denomination)
+      ? { ...pool, classHash: "UNDECLARED", declareTxHash: "PENDING" }
+      : pool),
+  };
+  undeclared.manifestHash = rehashDeploymentManifest(undeclared);
+  assert.throws(() => assertMainnetDeployConfig(undeclared), /router_declaration_missing/);
 });
 
 test("pilot sync forces owner to equal deployer from env", async () => {
@@ -85,13 +93,14 @@ test("declaration needs no relayer identity but rejects Sepolia deployer reuse",
 });
 
 test("fee helpers cap each declaration and require balance for both bounds", () => {
-  assert.doesNotThrow(() => assertDeclareWithinCeiling("router", 45n * STRK_FRI));
+  assert.doesNotThrow(() => assertDeclareWithinCeiling("router", 50n * STRK_FRI));
   assert.throws(
-    () => assertDeclareWithinCeiling("router", 45n * STRK_FRI + 1n),
+    () => assertDeclareWithinCeiling("router", 50n * STRK_FRI + 1n),
     /router_declare_bound_exceeds_ceiling/,
   );
-  assert.doesNotThrow(() => assertBalanceCoversBounds(80n, [45n, 35n]));
-  assert.throws(() => assertBalanceCoversBounds(79n, [45n, 35n]), /balance_below_declare_bounds/);
+  assert.doesNotThrow(() => assertDeclareWithinCeiling("router", 45n * STRK_FRI + 142_881_000_000_000_000n));
+  assert.doesNotThrow(() => assertBalanceCoversBounds(85n, [50n, 35n]));
+  assert.throws(() => assertBalanceCoversBounds(84n, [50n, 35n]), /balance_below_declare_bounds/);
   assert.equal(maxFeeForBounds({
     l1_gas: { max_amount: 2n, max_price_per_unit: 3n },
     l1_data_gas: { max_amount: 5n, max_price_per_unit: 7n },

@@ -13,6 +13,7 @@ import {
 import {
   assertDeclareWithinCeiling,
   assertBalanceCoversBounds,
+  assertMainnetDeployerSignerReady,
   assertProviderIsMainnet,
   createMainnetDeployerAccount,
   deployerStrkBalance,
@@ -104,6 +105,9 @@ function buildBaseManifest(existing: DeploymentManifest | null): DeploymentManif
       process.env.WOTTA_STRK20_CLASS_HASH?.trim() ||
       existing?.strk20ClassHash ||
       "UNKNOWN",
+    // Contract declaration must never erase the independently verified Ready
+    // wallet-managed privacy route from the mainnet manifest.
+    walletManagedPrivacy: existing?.walletManagedPrivacy,
     deployer: {
       address:
         process.env.STARKNET_MAINNET_DEPLOYER_ADDRESS?.trim() ||
@@ -204,6 +208,57 @@ async function estimateAndGateDeclare(
   return primaryEstimate;
 }
 
+/**
+ * A process can exit after the sequencer accepts a declaration but before its
+ * confirmation is written. Reconcile that durable on-chain result before a
+ * resumed submission decides what still needs funding or signing.
+ */
+async function reconcileAcceptedDeclarations(
+  manifest: DeploymentManifest,
+  provider: RpcProvider,
+  notes: string[],
+): Promise<boolean> {
+  let changed = false;
+  const acceptedBlock = async (label: string, txHash: string): Promise<number> => {
+    const receipt = await provider.getTransactionReceipt(txHash);
+    if (
+      !("execution_status" in receipt) ||
+      !("finality_status" in receipt) ||
+      receipt.execution_status !== "SUCCEEDED" ||
+      receipt.finality_status !== "ACCEPTED_ON_L2"
+    ) {
+      throw new Error(`mainnet_blocked:${label}_declaration_not_accepted:${txHash}`);
+    }
+    if (!("block_number" in receipt) || typeof receipt.block_number !== "number") {
+      throw new Error(`mainnet_blocked:${label}_declaration_missing_block:${txHash}`);
+    }
+    return receipt.block_number;
+  };
+
+  if (manifest.router.declareTxHash !== "PENDING" && manifest.router.declaredBlock === "PENDING") {
+    manifest.router.declaredBlock = await acceptedBlock("router", manifest.router.declareTxHash);
+    notes.push(`router declaration reconciled: ${manifest.router.declareTxHash}`);
+    changed = true;
+  }
+
+  const pendingPoolTxHashes = [...new Set(
+    manifest.pools
+      .filter((pool) => pool.declareTxHash !== "PENDING" && pool.declaredBlock === "PENDING")
+      .map((pool) => pool.declareTxHash),
+  )];
+  for (const txHash of pendingPoolTxHashes) {
+    const block = await acceptedBlock("pool", txHash);
+    manifest.pools = manifest.pools.map((pool) =>
+      pool.declareTxHash === txHash && pool.declaredBlock === "PENDING"
+        ? { ...pool, declaredBlock: block }
+        : pool,
+    );
+    notes.push(`pool declaration reconciled: ${txHash}`);
+    changed = true;
+  }
+  return changed;
+}
+
 async function main(): Promise<void> {
   await mkdir(path.dirname(manifestPath), { recursive: true });
 
@@ -212,11 +267,13 @@ async function main(): Promise<void> {
   const sepolia = JSON.parse(await readFile(path.join(root, "deployments", "sepolia.json"), "utf8")) as { deployer?: { address?: string } };
   assertMainnetDeployerIdentity(process.env, sepolia.deployer?.address ?? "");
 
-  // Autosync deployer === owner from .env, then rehash before any gate.
+  // Autosync deployer === owner from .env, then rehash. Do not persist before
+  // a declaration is accepted: a bad signer or failed preflight must leave the
+  // deployment manifest byte-for-byte unchanged.
   const synced = syncMainnetPilotIdentities(existing, process.env);
   synced.generatedAt = new Date().toISOString();
   synced.manifestHash = rehashDeploymentManifest(synced);
-  await persistManifest(synced);
+  const submit = process.env.MAINNET_DECLARE_SUBMIT === "1";
   assertMainnetManifest(synced);
 
   const manifest = buildBaseManifest(synced);
@@ -246,19 +303,35 @@ async function main(): Promise<void> {
     `pool artifacts: ${artifacts.pool.path}, ${artifacts.pool.casmPath}`,
   ];
 
-  const submit = process.env.MAINNET_DECLARE_SUBMIT === "1";
   const account = createMainnetDeployerAccount(requireMainnetRpcUrl());
   const provider = account.provider;
   await assertProviderIsMainnet(provider);
+  await assertMainnetDeployerSignerReady(account);
+
+  // Only a submit run writes reconciliation state. Estimate-only must remain
+  // non-mutating, while a resumed submit run must never pay twice.
+  if (submit && await reconcileAcceptedDeclarations(manifest, provider, notes)) {
+    manifest.verificationNotes = notes.join(" ");
+    await persistManifest(manifest);
+  }
 
   const routerBounds = await estimateAndGateDeclare("router", artifacts.router, notes);
   const escrowBounds = await estimateAndGateDeclare("escrow", artifacts.pool, notes);
   const balance = await deployerStrkBalance(account);
-  assertBalanceCoversBounds(balance, [routerBounds.overallFeeFri, escrowBounds.overallFeeFri]);
-  notes.push(`deployer balance ${overallFeeStrk(balance).toFixed(4)} STRK covers both declare bounds`);
+  const outstandingBounds = [
+    ...(manifest.router.declareTxHash === "PENDING" ? [routerBounds.overallFeeFri] : []),
+    ...(manifest.pools.some((pool) => pool.declareTxHash === "PENDING") ? [escrowBounds.overallFeeFri] : []),
+  ];
+  assertBalanceCoversBounds(balance, outstandingBounds);
+  notes.push(
+    `deployer balance ${overallFeeStrk(balance).toFixed(4)} STRK covers ${outstandingBounds.length} remaining declare bound(s)`,
+  );
 
   if (!submit) {
     notes.push("preflight passed; set MAINNET_DECLARE_SUBMIT=1 to submit declarations");
+    notes.push(
+      "Evidence gates (check:phase1 / check:phase3) admit routes after deploy — they do not block this declare step",
+    );
     process.stdout.write(
       JSON.stringify(
         {

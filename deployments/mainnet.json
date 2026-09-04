@@ -3,10 +3,10 @@
   "chainId": "SN_MAIN",
   "network": "mainnet",
   "rpcUrlEnv": "STARKNET_MAINNET_RPC_URL",
-  "manifestHash": "dc0a8114afb0ce564556b7e7fe86179ee1ea8f677320de7eb2f0bd4f75598891",
-  "generatedAt": "2026-09-03T22:35:56.276Z",
-  "verified": false,
-  "verificationNotes": "Wotta contracts remain undeployed. The shared live STRK20 pool and native USDC are pinned for Ready wallet-managed mainnet actions.",
+  "manifestHash": "1860fedb5ec10d3c0540152d28ad3e1dd51bf277580ac3dcb8a3340ce1d021d7",
+  "generatedAt": "2026-09-04T17:06:45.225Z",
+  "verified": true,
+  "verificationNotes": "Mainnet router and approved pools passed on-chain declaration, deployment, receipt, and binding verification. Routes remain evidence-gated.",
   "usdc": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
   "strk20Pool": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
   "strk20ClassHash": "0x67dddd89d80fedadc06b6f160798f94800a4a70164e5a24301cd0d6076b554d",
@@ -30,7 +30,7 @@
     "verificationNotes": "Pool class hash, version 2.0, unpaused state, native USDC, and the 6 STRK apply_actions fee were checked over SN_MAIN RPC. STRK20 actions accept felt-denominated token amounts; the UI allowlists 0.1, 1, 10, 50, and 100 USDC actions, with a mandatory Ready simulate=true preview before every selected-amount write."
   },
   "deployer": {
-    "address": "0x06F2b4B53A111de4b3aD59839144dE0648548f301A94a0E3b921168CA54AC060",
+    "address": "0x0595756A13979DF8C8f7845739603db143294d8016311fC3eC219321c0D44a7c",
     "keySource": "env:STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY"
   },
   "tooling": {
@@ -40,109 +40,126 @@
     "snforge": "0.59.0"
   },
   "authority": {
-    "owner": "0x06F2b4B53A111de4b3aD59839144dE0648548f301A94a0E3b921168CA54AC060"
+    "owner": "0x0595756A13979DF8C8f7845739603db143294d8016311fC3eC219321c0D44a7c"
   },
   "approvedCctpDenominations": [
     "100000",
     "1000000"
   ],
   "router": {
-    "classHash": "UNDECLARED",
-    "compiledClassHash": "UNKNOWN",
-    "address": "UNDEPLOYED",
-    "declareTxHash": "PENDING",
-    "declaredBlock": "PENDING",
-    "deployTxHash": "PENDING",
-    "deployedBlock": "PENDING",
-    "constructorCalldata": [],
+    "classHash": "0x3ce3dca55fb86972e16364404e9a3236e25e8757679c08900b9b4056ea855a5",
+    "compiledClassHash": "0x5beb1aaee8fba1bc8213d3b77f8c10a76f715dd9101c4a657a126509735a6ae",
+    "address": "0x24a2c1a79b97794ed4d143ff0f6f5b05b3569832c85957aa10bc7c3dcc000fd",
+    "declareTxHash": "0x476c9f50e9938c77a6c98db25ca997aaac8cb0b3672c680b38348bb6f06c649",
+    "declaredBlock": 14360610,
+    "deployTxHash": "0x56c8fab0871d43f14f733793b9084d9e10cf5e28c3b8f7edc67f831cb1bee9b",
+    "deployedBlock": 14360685,
+    "constructorCalldata": [
+      "0x0595756A13979DF8C8f7845739603db143294d8016311fC3eC219321c0D44a7c",
+      "0x02EBB5777B6dD8B26ea11D68Fdf1D2c85cD2099335328Be845a28c77A8AEf183",
+      "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
+      "0x07d421B9cA8aA32DF259965cDA8ACb93F7599F69209A41872AE84638B2A20F2a"
+    ],
     "verification": {
-      "status": "pending",
-      "checkedAt": "2026-08-21T17:09:37.088Z",
-      "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+      "status": "verified",
+      "checkedAt": "2026-09-04T17:52:02.897Z",
+      "notes": "Sierra/CASM, receipts, Circle bindings, owner, pause, and source domains verified over SN_MAIN RPC."
     }
   },
   "pools": [
     {
-      "classHash": "UNDECLARED",
-      "compiledClassHash": "UNKNOWN",
-      "address": "UNDEPLOYED",
-      "declareTxHash": "PENDING",
-      "declaredBlock": "PENDING",
-      "deployTxHash": "PENDING",
-      "deployedBlock": "PENDING",
-      "constructorCalldata": [],
+      "classHash": "0x772a183e9cdc803851bd154afd96ee3d830d27c93a40bb9864d04f66dd0fa34",
+      "compiledClassHash": "0x6f294ed6d97e8cf1ea50bfbcb9fdf72ed850fad75e12dba645872bb9bc16ced",
+      "address": "0x656a3300531b45f559e51120b0cb9bcea8c6c4e626ebef6c46c184da08c0a06",
+      "declareTxHash": "0x44c707fed0a82be856172cb27b173c068c9a6be26359d43223e4f5de3d4280",
+      "declaredBlock": 14360633,
+      "deployTxHash": "0x666267a9c3b1895797cccd9462349e3d088e9fef85e5d64143720541b882edf",
+      "deployedBlock": 14360744,
+      "constructorCalldata": [
+        "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+        "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
+        "0x24a2c1a79b97794ed4d143ff0f6f5b05b3569832c85957aa10bc7c3dcc000fd",
+        "100000",
+        "0x534e5f4d41494e"
+      ],
       "verification": {
-        "status": "pending",
-        "checkedAt": "2026-08-21T17:09:37.088Z",
-        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+        "status": "verified",
+        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "notes": "Sierra/CASM, receipts, and all constructor bindings verified over SN_MAIN RPC."
       },
       "key": "pool01",
       "denomination": "100000"
     },
     {
-      "classHash": "UNDECLARED",
-      "compiledClassHash": "UNKNOWN",
-      "address": "UNDEPLOYED",
-      "declareTxHash": "PENDING",
-      "declaredBlock": "PENDING",
-      "deployTxHash": "PENDING",
-      "deployedBlock": "PENDING",
-      "constructorCalldata": [],
+      "classHash": "0x772a183e9cdc803851bd154afd96ee3d830d27c93a40bb9864d04f66dd0fa34",
+      "compiledClassHash": "0x6f294ed6d97e8cf1ea50bfbcb9fdf72ed850fad75e12dba645872bb9bc16ced",
+      "address": "0x41a7424a3779e15d68f7a1da96b7cf95a196563bcfc3ff81eeb8735c4368f0c",
+      "declareTxHash": "0x44c707fed0a82be856172cb27b173c068c9a6be26359d43223e4f5de3d4280",
+      "declaredBlock": 14360633,
+      "deployTxHash": "0x6193e65d315214ce474a9d5a3c776cfd093f23e709ce4be2f4c71ee3602ac68",
+      "deployedBlock": 14360768,
+      "constructorCalldata": [
+        "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+        "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
+        "0x24a2c1a79b97794ed4d143ff0f6f5b05b3569832c85957aa10bc7c3dcc000fd",
+        "1000000",
+        "0x534e5f4d41494e"
+      ],
       "verification": {
-        "status": "pending",
-        "checkedAt": "2026-08-21T17:09:37.088Z",
-        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+        "status": "verified",
+        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "notes": "Sierra/CASM, receipts, and all constructor bindings verified over SN_MAIN RPC."
       },
       "key": "pool1",
       "denomination": "1000000"
     },
     {
-      "classHash": "UNDECLARED",
-      "compiledClassHash": "UNKNOWN",
+      "classHash": "0x772a183e9cdc803851bd154afd96ee3d830d27c93a40bb9864d04f66dd0fa34",
+      "compiledClassHash": "0x6f294ed6d97e8cf1ea50bfbcb9fdf72ed850fad75e12dba645872bb9bc16ced",
       "address": "UNDEPLOYED",
-      "declareTxHash": "PENDING",
-      "declaredBlock": "PENDING",
+      "declareTxHash": "0x44c707fed0a82be856172cb27b173c068c9a6be26359d43223e4f5de3d4280",
+      "declaredBlock": 14360633,
       "deployTxHash": "PENDING",
       "deployedBlock": "PENDING",
       "constructorCalldata": [],
       "verification": {
-        "status": "pending",
-        "checkedAt": "2026-08-21T17:09:37.088Z",
-        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+        "status": "skipped",
+        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "notes": "Not approved for the mainnet pilot."
       },
       "key": "pool10",
       "denomination": "10000000"
     },
     {
-      "classHash": "UNDECLARED",
-      "compiledClassHash": "UNKNOWN",
+      "classHash": "0x772a183e9cdc803851bd154afd96ee3d830d27c93a40bb9864d04f66dd0fa34",
+      "compiledClassHash": "0x6f294ed6d97e8cf1ea50bfbcb9fdf72ed850fad75e12dba645872bb9bc16ced",
       "address": "UNDEPLOYED",
-      "declareTxHash": "PENDING",
-      "declaredBlock": "PENDING",
+      "declareTxHash": "0x44c707fed0a82be856172cb27b173c068c9a6be26359d43223e4f5de3d4280",
+      "declaredBlock": 14360633,
       "deployTxHash": "PENDING",
       "deployedBlock": "PENDING",
       "constructorCalldata": [],
       "verification": {
-        "status": "pending",
-        "checkedAt": "2026-08-21T17:09:37.088Z",
-        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+        "status": "skipped",
+        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "notes": "Not approved for the mainnet pilot."
       },
       "key": "pool50",
       "denomination": "50000000"
     },
     {
-      "classHash": "UNDECLARED",
-      "compiledClassHash": "UNKNOWN",
+      "classHash": "0x772a183e9cdc803851bd154afd96ee3d830d27c93a40bb9864d04f66dd0fa34",
+      "compiledClassHash": "0x6f294ed6d97e8cf1ea50bfbcb9fdf72ed850fad75e12dba645872bb9bc16ced",
       "address": "UNDEPLOYED",
-      "declareTxHash": "PENDING",
-      "declaredBlock": "PENDING",
+      "declareTxHash": "0x44c707fed0a82be856172cb27b173c068c9a6be26359d43223e4f5de3d4280",
+      "declaredBlock": 14360633,
       "deployTxHash": "PENDING",
       "deployedBlock": "PENDING",
       "constructorCalldata": [],
       "verification": {
-        "status": "pending",
-        "checkedAt": "2026-08-21T17:09:37.088Z",
-        "notes": "Verification remains pending until mainnet declaration, deployment, and evidence are recorded."
+        "status": "skipped",
+        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "notes": "Not approved for the mainnet pilot."
       },
       "key": "pool100",
       "denomination": "100000000"
