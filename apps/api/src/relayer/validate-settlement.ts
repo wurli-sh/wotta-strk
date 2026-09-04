@@ -1,5 +1,6 @@
 import {
   CIRCLE_ROUTE_REGISTRY,
+  CIRCLE_STARKNET_TOKEN_MESSENGER,
   type CircleEnvironment,
   type WottaSourceRoute,
 } from "@wotta/adapters";
@@ -39,9 +40,15 @@ export function validateSettlement(config: Config, job: SettlementJob, message: 
     throw new Error("settlement_router_mismatch");
   }
   const circle = circleRouteForJob(config, job.intent.route_id);
-  if (circle?.family === "evm") {
-    if (decoded.recipient.toLowerCase() !== feltBytes32(circle.tokenMessenger)) throw new Error("settlement_recipient_mismatch");
-    if (decoded.burn.burnToken.toLowerCase() !== feltBytes32(circle.usdc)) throw new Error("settlement_burn_token_mismatch");
+  const env: CircleEnvironment = config.manifest.chainId === "SN_MAIN" ? "mainnet" : "testnet";
+  if (decoded.recipient.toLowerCase() !== feltBytes32(CIRCLE_STARKNET_TOKEN_MESSENGER[env])) {
+    throw new Error("settlement_recipient_mismatch");
+  }
+  if (circle?.family === "evm" && decoded.burn.burnToken.toLowerCase() !== feltBytes32(circle.usdc)) {
+    throw new Error("settlement_burn_token_mismatch");
+  }
+  if (circle?.family === "solana" && decoded.burn.burnToken.toLowerCase() !== circle.burnTokenBytes32?.toLowerCase()) {
+    throw new Error("settlement_burn_token_mismatch");
   }
   if (decoded.wrapper.hook.intentId !== job.intent.id) throw new Error("settlement_intent_mismatch");
   const pool = cctpPoolsForConfig(config).find((candidate) => String(candidate.denomination) === String(job.intent.denomination));

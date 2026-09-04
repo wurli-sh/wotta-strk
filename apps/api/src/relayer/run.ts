@@ -49,9 +49,9 @@ async function routerProcessed(provider: RpcProvider, config: Config, intentId: 
   return BigInt(result[0] ?? 0) !== 0n;
 }
 
-async function waitForOnchainProjection(db: Db, claimHash: string): Promise<string | null> {
+async function waitForOnchainProjection(db: Db, config: Config, claimHash: string): Promise<string | null> {
   for (let attempt = 0; attempt < PROJECTION_WAIT_ATTEMPTS; attempt += 1) {
-    const { data, error } = await db.from("intents").select("onchain_state,onchain_tx_hash").eq("claim_hash", claimHash).maybeSingle();
+    const { data, error } = await db.from("intents").select("onchain_state,onchain_tx_hash").eq("claim_hash", claimHash).eq("chain_id", config.manifest.chainId).maybeSingle();
     if (error) throw error;
     if (data?.onchain_state === "funded" || data?.onchain_state === "claimed" || data?.onchain_state === "refunded") {
       return data.onchain_tx_hash ?? null;
@@ -59,6 +59,19 @@ async function waitForOnchainProjection(db: Db, claimHash: string): Promise<stri
     await new Promise((resolve) => setTimeout(resolve, PROJECTION_WAIT_MS));
   }
   return null;
+}
+
+async function refreshJobState(db: Db, config: Config, job: JobRow): Promise<void> {
+  const { data, error } = await db
+    .from("intents")
+    .select("state,version")
+    .eq("id", job.intent.id)
+    .eq("chain_id", config.manifest.chainId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("relayer_intent_missing");
+  job.intent.state = data.state as IntentState;
+  job.intent.version = data.version as number;
 }
 
 function relayerAccount(config: Config) {
@@ -130,6 +143,10 @@ function isRelayerFeeExhausted(message: string): boolean {
   return /exceed balance|strk balance too low|resources bounds/i.test(message);
 }
 
+function isRelayerSignerInvalid(message: string): boolean {
+  return /account validation failed|invalid signature length/i.test(message);
+}
+
 async function advance(db: Db, job: JobRow, to: IntentState, evidence: Record<string, unknown>) {
   const updated = await transition(db, job.intent.owner_id, job.intent.id, job.intent.version, to, evidence);
   job.intent.state = updated.state as IntentState;
@@ -158,22 +175,25 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
     );
   }
   if (job.intent.state === "attestation_ready" && !job.destination_tx_hash) {
-    const { data: projected } = await deps.db.from("intents").select("onchain_state,onchain_tx_hash").eq("id", job.intent.id).maybeSingle();
+    const { data: projected } = await deps.db.from("intents").select("onchain_state,onchain_tx_hash").eq("id", job.intent.id).eq("chain_id", deps.config.manifest.chainId).maybeSingle();
     const alreadyOnchain = projected?.onchain_state === "funded" || projected?.onchain_state === "claimed" || projected?.onchain_state === "refunded";
     const alreadyProcessed = alreadyOnchain || await routerProcessed(provider, deps.config, job.intent.id);
     if (alreadyProcessed) {
       job.destination_tx_hash = projected?.onchain_tx_hash ?? job.destination_tx_hash;
       if (!job.destination_tx_hash) {
-        job.destination_tx_hash = await waitForOnchainProjection(deps.db, job.intent.claim_hash);
+        job.destination_tx_hash = await waitForOnchainProjection(deps.db, deps.config, job.intent.claim_hash);
       }
       if (job.destination_tx_hash) {
         await deps.db.from("relayer_jobs").update({ destination_tx_hash: job.destination_tx_hash, message_hash: iris.messageHash, updated_at: new Date().toISOString() }).eq("id", job.id);
       }
-      await advance(deps.db, job, "destination_submitted", {
-        destinationTxHash: job.destination_tx_hash,
-        messageHash: iris.messageHash,
-        recovered: true,
-      });
+      await refreshJobState(deps.db, deps.config, job);
+      if (job.intent.state === "attestation_ready" || job.intent.state === "failed_recoverable") {
+        await advance(deps.db, job, "destination_submitted", {
+          destinationTxHash: job.destination_tx_hash,
+          messageHash: iris.messageHash,
+          recovered: true,
+        });
+      }
     } else {
       const message = new CairoByteArray(Buffer.from(iris.message.replace(/^0x/, ""), "hex"));
       const attestation = new CairoByteArray(Buffer.from(iris.attestation.replace(/^0x/, ""), "hex"));
@@ -218,7 +238,10 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
     );
     await fallback.waitForTransaction(job.destination_tx_hash);
   }
-  await waitForOnchainProjection(deps.db, job.intent.claim_hash);
+  await waitForOnchainProjection(deps.db, deps.config, job.intent.claim_hash);
+  // The indexer can project `funded` while this worker waits for confirmation.
+  // Refresh the optimistic-lock fields before attempting another transition.
+  await refreshJobState(deps.db, deps.config, job);
   if (job.intent.state === "destination_submitted") {
     await transitionToward(
       deps.db,
@@ -248,9 +271,11 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
 }
 
 export async function runRelayerOnce(deps: { db: Db; config: Config; log: Logger }) {
-  const lease = await acquireLease(deps.db, "relayer");
+  // Local Sepolia and Mainnet APIs may share one database; never let one chain
+  // starve the other by contending for a global worker lease.
+  const lease = await acquireLease(deps.db, `relayer:${deps.config.manifest.chainId}`);
   if (!lease) return { processed: 0, leased: false };
-  const { data, error } = await deps.db.from("relayer_jobs").select("id,attempts,destination_tx_hash,intent:intents!inner(id,owner_id,state,version,route_id,denomination,source_tx_hash,claim_hash,public_refund_recipient,expires_at,quote)").eq("status", "queued").order("created_at").limit(10);
+  const { data, error } = await deps.db.from("relayer_jobs").select("id,attempts,destination_tx_hash,intent:intents!inner(id,owner_id,state,version,route_id,denomination,source_tx_hash,claim_hash,public_refund_recipient,expires_at,quote)").eq("status", "queued").eq("intent.chain_id", deps.config.manifest.chainId).order("created_at").limit(10);
   if (error) throw error;
   let processed = 0;
   for (const raw of data ?? []) {
@@ -261,13 +286,19 @@ export async function runRelayerOnce(deps: { db: Db; config: Config; log: Logger
     } catch (error) {
       const attempts = job.attempts + 1;
       const message = error instanceof Error ? error.message : "relayer_failed";
+      // RPC clients prefix failures with the full submitted transaction; retain
+      // both ends so the actual node rejection remains visible in job recovery.
+      const storedMessage = message.length > 512
+        ? `${message.slice(0, 128)}…${message.slice(-383)}`
+        : message;
       const feeExhausted = isRelayerFeeExhausted(message);
-      const terminal = attempts >= 10 || feeExhausted;
-      await deps.db.from("relayer_jobs").update({ status: terminal ? "failed" : "queued", attempts, last_error: message.slice(0, 512), updated_at: new Date().toISOString() }).eq("id", job.id);
-      if (feeExhausted && transitionAllowed(job.intent.state, "failed_recoverable")) {
+      const signerInvalid = isRelayerSignerInvalid(message);
+      const terminal = attempts >= 10 || feeExhausted || signerInvalid;
+      await deps.db.from("relayer_jobs").update({ status: terminal ? "failed" : "queued", attempts, last_error: storedMessage, updated_at: new Date().toISOString() }).eq("id", job.id);
+      if ((feeExhausted || signerInvalid) && transitionAllowed(job.intent.state, "failed_recoverable")) {
         try {
           await advance(deps.db, job, "failed_recoverable", {
-            reason: "relayer_strk_insufficient",
+            reason: feeExhausted ? "relayer_strk_insufficient" : "relayer_signer_invalid",
             error: message.slice(0, 240),
           });
         } catch (transitionError) {

@@ -11,23 +11,31 @@ const envBoolean = z.preprocess(
     .transform((value) => value === true || value === "true"),
 );
 
+/** Treat blank / whitespace optional env URLs as unset. */
+const optionalUrl = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().url().optional(),
+);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"), PORT: z.coerce.number().int().min(1).max(65535).default(8787),
   API_ORIGIN: z.string().url().default("http://127.0.0.1:8787"), CORS_ORIGINS: z.string().min(1).default("http://localhost:3000"), LOG_LEVEL: z.string().default("info"),
-  SUPABASE_URL: z.string().url(), SUPABASE_SECRET_KEY: z.string().min(20), STARKNET_RPC_URL: z.string().url(), STARKNET_MAINNET_RPC_URL: z.string().url().optional(), STARKNET_NETWORK: z.enum(["mainnet", "sepolia"]).default("mainnet"),
-  BASE_MAINNET_RPC_URL: z.string().url().optional(),
-  SOLANA_MAINNET_RPC_URL: z.string().url().optional(),
-  SOLANA_DEVNET_RPC_URL: z.string().url().optional(),
+  SUPABASE_URL: z.string().url(), SUPABASE_SECRET_KEY: z.string().min(20), STARKNET_RPC_URL: z.string().url(), STARKNET_MAINNET_RPC_URL: optionalUrl, STARKNET_NETWORK: z.enum(["mainnet", "sepolia"]).default("mainnet"),
+  BASE_MAINNET_RPC_URL: optionalUrl,
+  SOLANA_MAINNET_RPC_URL: optionalUrl,
+  SOLANA_DEVNET_RPC_URL: optionalUrl,
   RESOLVER_SIGNING_KEY: z.string().min(32), IDENTITY_LOOKUP_KEY: z.string().min(32), PENDING_DELIVERY_PRIVATE_KEY: z.string().min(32),
-  CIRCLE_IRIS_BASE_URL: z.string().url().optional(), STARKNET_RELAYER_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_RELAYER_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_RELAYER_KEY_OR_KEYSTORE: z.string().min(1).optional(),
+  CIRCLE_IRIS_BASE_URL: optionalUrl, STARKNET_RELAYER_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_RELAYER_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_RELAYER_KEY_OR_KEYSTORE: z.string().min(1).optional(),
   STARKNET_DEPLOYER_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), STARKNET_DEPLOYER_PRIVATE_KEY: z.string().regex(/^(0x)?[0-9a-fA-F]{1,64}$/).optional(),
   DEPLOYMENT_MANIFEST_PATH: z.string().optional(),
   CCTP_ADMITTED_ROUTES: z.string().default(""),
   STARKNET_PRIVATE_ADMITTED: envBoolean.default(false),
+  /** Local/demo escape hatch: skip retained phase evidence; still requires real RPCs + workers. */
+  MAINNET_FORCE_ADMIT: envBoolean.default(false),
   RUN_INDEXER: envBoolean.default(false),
   RUN_RELAYER: envBoolean.default(false),
-  STARKNET_FALLBACK_RPC_URL: z.string().url().optional(),
-  STARKNET_RELAYER_ALERT_BALANCE_WEI: z.coerce.bigint().positive().default(10_000_000_000_000_000_000n),
+  STARKNET_FALLBACK_RPC_URL: optionalUrl,
+  STARKNET_RELAYER_ALERT_BALANCE_WEI: z.coerce.bigint().positive().default(15_000_000_000_000_000_000n),
   PILOT_MAX_USDC_PER_TX: z.coerce.number().int().positive().optional(),
   PILOT_PAUSED_ROUTES: z.string().default(""),
 }).passthrough();
@@ -82,7 +90,15 @@ export function verifyStarknetPrivateEvidence(
 }
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
-  const parsedEnv = envSchema.parse(source);
+  // Prefer dedicated STARKNET_RELAYER_*; fall back to MAINNET_RELAYER_* when unset.
+  const withRelayerAlias: NodeJS.ProcessEnv = { ...source };
+  if (!withRelayerAlias.STARKNET_RELAYER_ADDRESS?.trim() && withRelayerAlias.STARKNET_MAINNET_RELAYER_ADDRESS?.trim()) {
+    withRelayerAlias.STARKNET_RELAYER_ADDRESS = withRelayerAlias.STARKNET_MAINNET_RELAYER_ADDRESS;
+  }
+  if (!withRelayerAlias.STARKNET_RELAYER_PRIVATE_KEY?.trim() && withRelayerAlias.STARKNET_MAINNET_RELAYER_PRIVATE_KEY?.trim()) {
+    withRelayerAlias.STARKNET_RELAYER_PRIVATE_KEY = withRelayerAlias.STARKNET_MAINNET_RELAYER_PRIVATE_KEY;
+  }
+  const parsedEnv = envSchema.parse(withRelayerAlias);
   const env = { ...parsedEnv, CIRCLE_IRIS_BASE_URL: parsedEnv.CIRCLE_IRIS_BASE_URL ?? (parsedEnv.STARKNET_NETWORK === "sepolia" ? "https://iris-api-sandbox.circle.com" : "https://iris-api.circle.com") };
   if (Buffer.from(env.PENDING_DELIVERY_PRIVATE_KEY, "base64url").length !== 32) throw new Error("invalid_pending_delivery_key");
   const manifestPath = env.DEPLOYMENT_MANIFEST_PATH ?? fileURLToPath(new URL(`../../../deployments/${env.STARKNET_NETWORK}.json`, import.meta.url));
@@ -102,9 +118,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
   for (const route of admittedCctpRoutes) {
     if (!supportedCctpRoutes.has(route)) throw new Error(`unsupported_admitted_route:${route}`);
   }
+  const forceAdmit = expectedChainId === "SN_MAIN" && env.MAINNET_FORCE_ADMIT;
   if (expectedChainId === "SN_MAIN") {
     const SOLANA_PUBLIC_ENDPOINTS = [
       "api.mainnet-beta.solana.com",
+      "api.mainnet.solana.com",
       "solana-api.projectserum.com",
       "api.devnet.solana.com",
       "api.testnet.solana.com",
@@ -114,14 +132,22 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     }
     if (admittedCctpRoutes.has("solana")) {
       const solanaRpc = env.SOLANA_MAINNET_RPC_URL?.trim();
-      if (!solanaRpc || SOLANA_PUBLIC_ENDPOINTS.some((host) => new URL(solanaRpc).hostname === host)) {
+      const isPublic = Boolean(
+        solanaRpc && SOLANA_PUBLIC_ENDPOINTS.some((host) => new URL(solanaRpc).hostname === host),
+      );
+      if (!solanaRpc || (isPublic && !forceAdmit)) {
         throw new Error("solana_mainnet_rpc_required");
       }
     }
   }
-  const starknetPrivateEvidenceVerified = expectedChainId === "SN_MAIN"
-    && verifyStarknetPrivateEvidence(manifest, manifestPath, manifestHash);
-  if (expectedChainId === "SN_MAIN" && env.STARKNET_PRIVATE_ADMITTED && !starknetPrivateEvidenceVerified) {
+  const starknetPrivateEvidenceVerified = forceAdmit
+    || (expectedChainId === "SN_MAIN"
+      && verifyStarknetPrivateEvidence(manifest, manifestPath, manifestHash));
+  if (
+    expectedChainId === "SN_MAIN"
+    && env.STARKNET_PRIVATE_ADMITTED
+    && !starknetPrivateEvidenceVerified
+  ) {
     throw new Error("starknet_private_evidence_required");
   }
   return {
@@ -135,6 +161,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     admittedCctpRoutes,
     runtimeVerifiedCctpRoutes: new Set<string>(),
     starknetPrivateEvidenceVerified,
+    forceAdmit,
     pilotMaxUsdcPerTx: env.PILOT_MAX_USDC_PER_TX,
     pilotPausedRoutes: new Set(env.PILOT_PAUSED_ROUTES.split(",").map((route) => route.trim()).filter(Boolean)),
   };
@@ -145,6 +172,36 @@ export async function assertStarknetRpcNetwork(config: Config): Promise<void> {
   try { chainId = await new RpcProvider({ nodeUrl: config.env.STARKNET_RPC_URL }).getChainId(); } catch { throw new Error("starknet_rpc_unavailable"); }
   const expected = config.manifest.chainId === "SN_MAIN" ? constants.StarknetChainId.SN_MAIN : constants.StarknetChainId.SN_SEPOLIA;
   if (chainId !== expected) throw new Error("network_manifest_mismatch");
+}
+
+type StarknetChainIdReader = (nodeUrl: string) => Promise<string>;
+
+const readStarknetChainId: StarknetChainIdReader = async (nodeUrl) =>
+  new RpcProvider({ nodeUrl }).getChainId();
+
+/**
+ * The indexer uses the fallback as an independent read provider. A URL and a
+ * distinct hostname are insufficient: reject an unavailable or wrong-network
+ * fallback before either worker begins processing escrow state.
+ */
+export async function assertMainnetFallbackRpcNetwork(
+  config: Config,
+  readChainId: StarknetChainIdReader = readStarknetChainId,
+): Promise<void> {
+  if (config.manifest.chainId !== "SN_MAIN") return;
+  const workersRequested = config.env.RUN_INDEXER || config.env.RUN_RELAYER || config.env.STARKNET_PRIVATE_ADMITTED;
+  if (!workersRequested) return;
+  const fallback = config.env.STARKNET_FALLBACK_RPC_URL;
+  if (!fallback) throw new Error("mainnet_worker_fallback_rpc_required");
+  let chainId: string;
+  try {
+    chainId = await readChainId(fallback);
+  } catch {
+    throw new Error("starknet_fallback_rpc_unavailable");
+  }
+  if (chainId !== constants.StarknetChainId.SN_MAIN) {
+    throw new Error("starknet_fallback_rpc_network_mismatch");
+  }
 }
 
 async function jsonRpc(

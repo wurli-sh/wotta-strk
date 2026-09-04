@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CIRCLE_TESTNET_ROUTES } from "@wotta/adapters";
+import { CIRCLE_STARKNET_TOKEN_MESSENGER, CIRCLE_TESTNET_ROUTES } from "@wotta/adapters";
 import { PROTOCOL_FIXTURES, encodeCircleCctpMessageV2ForTest } from "@wotta/shared";
 import { loadConfig } from "../src/config.ts";
 import { validateSettlement, type SettlementJob } from "../src/relayer/validate-settlement.ts";
@@ -13,7 +13,7 @@ const sepoliaEnv = {
   IDENTITY_LOOKUP_KEY: "c".repeat(32),
   PENDING_DELIVERY_PRIVATE_KEY: Buffer.alloc(32, 1).toString("base64url"),
   STARKNET_NETWORK: "sepolia",
-  CCTP_ADMITTED_ROUTES: "base",
+  CCTP_ADMITTED_ROUTES: "base,solana",
 };
 
 function fixture() {
@@ -35,7 +35,7 @@ function fixture() {
   const encode = (overrides: Partial<Parameters<typeof encodeCircleCctpMessageV2ForTest>[0]> = {}) =>
     encodeCircleCctpMessageV2ForTest({
       sourceDomain: 6,
-      tokenMessenger: circle.tokenMessenger,
+      tokenMessenger: CIRCLE_STARKNET_TOKEN_MESSENGER.testnet,
       router: config.manifest.router.address,
       amount: 1_000_000n,
       burnToken: circle.usdc,
@@ -72,6 +72,18 @@ test("valid Base settlement message is accepted", () => {
   const decoded = validateSettlement(config, job, encode());
   assert.equal(decoded.sourceDomain, 6);
   assert.equal(decoded.wrapper.hook.intentId, job.intent.id);
+});
+
+test("valid Solana settlement binds the native USDC mint bytes", () => {
+  const { config, encode, job } = fixture();
+  const solana = CIRCLE_TESTNET_ROUTES.solana;
+  const solanaJob = { ...job, intent: { ...job.intent, route_id: "solana" } };
+  const message = encode({ sourceDomain: 5, burnToken: solana.burnTokenBytes32! });
+  assert.equal(validateSettlement(config, solanaJob, message).sourceDomain, 5);
+  assert.throws(
+    () => validateSettlement(config, solanaJob, encode({ sourceDomain: 5, burnToken: "0x1" })),
+    /settlement_burn_token_mismatch/,
+  );
 });
 
 test("mutated settlement fields are rejected independently", () => {

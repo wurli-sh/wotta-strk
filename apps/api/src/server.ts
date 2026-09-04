@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
 import { deliverySchema, idempotencySchema, intentSchema, privateIdentityBindingSchema, quoteSchema, resolveSchema, sourceSubmittedSchema, walletChallengeSchema, walletLinkSchema } from "@wotta/shared";
-import { assertMainnetSourceRpcNetworks, assertMainnetWorkerReadiness, assertStarknetRpcNetwork, loadConfig } from "./config.ts";
+import { assertMainnetFallbackRpcNetwork, assertMainnetSourceRpcNetworks, assertMainnetWorkerReadiness, assertStarknetRpcNetwork, loadConfig } from "./config.ts";
 import { createDb } from "./db/client.ts";
 import { createLogger, safeError } from "./logger.ts";
 import { requireAuth } from "./auth/auth.ts";
@@ -58,7 +58,7 @@ export async function buildServer(d = deps()) {
         strkAlert = null;
       }
     }
-    const queue = await loadRelayerQueueHealth(d.db, { strkAlert });
+    const queue = await loadRelayerQueueHealth(d.db, { chainId: d.config.manifest.chainId, strkAlert });
     return healthBody(d.config, routesForConfig(d.config).filter((route) => route.enabled).length, queue);
   });
   app.get("/v1/routes", async () => ({
@@ -112,12 +112,12 @@ export async function buildServer(d = deps()) {
   app.post("/v1/resolve", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(resolveSchema, request.body); return await resolveDescriptor(d.db, d.config, body.provider, body.identifier); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/quotes", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { return await signQuote(d.db, d.config, auth.userId, parse(quoteSchema, request.body)); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/intents", async (request, reply) => { const auth = await requireAuth(d.db, request), key = request.headers["idempotency-key"]; if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(intentSchema, request.body), idempotencyKey = idempotencySchema.parse(key); const output = await idempotent(d.db, auth.userId, idempotencyKey, body, () => createIntent(d.db, d.config, auth.userId, body)); return reply.code(201).send(output); } catch (error) { return errorReply(reply, error); } });
-  app.get("/v1/intents", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); const rawLimit = Number((request.query as { limit?: string }).limit ?? 25); const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 25; const { data, error } = await d.db.from("intents").select("id,mode,delivery_kind,denomination,route_id,state,version,source_tx_hash,onchain_state,onchain_tx_hash,onchain_block_number,expires_at,created_at,updated_at").eq("owner_id", auth.userId).order("created_at", { ascending: false }).limit(limit); return error ? errorReply(reply, error) : { intents: data ?? [] }; });
+  app.get("/v1/intents", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); const rawLimit = Number((request.query as { limit?: string }).limit ?? 25); const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 25; const { data, error } = await d.db.from("intents").select("id,mode,delivery_kind,denomination,route_id,state,version,source_tx_hash,onchain_state,onchain_tx_hash,onchain_block_number,expires_at,created_at,updated_at").eq("owner_id", auth.userId).eq("chain_id", d.config.manifest.chainId).order("created_at", { ascending: false }).limit(limit); return error ? errorReply(reply, error) : { intents: data ?? [] }; });
   app.get("/v1/intents/:id", async (request, reply) => {
     const auth = await requireAuth(d.db, request);
     if (!auth) return errorReply(reply, new Error("unauthorized"));
     try {
-      const intent = await getIntent(d.db, auth.userId, String((request.params as { id: string }).id));
+      const intent = await getIntent(d.db, auth.userId, String((request.params as { id: string }).id), d.config.manifest.chainId);
       const { data: job } = await d.db.from("relayer_jobs").select("created_at,status,attempts").eq("intent_id", intent.id).maybeSingle();
       return {
         ...intent,
@@ -139,18 +139,19 @@ export async function buildServer(d = deps()) {
     if (!auth) return errorReply(reply, new Error("unauthorized"));
     try {
       const body = parse(z.object({ expectedVersion: z.number().int().nonnegative() }), request.body);
-      return await cancelIntent(d.db, auth.userId, String((request.params as { id: string }).id), body.expectedVersion);
+      const intent = await getIntent(d.db, auth.userId, String((request.params as { id: string }).id), d.config.manifest.chainId);
+      return await cancelIntent(d.db, auth.userId, intent.id, body.expectedVersion);
     } catch (error) {
       return errorReply(reply, error);
     }
   });
-  app.post("/v1/intents/:id/source-submitted", async (request, reply) => { const auth = await requireAuth(d.db, request), key = request.headers["idempotency-key"]; if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(sourceSubmittedSchema.extend({ expectedVersion: z.number().int().nonnegative() }), request.body), idempotencyKey = idempotencySchema.parse(key), id = String((request.params as { id: string }).id); return await idempotent(d.db, auth.userId, idempotencyKey, body, () => markSourceSubmitted(d.db, auth.userId, id, body.expectedVersion, body.txHash)); } catch (error) { return errorReply(reply, error); } });
-  app.post("/v1/intents/:id/delivery", async (request, reply) => { const auth = await requireAuth(d.db, request), key = request.headers["idempotency-key"]; if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(deliverySchema.extend({ expectedVersion: z.number().int().nonnegative(), expiresAt: z.string().datetime() }), request.body), idempotencyKey = idempotencySchema.parse(key), id = String((request.params as { id: string }).id); return await idempotent(d.db, auth.userId, idempotencyKey, body, async () => { const current = await getIntent(d.db, auth.userId, id); if (current.version !== body.expectedVersion || !sameInstant(current.expires_at, body.expiresAt) || Date.parse(body.expiresAt) <= Date.now()) throw new Error("delivery_intent_mismatch"); const delivery = await storeDelivery(d.db, d.config, { senderId: auth.userId, intentId: id, recipient: body.recipient, ephemeralPublicKey: body.ephemeralPublicKey, ciphertext: body.ciphertext, nonce: body.nonce, algorithm: body.algorithm, expiresAt: body.expiresAt }); const intent = current.state === "funded" ? await transition(d.db, auth.userId, id, body.expectedVersion, "delivered", { delivery }) : current; return { intent, delivery, queuedUntilFunded: current.state !== "funded" }; }); } catch (error) { return errorReply(reply, error); } });
+  app.post("/v1/intents/:id/source-submitted", async (request, reply) => { const auth = await requireAuth(d.db, request), key = request.headers["idempotency-key"]; if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(sourceSubmittedSchema.extend({ expectedVersion: z.number().int().nonnegative() }), request.body), idempotencyKey = idempotencySchema.parse(key), id = String((request.params as { id: string }).id); return await idempotent(d.db, auth.userId, idempotencyKey, body, () => markSourceSubmitted(d.db, auth.userId, id, body.expectedVersion, body.txHash, d.config.manifest.chainId)); } catch (error) { return errorReply(reply, error); } });
+  app.post("/v1/intents/:id/delivery", async (request, reply) => { const auth = await requireAuth(d.db, request), key = request.headers["idempotency-key"]; if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(deliverySchema.extend({ expectedVersion: z.number().int().nonnegative(), expiresAt: z.string().datetime() }), request.body), idempotencyKey = idempotencySchema.parse(key), id = String((request.params as { id: string }).id); return await idempotent(d.db, auth.userId, idempotencyKey, body, async () => { const current = await getIntent(d.db, auth.userId, id, d.config.manifest.chainId); if (current.version !== body.expectedVersion || !sameInstant(current.expires_at, body.expiresAt) || Date.parse(body.expiresAt) <= Date.now()) throw new Error("delivery_intent_mismatch"); const delivery = await storeDelivery(d.db, d.config, { senderId: auth.userId, intentId: id, recipient: body.recipient, ephemeralPublicKey: body.ephemeralPublicKey, ciphertext: body.ciphertext, nonce: body.nonce, algorithm: body.algorithm, expiresAt: body.expiresAt }); const intent = current.state === "funded" ? await transition(d.db, auth.userId, id, body.expectedVersion, "delivered", { delivery }) : current; return { intent, delivery, queuedUntilFunded: current.state !== "funded" }; }); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/intents/:id/refund-observed", async (request, reply) => {
     const auth = await requireAuth(d.db, request);
     if (!auth) return errorReply(reply, new Error("unauthorized"));
     try {
-      const intent = await getIntent(d.db, auth.userId, String((request.params as { id: string }).id));
+      const intent = await getIntent(d.db, auth.userId, String((request.params as { id: string }).id), d.config.manifest.chainId);
       if (intent.onchain_state !== "refunded") {
         return reply.code(202).send({ accepted: false, intentId: intent.id, reason: "awaiting_indexer" });
       }
@@ -184,7 +185,8 @@ export async function buildServer(d = deps()) {
     const { data: relatedIntents, error: intentError } = await d.db
       .from("intents")
       .select("id,denomination,state,onchain_state,expires_at,route_id,source_tx_hash,onchain_tx_hash")
-      .in("id", intentIds);
+      .in("id", intentIds)
+      .eq("chain_id", d.config.manifest.chainId);
     if (intentError) return errorReply(reply, intentError);
     const byIntent = new Map((relatedIntents ?? []).map((intent) => [intent.id, intent]));
     return {
@@ -194,7 +196,38 @@ export async function buildServer(d = deps()) {
       }),
     };
   });
-  app.post("/v1/notes/:id/delivered", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); if (d.config.manifest.chainId === "SN_MAIN" && !starknetEscrowInboxReady(d.config)) return errorReply(reply, new Error("route_disabled:awaiting_verified_escrow_deployment")); const { data, error } = await d.db.from("encrypted_notes").update({ delivered_at: new Date().toISOString() }).eq("id", String((request.params as { id: string }).id)).eq("recipient_profile_id", auth.userId).select("id").maybeSingle(); return error ? errorReply(reply, error) : data ? { ok: true } : errorReply(reply, new Error("not_found")); });
+  app.post("/v1/notes/:id/delivered", async (request, reply) => {
+    const auth = await requireAuth(d.db, request);
+    if (!auth) return errorReply(reply, new Error("unauthorized"));
+    if (d.config.manifest.chainId === "SN_MAIN" && !starknetEscrowInboxReady(d.config)) {
+      return errorReply(reply, new Error("route_disabled:awaiting_verified_escrow_deployment"));
+    }
+    const noteId = String((request.params as { id: string }).id);
+    const { data: note, error: noteError } = await d.db
+      .from("encrypted_notes")
+      .select("id,intent_id")
+      .eq("id", noteId)
+      .eq("recipient_profile_id", auth.userId)
+      .maybeSingle();
+    if (noteError) return errorReply(reply, noteError);
+    if (!note) return errorReply(reply, new Error("not_found"));
+    const { data: intent, error: intentError } = await d.db
+      .from("intents")
+      .select("id")
+      .eq("id", note.intent_id)
+      .eq("chain_id", d.config.manifest.chainId)
+      .maybeSingle();
+    if (intentError) return errorReply(reply, intentError);
+    if (!intent) return errorReply(reply, new Error("not_found"));
+    const { data, error } = await d.db
+      .from("encrypted_notes")
+      .update({ delivered_at: new Date().toISOString() })
+      .eq("id", note.id)
+      .eq("recipient_profile_id", auth.userId)
+      .select("id")
+      .maybeSingle();
+    return error ? errorReply(reply, error) : data ? { ok: true } : errorReply(reply, new Error("not_found"));
+  });
   return app;
 }
 async function main() {
@@ -207,6 +240,7 @@ async function main() {
   const workerTasks: Promise<void>[] = [];
   if (config.env.RUN_INDEXER || config.env.RUN_RELAYER || config.env.STARKNET_PRIVATE_ADMITTED) {
     assertMainnetWorkerReadiness(config);
+    await assertMainnetFallbackRpcNetwork(config);
   }
   if (config.env.RUN_INDEXER) workerTasks.push(runIndexerLoop(d, workers.signal));
   if (config.env.RUN_RELAYER) workerTasks.push(runRelayerLoop(d, workers.signal));

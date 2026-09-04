@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeIdentifier } from "../src/auth/normalize.ts";
 import { assertCctpPilotControls, assertStarknetPrivateEscrowIntent, buildStarknetEscrowDepositPlan, cctpFinalityThreshold, quoteMatchesStoredIntent, sameFelt, sameInstant, transitionAllowed } from "../src/intents/service.ts";
-import { ROUTES, routesForConfig, starknetEscrowInboxReady } from "../src/routes.ts";
-import { assertMainnetSourceRpcNetworks, assertMainnetWorkerReadiness, loadConfig } from "../src/config.ts";
+import { ROUTES, routesForConfig, starknetEscrowInboxReady, verifiedEscrowPoolsForConfig } from "../src/routes.ts";
+import { assertMainnetFallbackRpcNetwork, assertMainnetSourceRpcNetworks, assertMainnetWorkerReadiness, loadConfig } from "../src/config.ts";
 import { collectVerifiedIdentities } from "../src/auth/sync.ts";
-import { decodeEscrowProjection } from "../src/indexer/run.ts";
+import { decodeEscrowProjection, indexedDeploymentStart, indexedEscrowAddresses } from "../src/indexer/run.ts";
 import { hash } from "starknet";
 import { safeError } from "../src/logger.ts";
 import { requireWalletOrigin, walletBindingTypedData, normalizeWalletAddress } from "../src/auth/challenge.ts";
@@ -113,6 +113,59 @@ test("mainnet private send fails closed until escrow and privacy manifests are v
   }
 });
 
+test("mainnet verifiedEscrowPools exclude UNDEPLOYED and unapproved dens", () => {
+  const config = loadConfig(mainnetEnv);
+  const pools = verifiedEscrowPoolsForConfig(config);
+  assert.equal(pools.length, 2);
+  assert.deepEqual(pools.map((pool) => pool.denomination).sort(), ["100000", "1000000"]);
+  for (const pool of pools) {
+    assert.equal(pool.verification.status, "verified");
+    assert.match(pool.address, /^0x[0-9a-f]+$/i);
+    assert.match(pool.classHash, /^0x[0-9a-f]+$/i);
+  }
+  assert.equal(config.manifest.pools.filter((pool) => pool.address === "UNDEPLOYED").length, 3);
+});
+
+test("mainnet indexer watches only verified approved escrows and skips UNDEPLOYED", () => {
+  const config = loadConfig(mainnetEnv);
+  const addresses = [...indexedEscrowAddresses(config)].sort();
+  const expected = verifiedEscrowPoolsForConfig(config)
+    .map((pool) => `0x${BigInt(pool.address).toString(16)}`)
+    .sort();
+  assert.deepEqual(addresses, expected);
+  assert.equal(addresses.length, 2);
+  const start = indexedDeploymentStart(config);
+  const verifiedBlocks = verifiedEscrowPoolsForConfig(config)
+    .map((pool) => pool.deployedBlock)
+    .filter((value): value is number => typeof value === "number");
+  assert.equal(start, Math.min(...verifiedBlocks));
+  assert.doesNotThrow(() => indexedEscrowAddresses(config));
+});
+
+test("indexer fails closed when no verified escrow pools remain", () => {
+  const config = loadConfig(mainnetEnv);
+  for (const pool of config.manifest.pools) {
+    pool.verification.status = "skipped";
+  }
+  assert.throws(() => indexedEscrowAddresses(config), /indexer_verified_escrow_pools_empty/);
+  assert.throws(() => indexedDeploymentStart(config), /indexer_deployment_block_missing/);
+});
+
+test("indexer ignores Mainnet directPrivacy even if present", () => {
+  const config = loadConfig(mainnetEnv);
+  config.manifest.directPrivacy = {
+    status: "verified",
+    escrow: {
+      status: "verified",
+      address: "0xdead",
+      classHash: "0xbeef",
+      deployedBlock: 1,
+    },
+  } as typeof config.manifest.directPrivacy;
+  const addresses = indexedEscrowAddresses(config);
+  assert.equal(addresses.has("0xdead"), false);
+});
+
 test("mainnet private send is admitted only as registered escrow-inbox delivery", () => {
   const config = loadConfig(mainnetEnv);
   config.manifest.verified = true;
@@ -159,6 +212,31 @@ test("mainnet private admission fails closed without retained evidence", () => {
     /starknet_private_evidence_required/,
   );
 });
+
+test("mainnet force-admit skips evidence and allows public Solana RPC", () => {
+  const config = loadConfig({
+    ...mainnetEnv,
+    MAINNET_FORCE_ADMIT: "true",
+    STARKNET_PRIVATE_ADMITTED: "true",
+    CCTP_ADMITTED_ROUTES: "base,solana",
+    BASE_MAINNET_RPC_URL: "https://base-rpc.example",
+    SOLANA_MAINNET_RPC_URL: "https://api.mainnet-beta.solana.com",
+    RUN_INDEXER: "true",
+  });
+  assert.equal(config.forceAdmit, true);
+  assert.equal(config.starknetPrivateEvidenceVerified, true);
+  assert.equal(config.admittedCctpRoutes.has("base"), true);
+  assert.equal(config.admittedCctpRoutes.has("solana"), true);
+  config.manifest.verified = true;
+  config.manifest.router.verification.status = "verified";
+  config.manifest.router.address = "0x456";
+  config.manifest.approvedCctpDenominations = ["1000000"];
+  const pool = config.manifest.pools.find((candidate) => candidate.denomination === "1000000")!;
+  pool.address = "0x789";
+  pool.classHash = "0xabc";
+  pool.verification.status = "verified";
+  assert.equal(starknetEscrowInboxReady(config), true);
+});
 test("API rejects a network-mode header that does not match its manifest", () => {
   const config = { manifest: { chainId: "SN_SEPOLIA" } } as ReturnType<typeof loadConfig>;
   const testnetRequest = { headers: { "x-wotta-network": "testnet" } } as never;
@@ -185,6 +263,7 @@ test("configuration requires a valid pending-delivery private key", () => {
   assert.doesNotThrow(() => loadConfig({ ...base, CI: "true" }));
   // An inactive route must not prevent the isolated mainnet/private API from starting.
   assert.doesNotThrow(() => loadConfig({ ...base, SOLANA_MAINNET_RPC_URL: undefined }));
+  assert.doesNotThrow(() => loadConfig({ ...base, SOLANA_MAINNET_RPC_URL: "" }));
   assert.throws(() => loadConfig({ ...base, CCTP_ADMITTED_ROUTES: "solana", SOLANA_MAINNET_RPC_URL: undefined }), /solana_mainnet_rpc_required/);
   assert.throws(() => loadConfig({ ...base, CCTP_ADMITTED_ROUTES: "solana", SOLANA_MAINNET_RPC_URL: "https://api.mainnet-beta.solana.com" }), /solana_mainnet_rpc_required/);
   assert.throws(() => loadConfig({ ...base, CCTP_ADMITTED_ROUTES: "solana", SOLANA_MAINNET_RPC_URL: "https://api.devnet.solana.com" }), /solana_mainnet_rpc_required/);
@@ -253,13 +332,13 @@ test("mainnet: ethereum, arbitrum, stellar always return coming_soon", () => {
   }
 });
 
-test("mainnet: base and solana return awaiting_mainnet_destination when manifest unverified", () => {
+test("mainnet: base and solana return awaiting_route_evidence after deployment but before admission", () => {
   const routes = routesForConfig(loadConfig(mainnetEnv));
-  // Mainnet manifest is not verified in deployments/mainnet.json, so cctpReady is false
+  // Contracts are verified, but neither route has retained live evidence or admission.
   for (const id of ["base", "solana"] as const) {
     const route = routes.find((r) => r.id === id);
     assert.equal(route?.enabled, false, `${id} should be disabled`);
-    assert.equal(route?.reason, "awaiting_mainnet_destination", `${id} should have awaiting_mainnet_destination`);
+    assert.equal(route?.reason, "awaiting_route_evidence", `${id} should have awaiting_route_evidence`);
   }
 });
 
@@ -392,6 +471,19 @@ test("assertMainnetWorkerReadiness: private escrow requires an indexer and indep
   assert.throws(() => assertMainnetWorkerReadiness(noFallback), /mainnet_worker_fallback_rpc_required/);
 });
 
+test("mainnet fallback RPC must be live and bound to SN_MAIN before workers start", async () => {
+  const config = makeWorkerConfig({});
+  await assert.doesNotReject(() => assertMainnetFallbackRpcNetwork(config, async () => "0x534e5f4d41494e"));
+  await assert.rejects(
+    () => assertMainnetFallbackRpcNetwork(config, async () => { throw new Error("retired provider"); }),
+    /starknet_fallback_rpc_unavailable/,
+  );
+  await assert.rejects(
+    () => assertMainnetFallbackRpcNetwork(config, async () => "0x534e5f5345504f4c4941"),
+    /starknet_fallback_rpc_network_mismatch/,
+  );
+});
+
 test("mainnet source RPC probes bind Base and Solana to their real networks", async () => {
   const config = loadConfig({
     ...mainnetEnv,
@@ -460,9 +552,9 @@ function liveMainnetCctpConfig(pausedRoutes = "") {
   return config;
 }
 
-test("CCTP finality stays Standard/Finalized for Base and Solana", () => {
-  assert.equal(cctpFinalityThreshold("base"), 2000);
-  assert.equal(cctpFinalityThreshold("solana"), 2000);
+test("Base and Solana use Fast finality while other rails remain Standard/Finalized", () => {
+  assert.equal(cctpFinalityThreshold("base"), 1000);
+  assert.equal(cctpFinalityThreshold("solana"), 1000);
   assert.equal(cctpFinalityThreshold("stellar"), 2000);
 });
 

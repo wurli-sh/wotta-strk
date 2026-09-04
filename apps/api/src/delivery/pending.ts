@@ -39,7 +39,7 @@ export async function deliverPendingForProfile(db: Db, config: Config, profileId
   }))];
   const wallet = await activeWalletBindingForProfile(db, profileId, config.manifest.chainId, { dedupe: true });
   if (!wallet) return 0;
-  const token = crypto.randomUUID(); const { data, error } = await db.rpc("claim_pending_claims", { p_profile_id: profileId, p_lookup_hashes: hashes, p_token: token }); if (error) throw error;
+  const token = crypto.randomUUID(); const { data, error } = await db.rpc("claim_pending_claims", { p_profile_id: profileId, p_lookup_hashes: hashes, p_token: token, p_chain_id: config.manifest.chainId }); if (error) throw error;
   const serverKeys = nacl.box.keyPair.fromSecretKey(decode(config.env.PENDING_DELIVERY_PRIVATE_KEY)); let delivered = 0;
   for (const row of (data ?? []) as { id: string; intent_id: string; sender_profile_id: string; sealed_payload: string }[]) {
     const payload = JSON.parse(row.sealed_payload) as { ciphertext: string; nonce: string; ephemeralPublicKey: string; algorithm: "x25519-xsalsa20-poly1305" };

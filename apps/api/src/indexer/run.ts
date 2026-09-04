@@ -3,6 +3,7 @@ import { hash, RpcProvider } from "starknet";
 import type { Config } from "../config.ts";
 import type { Db } from "../db/client.ts";
 import type { Logger } from "pino";
+import { verifiedEscrowPoolsForConfig } from "../routes.ts";
 import { acquireLease } from "../workers/lease.ts";
 import { applyOnchainProjection, sweepExpiredFunded } from "../intents/recovery.ts";
 
@@ -45,25 +46,48 @@ export function decodeEscrowProjection(event: { keys: string[]; data: string[] }
   return undefined;
 }
 
-function deploymentStart(config: Config): number {
-  const blocks = config.manifest.pools.map((pool) => pool.deployedBlock).filter((value): value is number => typeof value === "number");
-  const directBlock = config.manifest.directPrivacy?.escrow?.deployedBlock;
-  if (typeof directBlock === "number") blocks.push(directBlock);
-  if (!blocks.length) throw new Error("indexer_deployment_block_missing");
-  return Math.min(...blocks);
+function isHexFelt(value: string | undefined): value is string {
+  return typeof value === "string" && /^0x[0-9a-f]+$/i.test(value);
 }
 
-function escrowAddresses(config: Config): Set<string> {
-  const addresses = config.manifest.pools.map((pool) => felt(pool.address));
-  const direct = config.manifest.directPrivacy?.escrow?.address;
-  if (direct) addresses.push(felt(direct));
+/** Verified Wotta escrows (+ verified Sepolia directPrivacy escrow). Never indexes UNDEPLOYED pools. */
+export function indexedEscrowAddresses(config: Config): Set<string> {
+  const pools = verifiedEscrowPoolsForConfig(config);
+  if (!pools.length) throw new Error("indexer_verified_escrow_pools_empty");
+  const addresses = pools.map((pool) => felt(pool.address));
+  const direct = config.manifest.directPrivacy?.escrow;
+  if (
+    config.manifest.chainId !== "SN_MAIN"
+    && direct?.status === "verified"
+    && isHexFelt(direct.address)
+  ) {
+    addresses.push(felt(direct.address));
+  }
   return new Set(addresses);
+}
+
+/** Start block from the same filtered escrow set as indexedEscrowAddresses. */
+export function indexedDeploymentStart(config: Config): number {
+  const pools = verifiedEscrowPoolsForConfig(config);
+  const blocks = pools
+    .map((pool) => pool.deployedBlock)
+    .filter((value): value is number => typeof value === "number");
+  const direct = config.manifest.directPrivacy?.escrow;
+  if (
+    config.manifest.chainId !== "SN_MAIN"
+    && direct?.status === "verified"
+    && typeof direct.deployedBlock === "number"
+  ) {
+    blocks.push(direct.deployedBlock);
+  }
+  if (!blocks.length) throw new Error("indexer_deployment_block_missing");
+  return Math.min(...blocks);
 }
 
 async function resetCanonicalReadModel(db: Db, chainId: string) {
   const { error: eventError } = await db.from("chain_events").update({ canonical: false }).eq("chain_id", chainId).eq("canonical", true);
   if (eventError) throw eventError;
-  const { error: intentError } = await db.from("intents").update({ onchain_state: null, onchain_tx_hash: null, onchain_block_number: null }).not("onchain_state", "is", null);
+  const { error: intentError } = await db.from("intents").update({ onchain_state: null, onchain_tx_hash: null, onchain_block_number: null }).eq("chain_id", chainId).not("onchain_state", "is", null);
   if (intentError) throw intentError;
 }
 
@@ -112,18 +136,23 @@ async function persistProjection(db: Db, chainId: string, event: {
     onchain_tx_hash: event.transaction_hash,
     onchain_block_number: event.block_number,
     updated_at: new Date().toISOString(),
-  }).eq("claim_hash", projection.claimHash);
+  })
+    .eq("claim_hash", projection.claimHash)
+    // A claim hash is globally unique today, but retain the chain predicate so
+    // a future schema relaxation cannot let one indexer rewrite the other network.
+    .eq("chain_id", chainId);
   if (intentError) throw intentError;
-  await applyOnchainProjection(db, projection.claimHash, projection.kind);
+  await applyOnchainProjection(db, chainId, projection.claimHash, projection.kind);
 }
 
 /** Index verified Wotta escrow events and maintain a reorg-replayable status projection. */
 export async function runIndexerOnce(deps: { db: Db; config: Config; log: Logger }) {
-  const lease = await acquireLease(deps.db, "indexer");
+  // Scope leases to the deployment chain when local APIs share a database.
+  const lease = await acquireLease(deps.db, `indexer:${deps.config.manifest.chainId}`);
   if (!lease) return { indexed: 0, leased: false };
   const chainId = deps.config.manifest.chainId;
   const provider = new RpcProvider({ nodeUrl: deps.config.env.STARKNET_RPC_URL });
-  const start = deploymentStart(deps.config);
+  const start = indexedDeploymentStart(deps.config);
   const { data: cursor, error: cursorError } = await deps.db.from("indexer_cursors").select("block_number,block_hash").eq("chain_id", chainId).maybeSingle();
   if (cursorError) throw cursorError;
 
@@ -139,7 +168,7 @@ export async function runIndexerOnce(deps: { db: Db; config: Config; log: Logger
 
   const latest = await provider.getBlockNumber();
   if (fromBlock > latest) return { indexed: 0, fromBlock, toBlock: latest };
-  const addresses = escrowAddresses(deps.config);
+  const addresses = indexedEscrowAddresses(deps.config);
   let continuationToken: string | undefined;
   let indexed = 0;
   do {
@@ -164,7 +193,7 @@ export async function runIndexerOnce(deps: { db: Db; config: Config; log: Logger
   const latestBlock = await provider.getBlockWithTxHashes(latest);
   const { error: saveCursorError } = await deps.db.from("indexer_cursors").upsert({ chain_id: chainId, block_number: latest, block_hash: latestBlock.block_hash, updated_at: new Date().toISOString() }, { onConflict: "chain_id" });
   if (saveCursorError) throw saveCursorError;
-  const swept = await sweepExpiredFunded(deps.db);
+  const swept = await sweepExpiredFunded(deps.db, chainId);
   deps.log.info({ chainId, fromBlock, toBlock: latest, indexed, swept }, "Wotta escrow indexer caught up");
   return { indexed, fromBlock, toBlock: latest, swept };
 }

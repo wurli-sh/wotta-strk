@@ -10,14 +10,14 @@ export type RelayerQueueHealth = {
 
 export async function loadRelayerQueueHealth(
   db: Db,
-  options: { strkAlert: boolean | null } = { strkAlert: null },
+  options: { chainId: string; strkAlert: boolean | null },
 ): Promise<RelayerQueueHealth> {
   const now = Date.now();
   const [{ count: queuedCount, error: queuedError }, { count: failedCount, error: failedError }, { data: oldest, error: oldestError }] =
     await Promise.all([
-      db.from("relayer_jobs").select("*", { count: "exact", head: true }).eq("status", "queued"),
-      db.from("relayer_jobs").select("*", { count: "exact", head: true }).eq("status", "failed"),
-      db.from("relayer_jobs").select("created_at").eq("status", "queued").order("created_at", { ascending: true }).limit(1),
+      db.from("relayer_jobs").select("*,intent:intents!inner(chain_id)", { count: "exact", head: true }).eq("status", "queued").eq("intent.chain_id", options.chainId),
+      db.from("relayer_jobs").select("*,intent:intents!inner(chain_id)", { count: "exact", head: true }).eq("status", "failed").eq("intent.chain_id", options.chainId),
+      db.from("relayer_jobs").select("created_at,intent:intents!inner(chain_id)").eq("status", "queued").eq("intent.chain_id", options.chainId).order("created_at", { ascending: true }).limit(1),
     ]);
   if (queuedError) throw queuedError;
   if (failedError) throw failedError;

@@ -40,11 +40,12 @@ export async function transitionToward(
   from: IntentState,
   target: IntentState,
   evidence: Record<string, unknown> = {},
+  chainId?: string,
 ) {
   const steps = pathToward(from, target);
   let version = expectedVersion;
   let state = from;
-  let row = await getIntent(db, ownerId, intentId);
+  let row = await getIntent(db, ownerId, intentId, chainId);
   for (const to of steps) {
     row = await transition(db, ownerId, intentId, version, to, evidence);
     version = row.version as number;
@@ -55,6 +56,7 @@ export async function transitionToward(
 
 export async function applyOnchainProjection(
   db: Db,
+  chainId: string,
   claimHash: string,
   kind: "funded" | "claimed" | "refunded",
 ) {
@@ -62,6 +64,7 @@ export async function applyOnchainProjection(
     .from("intents")
     .select("id,owner_id,state,version,source_tx_hash,onchain_state,expires_at")
     .eq("claim_hash", claimHash)
+    .eq("chain_id", chainId)
     .maybeSingle();
   if (error) throw error;
   if (!intent) return null;
@@ -70,17 +73,18 @@ export async function applyOnchainProjection(
   const target: IntentState = kind === "funded" ? "funded" : kind === "claimed" ? "claimed" : "refunded";
   if (state === target) return intent;
   try {
-    return await transitionToward(db, intent.owner_id, intent.id, intent.version, state, target, { onchain: kind });
+    return await transitionToward(db, intent.owner_id, intent.id, intent.version, state, target, { onchain: kind }, chainId);
   } catch (error) {
     if (error instanceof Error && error.message === "invalid_transition") return intent;
     throw error;
   }
 }
 
-export async function sweepExpiredFunded(db: Db, now = new Date()) {
+export async function sweepExpiredFunded(db: Db, chainId: string, now = new Date()) {
   const { data, error } = await db
     .from("intents")
     .select("id,owner_id,state,version")
+    .eq("chain_id", chainId)
     .eq("onchain_state", "funded")
     .lt("expires_at", now.toISOString())
     .in("state", ["source_submitted", "source_confirmed", "attestation_ready", "destination_submitted", "funded", "delivered", "claimable", "failed_recoverable"]);
@@ -96,6 +100,7 @@ export async function sweepExpiredFunded(db: Db, now = new Date()) {
         intent.state as IntentState,
         "refundable",
         { reason: "escrow_expired" },
+        chainId,
       );
       swept += 1;
     } catch {
