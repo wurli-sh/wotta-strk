@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { TRUTH_LINE } from "@/lib/brand-copy";
+
 export function PrivacyCallout({ className }: { className?: string }) {
   return (
     <aside
@@ -7,11 +10,12 @@ export function PrivacyCallout({ className }: { className?: string }) {
       }
       data-testid="privacy-callout"
     >
-      <p className="font-semibold">Privacy in one line</p>
+      <p className="font-semibold">Source is public. Balance is private.</p>
       <p className="mt-1 text-brand-ink/80">
-        Wotta keeps note payloads encrypted and uses Stark proofs for private
-        pool actions. Source-chain burns, Starknet transactions, amounts, and
-        timing remain public on testnet.
+        {TRUTH_LINE}{" "}
+        <Link href="/privacy" className="font-medium underline underline-offset-4">
+          Details
+        </Link>
       </p>
     </aside>
   );

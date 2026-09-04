@@ -33,7 +33,16 @@ import {
   SendPageSkeleton,
 } from "@/components/ui/Skeleton";
 import { TextShimmer } from "@/components/ui/TextShimmer";
-import { ConfidentialToggle } from "@/features/send/ConfidentialToggle";
+import {
+  MAINNET_BANNER,
+  PAGE_SUBTITLES,
+  SETTLED_PRIVATELY,
+  SETTLED_PRIVATELY_INBOX,
+  SUCCESS_NOTE_PIPELINE,
+  TOAST,
+  TRUTH_LINE_SHORT,
+} from "@/lib/brand-copy";
+import { PrivateRouteToggle } from "@/features/send/PrivateRouteToggle";
 import { NOX_ROUTE_ID, PUBLIC_DEFAULT_ROUTE_ID } from "@/features/send/routeIds";
 import {
   irisMessageUrl,
@@ -78,8 +87,6 @@ const CROSS_CHAIN_ROUTES = new Set<WottaSourceRoute>([
   "stellar",
 ]);
 const KEEPER_DELAY_MS = 900_000;
-const CCTP_PRIVACY_DISCLOSURE =
-  "The source wallet, amount, network fee, CCTP burn, and timing are public. Wotta protects delivery to the resolved recipient and supports private receiving and subsequent private activity on Starknet. Wotta provides confidentiality, not anonymity.";
 
 
 function parseRecipient(raw: string): { provider: "email" | "x"; identifier: string } | null {
@@ -106,7 +113,7 @@ function stageLabel(stage: SendStage, denom: Dens): string {
     delivering: "Encrypting delivery…",
     connecting_source: "Connecting source wallet…",
     approving: "Approve USDC…",
-    depositing: "Deposit to Wotta escrow…",
+    depositing: "Deposit to Wotta…",
     burning: "Confirm CCTP burn…",
     confirming: "Confirming source transaction…",
     attesting: "Waiting for Circle attestation…",
@@ -116,9 +123,9 @@ function stageLabel(stage: SendStage, denom: Dens): string {
     waiting_confirmations: "Waiting for a proof-safe block…",
     building_proof: "Building private transfer…",
     signing_message: "Authorize in wallet…",
-    generating_proof: "Generating privacy proof…",
+    generating_proof: "Generating private proof…",
     submitting: "Submitting proof…",
-    complete: "Escrowed",
+    complete: SETTLED_PRIVATELY,
   };
   return labels[stage];
 }
@@ -328,7 +335,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     setBusy(false);
     setStage("idle");
     setInlineError("Ready confirmation was closed. Nothing was sent — you can retry.");
-    toast.message("Ready request closed — Send is unlocked");
+    toast.message(TOAST.sendUnlocked);
   }
 
   useEffect(() => {
@@ -449,7 +456,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           address: connected.address,
           label: confidentialMode ? "Private Starknet" : "Starknet",
         });
-        toast.success(`Ready wallet connected on ${mainnet ? "Mainnet" : "Testnet"}`);
+        toast.success(TOAST.readyConnected(mainnet ? "Mainnet" : "Testnet"));
         return;
       }
       if (!CROSS_CHAIN_ROUTES.has(source as WottaSourceRoute)) {
@@ -468,7 +475,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
         address,
         label: sourceLabel,
       });
-      toast.success(`${sourceLabel} wallet connected`);
+      toast.success(TOAST.sourceConnected(sourceLabel));
     } catch (error) {
       const message = userFacingError(error, "Wallet connect failed");
       setInlineError(message);
@@ -482,7 +489,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   async function run() {
     const parsed = parseRecipient(recipient);
     if (!parsed) {
-      toast.error("Enter a valid @handle or email");
+      toast.error(TOAST.invalidRecipient);
       return;
     }
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
@@ -522,7 +529,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           label: "Starknet escrow",
         });
         setStage("complete");
-        toast.success("Escrowed and delivered to their encrypted inbox");
+        toast.success(SETTLED_PRIVATELY_INBOX);
         return;
       }
       if (source === "starknet-private") {
@@ -545,7 +552,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           label: "Starknet escrow",
         });
         setStage("complete");
-        toast.success("Escrowed and delivered to their encrypted inbox");
+        toast.success(SETTLED_PRIVATELY_INBOX);
         return;
       }
       if (source === "starknet-public") {
@@ -567,7 +574,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           label: routes.find((route) => route.key === source)?.label,
         });
         setStage("complete");
-        toast.success("Escrowed on Starknet");
+        toast.success(SETTLED_PRIVATELY);
         return;
       }
       if (!CROSS_CHAIN_ROUTES.has(source as WottaSourceRoute)) {
@@ -597,7 +604,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
         label: routes.find((route) => route.key === source)?.label,
       });
       setStage("complete");
-      toast.success("Escrowed on Starknet");
+      toast.success(SETTLED_PRIVATELY);
     } catch (error) {
       if (operation.signal.aborted) return;
       const message = userFacingError(error, "Couldn’t send");
@@ -627,7 +634,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           status={delivery === "inbox" ? "Claimable" : "On hold"}
           note={delivery === "pending"
             ? `Held until ${heldUntil.toLocaleDateString()}`
-            : "Escrow → encrypted inbox → private Starknet claim"}
+            : SUCCESS_NOTE_PIPELINE}
           footer={
             <div className="space-y-2">
               <MotionPillButton className="w-full" onClick={() => { setStage("idle"); setDelivery(null); setSuccessTx(null); setSuccessRoute(null); }}>
@@ -669,10 +676,10 @@ function SendForm({ mode }: { mode: NetworkMode }) {
         <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
           {mainnet ? (
             <div className="radius-surface-inner border border-warning-border bg-warning-surface px-4 py-3 text-xs leading-5 text-warning-foreground" role="status">
-              Mainnet uses real funds. Your Ready wallet makes a public fixed-denomination USDC deposit into a verified Wotta escrow; the recipient then claims it into their private balance.
+              {MAINNET_BANNER}
             </div>
           ) : null}
-          <ConfidentialToggle
+          <PrivateRouteToggle
             enabled={confidentialMode}
             disabled={mainnet || formLocked || !routesReady}
             locked={mainnet}
@@ -694,8 +701,8 @@ function SendForm({ mode }: { mode: NetworkMode }) {
             >
               <p>
                 {routesHealth === "loading"
-                  ? "Checking route health — hold on a sec."
-                  : "API is waking up — chain selection unlocks once route health is back."}
+                  ? "Checking routes…"
+                  : "API is waking up — chain selection unlocks when route health is back."}
               </p>
               {routesHealth === "waking" ? (
                 <button
@@ -738,11 +745,9 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           </div>
           {CROSS_CHAIN_ROUTES.has(source as WottaSourceRoute) || source === NOX_ROUTE_ID ? (
             <p className="text-xs leading-5 text-muted-foreground" role="note">
-              {source === NOX_ROUTE_ID
-                ? "The source wallet, fixed denomination, network fee, deposit transaction, and timing are public. Wotta encrypts delivery to the recipient; the claim and later private activity use STRK20. Wotta provides confidentiality, not anonymity."
-                : CCTP_PRIVACY_DISCLOSURE}{" "}
+              {TRUTH_LINE_SHORT}{" "}
               <a className="font-medium text-foreground underline underline-offset-4" href="/privacy">
-                Privacy details
+                Details
               </a>
             </p>
           ) : null}
@@ -857,13 +862,7 @@ function SendPageInner() {
     <PageShell
       title={tab === "claim" ? "Claim" : "Send"}
       subtitle={
-        tab === "claim"
-          ? mode === "mainnet"
-            ? "Claim escrowed USDC from your encrypted inbox into your private Starknet balance."
-            : "Claim USDC from your inbox into your private Starknet balance."
-          : mode === "mainnet"
-            ? "Pay an email or @handle privately through Starknet Mainnet."
-            : "Pay an email or @handle from any admitted testnet source."
+        tab === "claim" ? PAGE_SUBTITLES.claim : PAGE_SUBTITLES.send
       }
     >
       <div className="mb-6 flex justify-center">

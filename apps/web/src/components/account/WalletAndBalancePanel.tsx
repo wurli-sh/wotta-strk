@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { WalletConnectModal } from "@/components/WalletConnectModal";
 import { apiFetch, type MeResponse } from "@/lib/api/client";
+import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import { isPrivacyReconnectError, requestWalletReconnect } from "@/lib/network-reconnect";
 import { routeLogoPath } from "@/lib/crypto-icons";
@@ -19,6 +20,7 @@ import { connectReady } from "@/lib/wotta/ready";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { readMainnetPrivateBalance } from "@/lib/wotta/mainnet-privacy";
 import { beginNetworkOperation } from "@/lib/network-operations";
+import { ACCOUNT_EARN_HINT } from "@/lib/brand-copy";
 
 type Props = {
   me: MeResponse | null;
@@ -57,10 +59,10 @@ export function WalletAndBalancePanel({
     try {
       await navigator.clipboard.writeText(address);
       setCopied(true);
-      toast.success("Address copied");
+      toast.success(TOAST.addressCopied);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      toast.error("Couldn't copy address");
+      toast.error(TOAST.addressCopyFailed);
     }
   }
 
@@ -79,14 +81,14 @@ export function WalletAndBalancePanel({
         signal: operation.signal,
       });
       clearAllPrivacyVaultLocalState();
-      toast.success("Ready wallet unlinked");
+      toast.success(TOAST.readyUnlinked);
       await onLinked({
         profile: me?.profile ?? null,
         identities: me?.identities ?? [],
         wallet: null,
       });
     } catch (e) {
-      toast.error(userFacingError(e, "Couldn't unlink wallet"));
+      toast.error(userFacingError(e, TOAST.unlinkWalletFailed));
     } finally {
       operation.finish();
       setBusy(false);
@@ -95,7 +97,7 @@ export function WalletAndBalancePanel({
 
   async function revealBalance() {
     if (!me?.wallet) {
-      toast.error("Link Ready to reveal your private balance");
+      toast.error(TOAST.linkReadyToReveal);
       return;
     }
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
@@ -264,6 +266,7 @@ export function WalletAndBalancePanel({
                   ? `Last revealed ${updatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
                   : "Reveal requires Ready authorization."}
               </p>
+              <p className="mt-2 text-xs text-muted-foreground">{ACCOUNT_EARN_HINT}</p>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {revealHref ? (

@@ -9,10 +9,14 @@ import { GoogleIcon, XBrandIcon } from "@/components/icons";
 import { MotionButton } from "@/components/ui/MotionLink";
 import { createClient } from "@/lib/supabase/client";
 import { prepareOAuthRedirect } from "@/lib/app-origin";
+import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import { toSupabaseProvider } from "@/lib/supabase/providers";
-
-const HEADLINE = ["Hold Anywhere.", "Send Quietly."] as const;
+import {
+  LANDING_HEADLINE,
+  LANDING_INBOX_PROMPT,
+  LANDING_SUBHEAD,
+} from "@/lib/brand-copy";
 
 function HomeContent() {
   const [busy, setBusy] = useState<"google" | "x" | null>(null);
@@ -31,7 +35,7 @@ function HomeContent() {
       if (error) throw error;
     } catch (cause) {
       setBusy(null);
-      toast.error(userFacingError(cause, "Sign-in failed"));
+      toast.error(userFacingError(cause, TOAST.signInFailed));
     }
   }
 
@@ -44,7 +48,7 @@ function HomeContent() {
               aria-hidden="true"
               className="flex flex-col items-center gap-2"
             >
-              {HEADLINE.map((line, index) => (
+              {LANDING_HEADLINE.map((line, index) => (
                 <motion.span
                   key={line}
                   className="block"
@@ -61,22 +65,20 @@ function HomeContent() {
               ))}
             </span>
             <span className="sr-only">
-              Hold Anywhere. Send Quietly. Pay from admitted testnet rails.
-              Send privately to an email or handle. They claim on Starknet.
+              {LANDING_HEADLINE.join(" ")} {LANDING_SUBHEAD}
             </span>
           </h1>
         </div>
 
         <p className="mx-auto max-w-xl text-base text-muted-foreground sm:text-lg">
-          Pay from Ethereum, Base, Arbitrum, Solana, Stellar, or Starknet
-          testnets when that rail is verified. They claim USDC on Starknet.
+          {LANDING_SUBHEAD}
         </p>
 
         <div className="flex flex-col items-center gap-5">
           <HeroSendBox />
           <div className="flex flex-col items-center gap-2">
             <p className="text-sm text-muted-foreground">
-              Getting paid? Open your inbox.
+              {LANDING_INBOX_PROMPT}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <MotionButton

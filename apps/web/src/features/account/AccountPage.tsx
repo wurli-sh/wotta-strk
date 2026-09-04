@@ -20,6 +20,7 @@ import {
   WalletPanelSkeleton,
 } from "@/components/ui/Skeleton";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { PAGE_SUBTITLES, TOAST } from "@/lib/brand-copy";
 
 type AccountTab = "handles" | "wallet";
 
@@ -72,13 +73,13 @@ function AccountContent() {
           });
           notifySessionChanged();
         } else {
-          toast.error(userFacingError(res.error, "Couldn't refresh account"));
+          toast.error(userFacingError(res.error, TOAST.accountRefreshFailed));
         }
       };
       if (opts?.hold) await withMinSkeleton(work);
       else await work();
     } catch (error) {
-      toast.error(userFacingError(error, "Couldn't refresh account"));
+      toast.error(userFacingError(error, TOAST.accountRefreshFailed));
     }
   }, [mode]);
 
@@ -121,7 +122,7 @@ function AccountContent() {
   useEffect(() => {
     const authError = params.get("authError");
     if (!authError) return;
-    toast.error(userFacingError(authError, "Sign-in did not complete — try again"), {
+    toast.error(userFacingError(authError, TOAST.signInFailed), {
       id: "auth-callback-error",
     });
     const query = new URLSearchParams(params.toString());
@@ -157,7 +158,7 @@ function AccountContent() {
       title="Account"
       subtitle={
         session
-          ? "Your handles, Ready wallet, and private identity."
+          ? PAGE_SUBTITLES.account
           : "Sign in from the navigation to manage your handles and wallet."
       }
       maxWidth="md"

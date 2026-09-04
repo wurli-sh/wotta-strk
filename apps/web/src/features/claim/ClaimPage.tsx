@@ -8,6 +8,11 @@ import { NoteCardSkeleton } from "@/components/ui/Skeleton";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { WrongModeNotice } from "@/components/WrongModeNotice";
 import { useRoutesHealth } from "@/features/send/useRoutesHealth";
+import {
+  CHECKING_PRIVATE_CLAIM_ROUTE,
+  PAGE_SUBTITLES,
+  PRIVATE_CLAIM_ROUTE_UNVERIFIED,
+} from "@/lib/brand-copy";
 
 function ClaimPageInner({ embedded = false }: { embedded?: boolean }) {
   const { mode } = useNetworkMode();
@@ -18,7 +23,7 @@ function ClaimPageInner({ embedded = false }: { embedded?: boolean }) {
 
   if (mode === "mainnet" && !routesReady) {
     return embedded ? <NoteCardSkeleton /> : (
-      <PageShell title="Claim" subtitle="Checking the verified Mainnet escrow route."><NoteCardSkeleton /></PageShell>
+      <PageShell title="Claim" subtitle={CHECKING_PRIVATE_CLAIM_ROUTE}><NoteCardSkeleton /></PageShell>
     );
   }
 
@@ -26,11 +31,11 @@ function ClaimPageInner({ embedded = false }: { embedded?: boolean }) {
     const unavailable = (
       <WrongModeNotice
         feature="Claim"
-        detail="Mainnet escrow claims stay disabled until the Wotta escrow and Ready privacy manifests pass on-chain verification."
+        detail={PRIVATE_CLAIM_ROUTE_UNVERIFIED}
       />
     );
     return embedded ? unavailable : (
-      <PageShell title="Claim" subtitle="Prove and claim USDC from your inbox into your private Starknet balance.">{unavailable}</PageShell>
+      <PageShell title="Claim" subtitle={PAGE_SUBTITLES.claim}>{unavailable}</PageShell>
     );
   }
 
@@ -41,7 +46,7 @@ function ClaimPageInner({ embedded = false }: { embedded?: boolean }) {
   return (
     <PageShell
       title="Claim"
-      subtitle="Prove and claim USDC from your inbox into your private Starknet balance."
+      subtitle={PAGE_SUBTITLES.claim}
     >
       <ClaimView noteId={noteId} />
     </PageShell>

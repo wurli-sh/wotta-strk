@@ -81,7 +81,7 @@ Version: viem@2.55.10`;
 
   it("maps a Sepolia indexer viewing-key mismatch after a network switch", () => {
     expect(userFacingError(new Error("privacy_viewing_key_mismatch"))).toBe(
-      "Local privacy state no longer matches this identity — reconnect Ready from Account",
+      "Local private state no longer matches this identity — reconnect Ready from Account",
     );
     expect(
       userFacingError(
@@ -89,7 +89,7 @@ Version: viem@2.55.10`;
           'Indexer API /v1/sync/incoming_state failed (400): {"error":{"code":"INVALID_REQUEST","message":"viewing_key does not match the registered public key"}}',
         ),
       ),
-    ).toBe("Local privacy state no longer matches this identity — reconnect Ready from Account");
+    ).toBe("Local private state no longer matches this identity — reconnect Ready from Account");
     expect(
       userFacingError(new Error("JSON object requested, multiple (or no) rows returned")),
     ).toBe("Wallet link is out of sync — retry reconnect, or unlink and link Ready again from Account");

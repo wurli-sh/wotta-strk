@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { GlimmProvider, InterceptLinks } from "glimm/next";
 import { AppChrome } from "@/components/AppChrome";
 import { Providers } from "@/components/Providers";
+import { SITE_DESCRIPTION } from "@/lib/brand-copy";
 import { BRAND_GLIMM_SWEEP } from "@/lib/glimmBrand";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Wotta",
-  description:
-    "Private USDC payments through Starknet, with full Testnet beta routes and a restricted live-pool Mainnet mode.",
+  description: SITE_DESCRIPTION,
   referrer: "no-referrer",
   icons: {
     icon: [

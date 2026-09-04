@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   try {
     const raw = await request.text();
     if (new TextEncoder().encode(raw).byteLength > MAX_SUBMISSION_BYTES) {
-      throw new Error("privacy proof payload is too large");
+      throw new Error("private proof payload is too large");
     }
     const payload = JSON.parse(raw) as SubmitPayload;
     const pool = sepoliaDeployment.directPrivacy.poolAddress;
@@ -62,7 +62,7 @@ function validateSubmission(payload: SubmitPayload, expectedPool: string): Call 
     throw new Error("invalid privacy submission contract address");
   }
   if (BigInt(call.contractAddress) !== BigInt(expectedPool) || call.entrypoint !== "apply_actions") {
-    throw new Error("submitter only accepts apply_actions for the pinned Sepolia privacy pool");
+    throw new Error("submitter only accepts apply_actions for the pinned Sepolia private pool");
   }
   if (!Array.isArray(call.calldata) || call.calldata.some((value) =>
     typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value))) {
@@ -70,7 +70,7 @@ function validateSubmission(payload: SubmitPayload, expectedPool: string): Call 
   }
   if (!proof?.data || !Array.isArray(proof.proof_facts) || proof.proof_facts.length === 0 ||
       proof.proof_facts.some((value) => typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value))) {
-    throw new Error("invalid or empty privacy proof");
+    throw new Error("invalid or empty private proof");
   }
   return {
     contractAddress: call.contractAddress,

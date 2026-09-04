@@ -12,7 +12,7 @@ type Props = {
   denominations?: readonly Dens[];
 };
 
-/** Fixed dens as amount chips — single row, number only. */
+/** Fixed denominations as amount chips — single row, number only. */
 export function DenomChips({ value, onChange, disabled, denominations = DENS }: Props) {
   const reduce = useReducedMotion();
 

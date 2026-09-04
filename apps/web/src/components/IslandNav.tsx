@@ -8,6 +8,7 @@ import { AlertTriangle, Check, ChevronDown, Copy, LogOut, Mail, Network, Wallet 
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import { toastNetworkModeEnabled } from "@/lib/network-mode-toast";
+import { MAINNET_NAV_CONFIRM, TOAST } from "@/lib/brand-copy";
 import { buttonTap, navSpring } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 import {
@@ -186,7 +187,7 @@ function NetworkChoices({
           <div className="flex gap-2.5 rounded-lg border border-mainnet-muted bg-mainnet-soft px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-mainnet-strong" aria-hidden />
             <p className="text-xs leading-5 text-foreground">
-              Mainnet uses real USDC and STRK. Only Starknet private sends are enabled; 0.1 USDC is added to the existing amounts.
+              {MAINNET_NAV_CONFIRM} 0.1 USDC is added to the existing amounts.
             </p>
           </div>
           <div className="mt-2.5 flex gap-2">
@@ -250,7 +251,7 @@ export function IslandNav() {
       return;
     }
     if (!setMode(next)) {
-      toast.error("Finish or cancel the open Ready request before switching networks");
+      toast.error(TOAST.networkBlocked);
       return;
     }
     playSweep(next === "testnet");
@@ -329,9 +330,9 @@ export function IslandNav() {
       clearSources();
       setMe(null);
       setSession(null);
-      toast.success("Signed out");
+      toast.success(TOAST.signedOut);
     } catch {
-      toast.error("Sign-out failed");
+      toast.error(TOAST.signOutFailed);
     } finally {
       setBusy(false);
     }
@@ -343,7 +344,7 @@ export function IslandNav() {
   function disconnectWallet() {
     setMenuOpen(false);
     clearSources();
-    toast.success("Wallet disconnected");
+    toast.success(TOAST.walletDisconnected);
   }
 
   async function copyAddress(address: string) {
@@ -353,7 +354,7 @@ export function IslandNav() {
       window.setTimeout(() => setCopiedAddress(null), 1_800);
     } catch {
       setCopiedAddress(null);
-      toast.error("Couldn’t copy address");
+      toast.error(TOAST.addressCopyFailed);
     }
   }
 

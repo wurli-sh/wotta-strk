@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/PageShell";
+import { PAGE_SUBTITLES } from "@/lib/brand-copy";
 
 export default function ActivityPage({
   params,
@@ -6,7 +7,7 @@ export default function ActivityPage({
   params: Promise<{ id: string }>;
 }) {
   return (
-    <PageShell title="Activity" subtitle="Public workflow shell only.">
+    <PageShell title="Activity" subtitle={PAGE_SUBTITLES.activity}>
       <ActivityId params={params} />
     </PageShell>
   );

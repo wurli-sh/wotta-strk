@@ -7,22 +7,22 @@ import type { ProofPhase } from "@/lib/wotta/privacy-proof";
 type SendStage = "idle" | FundingStage | ProofPhase | "unlocking_private" | "complete";
 
 const LABELS: Partial<Record<SendStage, string>> = {
-  resolving: "Looking up recipient…",
-  quoting: "Fetching quote…",
-  approving: "Waiting for approval…",
-  depositing: "Depositing to escrow…",
-  submitting: "Confirm source payment…",
-  delivering: "Saving encrypted delivery…",
+  resolving: "Resolving recipient…",
+  quoting: "Verifying quote…",
+  approving: "Approve USDC…",
+  depositing: "Deposit to Wotta…",
+  submitting: "Submitting proof…",
+  delivering: "Encrypting delivery…",
   connecting_source: "Connecting source wallet…",
-  burning: "Confirm source burn…",
+  burning: "Confirm CCTP burn…",
   confirming: "Confirming source transaction…",
   attesting: "Waiting for Circle attestation…",
-  settling: "Settling on Starknet…",
+  settling: "Settling privately on Starknet…",
   unlocking_private: "Unlocking private balance…",
   waiting_confirmations: "Waiting for a proof-safe block…",
   building_proof: "Building private transfer…",
   signing_message: "Authorize in wallet…",
-  generating_proof: "Generating privacy proof…",
+  generating_proof: "Generating private proof…",
 };
 
 export function SendProgress({ stage }: { stage: SendStage }) {

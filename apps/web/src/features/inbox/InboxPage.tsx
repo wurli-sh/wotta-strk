@@ -24,6 +24,12 @@ import type { SourceRail } from "@/components/SourceChips";
 import { starkscanTransactionUrl } from "@/lib/network-mode";
 import type { NetworkMode } from "@/lib/network-mode";
 import { useRoutesHealth } from "@/features/send/useRoutesHealth";
+import {
+  CHECKING_PRIVATE_CLAIM_ROUTE,
+  PAGE_SUBTITLES,
+  PRIVATE_CLAIM_ROUTE_UNVERIFIED,
+  TOAST,
+} from "@/lib/brand-copy";
 
 const SELF_SETTLE_MS = 900_000;
 
@@ -215,7 +221,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
       if (hold) await withMinSkeleton(work, SKELETON_MAX_MS); else await work();
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
-        toast.error(userFacingError(error, "Couldn’t load inbox"));
+        toast.error(userFacingError(error, TOAST.inboxLoadFailed));
       }
     } finally {
       operation.finish();
@@ -240,7 +246,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
       await unlock();
       await refresh();
     } catch (error) {
-      toast.error(userFacingError(error, "Couldn't unlock inbox"));
+      toast.error(userFacingError(error, TOAST.inboxUnlockFailed));
     }
   }
 
@@ -266,7 +272,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
       </TableShell>
     );
     return embedded ? waiting : (
-      <PageShell title="Inbox" subtitle="Payments waiting for a private Starknet claim." maxWidth="lg">
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
         {waiting}
       </PageShell>
     );
@@ -391,7 +397,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
   );
 
   return embedded ? content : (
-    <PageShell title="Inbox" subtitle="Payments waiting for a private Starknet claim." maxWidth="lg">{content}</PageShell>
+    <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">{content}</PageShell>
   );
 }
 
@@ -402,20 +408,20 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   if (mode === "mainnet" && !routesReady) {
     const loading = <InboxMobileRowsSkeleton rows={2} />;
     return embedded ? loading : (
-      <PageShell title="Inbox" subtitle="Checking the verified Mainnet escrow route." maxWidth="lg">{loading}</PageShell>
+      <PageShell title="Inbox" subtitle={CHECKING_PRIVATE_CLAIM_ROUTE} maxWidth="lg">{loading}</PageShell>
     );
   }
   if (mode === "mainnet" && routesReady && !mainnetEscrowReady) {
     const blocked = (
       <WrongModeNotice
         feature="Inbox"
-        detail="Mainnet inbox delivery stays disabled until the Wotta escrow and Ready privacy manifests pass on-chain verification."
+        detail={PRIVATE_CLAIM_ROUTE_UNVERIFIED}
         mainnetHref="/account?tab=wallet"
         mainnetLabel="View Mainnet balance"
       />
     );
     return embedded ? blocked : (
-      <PageShell title="Inbox" subtitle="Payments waiting for a private Starknet claim." maxWidth="lg">
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
         {blocked}
       </PageShell>
     );

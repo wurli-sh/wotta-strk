@@ -590,7 +590,7 @@ export class WottaProductSession {
       }
       await new Promise((resolve) => window.setTimeout(resolve, 3_000));
     }
-    throw new Error("Source burn succeeded, but Starknet escrow confirmation is still pending. It will continue in the background.");
+    throw new Error("Source burn succeeded, but Starknet settlement confirmation is still pending. It will continue in the background.");
   }
 
   async loadLatestClaim(vault: PrivacyVault) {

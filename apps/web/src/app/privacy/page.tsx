@@ -2,20 +2,22 @@
 
 import { PageShell } from "@/components/PageShell";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
+import { PAGE_SUBTITLES, TRUTH_LINE } from "@/lib/brand-copy";
 
 function PrivacyContent() {
   const { mode } = useNetworkMode();
   return (
     <PageShell
       title="Privacy"
-      subtitle="What stays private — and what doesn’t."
+      subtitle={PAGE_SUBTITLES.privacy}
       maxWidth="md"
     >
       <div className="space-y-8" data-testid="privacy-page">
         <p className="text-sm leading-relaxed text-muted-foreground">
+          {TRUTH_LINE}{" "}
           {mode === "mainnet"
-            ? "Mainnet private send uses a public fixed-denomination USDC deposit into a verified Wotta escrow, encrypted inbox delivery, and a Ready/STRK20 claim into the recipient’s private balance. Shield and withdraw remain wallet-managed STRK20 actions. The system is unaudited; use only the minimum demo funds."
-            : "Testnet beta uses public source testnets, Starknet Sepolia contracts, the Starknet privacy SDK, and a hosted prover. The system is unaudited and is not suitable for meaningful funds."}
+            ? "Mainnet private send uses a public fixed-denomination USDC deposit, encrypted inbox delivery, and a claim into the recipient’s private balance. Shield and withdraw remain wallet-managed Ready actions. The system is unaudited; use only the minimum demo funds."
+            : "Testnet beta uses public source testnets, Starknet Sepolia contracts, and a hosted prover. The system is unaudited and is not suitable for meaningful funds."}
         </p>
 
         <section>
@@ -32,13 +34,13 @@ function PrivacyContent() {
               than exposing the private note material to the web API.
             </li>
             <li>
-              Inbox and privacy secrets are encrypted locally. Wotta does not
+              Inbox and private secrets are encrypted locally. Wotta does not
               store raw keys, decrypted inbox contents, or proof secrets in its
               database.
             </li>
             <li>
               A cross-chain note becomes claimable only after the canonical
-              indexer observes its funded Starknet escrow state.
+              indexer observes its funded Starknet settlement state.
             </li>
           </ul>
         </section>
@@ -83,17 +85,18 @@ function PrivacyContent() {
               wallet activity remain visible.
             </li>
             <li>
-              Not guaranteed anonymity; privacy depends on shared denominations
-              and real pool activity.
+              Not guaranteed privacy; it depends on shared denominations and
+              real pool activity.
             </li>
             <li>Multi-step wallet approvals are not “one click.”</li>
             <li>
-              Status is not “Escrowed” until the indexer reports the Starknet
-              escrow as funded, and not “Claimed” until it observes the claim.
+              Status is not “Settled privately” until the indexer reports the
+              Starknet settlement as funded, and not “Claimed” until it observes
+              the claim.
             </li>
             <li>
               {mode === "mainnet"
-                ? "Not audited production infrastructure: Mainnet private send stays gated on verified escrow/privacy manifests and is escrow → inbox → claim, not a direct private-balance transfer."
+                ? "Not audited production infrastructure: Mainnet private send stays gated on verified private claim routes and is deposit → inbox → claim, not a direct private-balance transfer."
                 : "Not a production deployment: contracts, relayers, adapters, and the hosted prover require independent audit and retained live test evidence before broader mainnet use."}
             </li>
           </ul>

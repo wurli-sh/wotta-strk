@@ -19,12 +19,12 @@ const ROUTES_RETRY_CAP_MS = 120_000;
 
 const routeToastCopy: Record<Exclude<RoutesHealth, "ready">, { title: string; description: string }> = {
   loading: {
-    title: "Checking route health — hold on a sec.",
-    description: "Send unlocks once admitted testnet routes are verified.",
+    title: "Checking routes",
+    description: "Send unlocks when verified routes are ready.",
   },
   waking: {
-    title: "API is waking up — hold on a sec.",
-    description: "Chain selection unlocks once route health is back.",
+    title: "API is waking up",
+    description: "Chain selection unlocks when route health is back.",
   },
 };
 

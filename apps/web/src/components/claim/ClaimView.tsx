@@ -21,6 +21,7 @@ import { beginNetworkOperation } from "@/lib/network-operations";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { starkscanTransactionUrl } from "@/lib/network-mode";
 import { submitMainnetEscrowClaim } from "@/lib/wotta/mainnet-privacy";
+import { SETTLED_PRIVATELY, TOAST } from "@/lib/brand-copy";
 
 type ClaimRow = {
   noteId: string;
@@ -48,7 +49,7 @@ const PHASE_LABELS: Record<ClaimPhase, string> = {
   waiting_confirmations: "Waiting for a proof-safe block…",
   building_proof: "Building private claim…",
   signing_message: "Authorize in Ready…",
-  generating_proof: "Generating privacy proof…",
+  generating_proof: "Generating private proof…",
   submitting: "Submitting proof…",
   confirming: "Confirming indexed claim…",
   complete: "Claimed",
@@ -117,7 +118,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
 
   async function runClaim() {
     if (!claim || !vault) {
-      toast.error("Unlock your inbox from Inbox first");
+      toast.error(TOAST.unlockInboxFirst);
       return;
     }
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
@@ -149,7 +150,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       operation.assertActive();
       setTransactionHash(hash);
       setPhase("complete");
-      toast.success("Claimed privately");
+      toast.success(TOAST.claimed);
       fireClaimConfetti(confettiRef.current);
       setClaim(null);
     } catch (caught) {
@@ -201,7 +202,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
         label="Ready to claim"
         amount={(claim.escrow.denomination / 1_000_000n).toString()}
         recipient="Private Starknet balance"
-        status="Escrowed"
+        status={SETTLED_PRIVATELY}
         footer={
           <Button
             variant="brand"

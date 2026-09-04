@@ -3,6 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { toastNetworkModeEnabled } from "@/lib/network-mode-toast";
+import { TOAST } from "@/lib/brand-copy";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { useGlimmSweep } from "@/lib/useGlimmSweep";
 import { Button } from "@/components/ui/Button";
@@ -23,7 +24,7 @@ export function WrongModeNotice({
 
   function switchToTestnet() {
     if (!setMode("testnet")) {
-      toast.error("Finish or cancel the open Ready request before switching networks");
+      toast.error(TOAST.networkBlocked);
       return;
     }
     playSweep(true);
@@ -37,7 +38,7 @@ export function WrongModeNotice({
       </span>
       <h2 className="mt-4 text-base font-semibold text-foreground">{feature} is not available on Mainnet</h2>
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        {detail ?? `Switch to Testnet to use ${feature}, or continue with the registered-recipient private flow on Mainnet.`}
+        {detail ?? `Switch to Testnet, or use the registered private flow on Mainnet.`}
       </p>
       <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
         <Button onClick={switchToTestnet}>Switch to Testnet</Button>

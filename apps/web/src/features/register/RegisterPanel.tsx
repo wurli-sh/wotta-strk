@@ -7,6 +7,7 @@ import { Button } from "@/components/Button";
 import { SignInAuthPanel } from "@/components/SignInAuthPanel";
 import { WalletConnectModal } from "@/components/WalletConnectModal";
 import { apiFetch, type MeResponse } from "@/lib/api/client";
+import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
 
@@ -35,7 +36,7 @@ export function RegisterPanel({ embedded = false }: { embedded?: boolean } = {})
       else if (profile.wallet) setStep("identity");
       else setStep("wallet");
     } catch (error) {
-      toast.error(userFacingError(error, "Couldn’t load registration"));
+      toast.error(userFacingError(error, TOAST.registrationLoadFailed));
     } finally {
       setBusy(false);
     }
@@ -58,7 +59,7 @@ export function RegisterPanel({ embedded = false }: { embedded?: boolean } = {})
           ["oauth", "Sign in with Google or X"],
           ["wallet", "Connect and bind Ready"],
           ["identity", "Deploy and prove private identity"],
-          ["done", "Ready for private cross-chain claims"],
+          ["done", "Ready for private claims"],
         ] as const).map(([id, label]) => (
           <li key={id} className={step === id ? "font-semibold text-primary" : ""}>{label}</li>
         ))}
@@ -99,7 +100,7 @@ export function RegisterPanel({ embedded = false }: { embedded?: boolean } = {})
   return embedded ? content : (
     <PageShell
       title="Connect wallet"
-      subtitle="Google or X → Ready on Starknet Sepolia → private identity proof."
+      subtitle="Sign in → Ready → private identity."
     >
       {content}
     </PageShell>

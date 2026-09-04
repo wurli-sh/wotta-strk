@@ -29,6 +29,6 @@ export function networkReconnectTitle(mode: NetworkMode): string {
 
 export function networkReconnectBody(mode: NetworkMode): string {
   return mode === "mainnet"
-    ? "Mainnet uses a separate wallet binding and privacy pool. Sign with Ready again to unlock local state and refresh your live balance."
-    : "Testnet uses its own wallet binding and privacy vault. Sign with Ready again to rebuild notes and reveal your private balance.";
+    ? "Mainnet uses a separate wallet binding and private balance. Sign with Ready again to unlock local state and refresh your live balance."
+    : "Testnet uses its own wallet binding and private vault. Sign with Ready again to rebuild notes and reveal your private balance.";
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { apiBase } from "@/lib/api/client";
+import { PAGE_SUBTITLES } from "@/lib/brand-copy";
 
 type HealthBody = {
   ok?: boolean;
@@ -53,7 +54,7 @@ export default function StatusPage() {
   }, []);
 
   return (
-    <PageShell title="Status" subtitle="Safe aggregate health only.">
+    <PageShell title="Status" subtitle={PAGE_SUBTITLES.status}>
       <dl className="space-y-3 rounded-[var(--radius-surface)] border border-border bg-card p-5 text-sm">
         <div>
           <dt className="text-muted-foreground">API</dt>

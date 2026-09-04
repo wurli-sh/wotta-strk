@@ -78,7 +78,7 @@ const REASON_COPY: Partial<Record<string, string>> = {
   // Legacy testnet reason codes — kept for backwards compatibility
   awaiting_verified_destination: "Verifying destination — coming soon",
   awaiting_route_specific_live_evidence: "Awaiting route verification — coming soon",
-  awaiting_verified_escrow_deployment: "Awaiting verified escrow — coming soon",
+  awaiting_verified_escrow_deployment: "Awaiting verified route — coming soon",
 };
 
 export function buildSourceRoutes(

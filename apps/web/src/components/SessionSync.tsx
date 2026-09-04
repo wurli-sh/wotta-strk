@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { syncWottaSession, clearStaleSupabaseLocalStorage } from "@/lib/auth";
+import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
 import { consumeOAuthCallbackFailure } from "@/lib/wotta/product-session";
@@ -18,7 +19,7 @@ export function SessionSync() {
     const failure = consumeOAuthCallbackFailure();
     if (failure) {
       toast.error(
-        userFacingError(failure, "Sign-in did not complete — try again"),
+        userFacingError(failure, TOAST.signInFailed),
         { id: "oauth-callback-failure" },
       );
     }

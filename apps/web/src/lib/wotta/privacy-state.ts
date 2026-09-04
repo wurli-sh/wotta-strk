@@ -297,7 +297,7 @@ async function decryptState(raw: string, key: CryptoKey): Promise<PrivacyState |
     return state;
   } catch {
     throw new Error(
-      "Could not unlock the encrypted privacy state. Use the same Ready account and do not clear its signing identity.",
+      "Could not unlock the encrypted private state. Use the same Ready account and do not clear its signing identity.",
     );
   }
 }

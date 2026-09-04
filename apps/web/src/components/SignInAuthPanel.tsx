@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { GoogleIcon, XBrandIcon } from "@/components/icons";
 import { createClient } from "@/lib/supabase/client";
 import { prepareOAuthRedirect } from "@/lib/app-origin";
+import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import {
   toSupabaseProvider,
@@ -35,7 +36,7 @@ export function SignInAuthPanel({
 
   useEffect(() => {
     if (authError) {
-      toast.error("Sign-in did not complete. Please try again.");
+      toast.error(TOAST.signInFailed);
     }
   }, [authError]);
 
@@ -49,9 +50,9 @@ export function SignInAuthPanel({
           redirectTo: prepareOAuthRedirect(redirectNext),
         },
       });
-      if (error) toast.error(userFacingError(error, "Sign-in failed"));
+      if (error) toast.error(userFacingError(error, TOAST.signInFailed));
     } catch (e) {
-      toast.error(userFacingError(e, "Sign-in failed"));
+      toast.error(userFacingError(e, TOAST.signInFailed));
     } finally {
       setBusy(false);
     }
@@ -66,13 +67,13 @@ export function SignInAuthPanel({
         email: email.trim().toLowerCase(),
       });
       if (error) {
-        toast.error(userFacingError(error, "Could not send code"));
+        toast.error(userFacingError(error, TOAST.codeSendFailed));
         return;
       }
       setOtpSent(true);
-      toast.success("Check your email for a one-time code.");
+      toast.success(TOAST.codeSent);
     } catch (e) {
-      toast.error(userFacingError(e, "Could not send code"));
+      toast.error(userFacingError(e, TOAST.codeSendFailed));
     } finally {
       setBusy(false);
     }
@@ -89,14 +90,14 @@ export function SignInAuthPanel({
         type: "email",
       });
       if (error) {
-        toast.error(userFacingError(error, "Could not verify code"));
+        toast.error(userFacingError(error, TOAST.codeVerifyFailed));
         return;
       }
-      toast.success("Signed in");
+      toast.success(TOAST.signedIn);
       await syncWottaSession({ notify: true });
       onAuthenticated?.();
     } catch (e) {
-      toast.error(userFacingError(e, "Could not verify code"));
+      toast.error(userFacingError(e, TOAST.codeVerifyFailed));
     } finally {
       setBusy(false);
     }

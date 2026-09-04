@@ -8,6 +8,7 @@ import { GoogleIcon, XBrandIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { HandlesPanelSkeleton } from "@/components/ui/Skeleton";
 import type { MeResponse } from "@/lib/api/client";
+import { TOAST } from "@/lib/brand-copy";
 import { toastInfo, userFacingError } from "@/lib/errors";
 import { syncWottaSession } from "@/lib/auth";
 import type { WottaOAuthProvider } from "@/lib/supabase/providers";
@@ -145,7 +146,7 @@ export function HandlesPanel({ me, session, loading, onLinked }: Props) {
 
   async function linkIdentity(provider: WottaOAuthProvider) {
     if (!session) {
-      toast.error("Sign in first");
+      toast.error(TOAST.signInToManageHandles);
       return;
     }
     setBusy(true);
@@ -156,10 +157,10 @@ export function HandlesPanel({ me, session, loading, onLinked }: Props) {
         await onLinked();
         return;
       }
-      toast.success("Continue linking in the provider window");
+      toast.success(TOAST.continueLinking);
       await onLinked();
     } catch (e) {
-      toast.error(userFacingError(e, "Couldn’t link account"));
+      toast.error(userFacingError(e, TOAST.linkAccountFailed));
     } finally {
       setBusy(false);
     }
@@ -175,7 +176,7 @@ export function HandlesPanel({ me, session, loading, onLinked }: Props) {
       return;
     }
     if (!canUnlinkIdentity) {
-      toast.error("Keep at least one sign-in method on this account");
+      toast.error(TOAST.keepOneSignIn);
       return;
     }
     if (row.provider === "email") {
@@ -185,15 +186,15 @@ export function HandlesPanel({ me, session, loading, onLinked }: Props) {
         const supabase = createClient();
         const { error } = await supabase.auth.unlinkIdentity(row.identity);
         if (error) {
-          toast.error(userFacingError(error, "Could not unlink"));
+          toast.error(userFacingError(error, TOAST.unlinkFailed));
           return;
         }
         await supabase.auth.refreshSession();
         await syncWottaSession();
-        toast.success("Email unlinked");
+        toast.success(TOAST.emailUnlinked);
         await onLinked();
       } catch (e) {
-        toast.error(userFacingError(e, "Couldn’t unlink"));
+        toast.error(userFacingError(e, TOAST.unlinkFailed));
       } finally {
         setBusy(false);
       }
@@ -203,13 +204,11 @@ export function HandlesPanel({ me, session, loading, onLinked }: Props) {
     try {
       await createBrowserProductSession().unlinkProvider(row.provider);
       toast.success(
-        row.provider === "x"
-          ? "X unlinked — Wotta handle cleared for this session"
-          : "Google unlinked",
+        row.provider === "x" ? TOAST.xUnlinked : TOAST.googleUnlinked,
       );
       await onLinked();
     } catch (e) {
-      toast.error(userFacingError(e, "Couldn’t unlink"));
+      toast.error(userFacingError(e, TOAST.unlinkFailed));
     } finally {
       setBusy(false);
     }

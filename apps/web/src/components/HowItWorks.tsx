@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { NoteVisaCard } from "@/components/NoteVisaCard";
 import { UsdcIcon } from "@/components/UsdcIcon";
+import {
+  HOW_IT_WORKS_DEMO_NOTE,
+  HOW_IT_WORKS_STEPS,
+} from "@/lib/brand-copy";
 import { routeLogoPath } from "@/lib/crypto-icons";
 
 const HANDLE = "@patlu";
@@ -14,20 +18,7 @@ const RAILS: { key: string; label: string }[] = [
 const PICKED = "ethereum";
 const DEMO_AMOUNT = "10";
 
-const STEPS = [
-  {
-    title: "Type a handle.",
-    body: "@patlu or an email. No wallet addresses to copy or mess up.",
-  },
-  {
-    title: "Fixed dens. Proven sources.",
-    body: "Send 1, 10, 50, or 100 USDC from an admitted testnet rail. A route appears only after its exact adapter is verified.",
-  },
-  {
-    title: "They claim to their wallet.",
-    body: "The encrypted inbox holds the note until they prove and claim it into their private Starknet balance.",
-  },
-];
+const STEPS = HOW_IT_WORKS_STEPS;
 
 export function HowItWorks() {
   const ref = useRef<HTMLElement>(null);
@@ -235,7 +226,7 @@ export function HowItWorks() {
               amount={DEMO_AMOUNT}
               recipient="@patlu"
               status="ready to claim"
-              note="Claim → private Starknet balance"
+              note={HOW_IT_WORKS_DEMO_NOTE}
               compact
               interactive={false}
             />

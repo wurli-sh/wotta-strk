@@ -12,7 +12,7 @@ type Props = {
   onChange: (enabled: boolean) => void;
 };
 
-export function ConfidentialToggle({ enabled, disabled, locked = false, onChange }: Props) {
+export function PrivateRouteToggle({ enabled, disabled, locked = false, onChange }: Props) {
   const playSweep = useGlimmSweep();
   const reduce = useReducedMotion();
 

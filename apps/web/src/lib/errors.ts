@@ -67,15 +67,15 @@ const APP_MESSAGES: Record<string, string> = {
   balance_check_unresponsive: "Balance check timed out — reopen Ready and retry",
   signature_invalid: "Ready signature did not verify — switch network in Ready and retry",
   challenge_invalid: "Wallet binding expired — close the modal and try again",
-  ready_pool_mismatch: "Ready’s live privacy pool does not match Wotta’s verified pool",
-  mainnet_pool_class_mismatch: "The configured live privacy pool failed verification",
+  ready_pool_mismatch: "Ready’s live private pool does not match Wotta’s verified pool",
+  mainnet_pool_class_mismatch: "The configured live private pool failed verification",
   mainnet_rpc_not_configured: "Mainnet Starknet RPC is not configured on the API",
   private_identity_not_registered:
     "Open Ready → gear → your account → Enable private tokens, then reconnect Wotta",
   mainnet_privacy_registration_required:
     "Open Ready → gear → your account → Enable private tokens, tap Enable, then retry Send in Wotta",
   privacy_viewing_key_mismatch:
-    "Local privacy state no longer matches this identity — reconnect Ready from Account",
+    "Local private state no longer matches this identity — reconnect Ready from Account",
   wallet_binding_ambiguous:
     "Wallet link is out of sync — retry reconnect, or unlink and link Ready again from Account",
 };
@@ -238,7 +238,7 @@ function mapKnownPhrase(raw: string): string | null {
   }
 
   if (/empty_proof_facts/i.test(m)) {
-    return "Privacy pool received an empty proof — retry after Sepolia catches up";
+    return "Private pool received an empty proof — retry after Sepolia catches up";
   }
 
   if (/privacy submitter strk balance too low|relayer strk balance too low|sepolia proof submitter is low on strk|settlement stalled|relayer needs strk/i.test(m)) {
@@ -248,7 +248,7 @@ function mapKnownPhrase(raw: string): string | null {
     return "Sepolia settlement wallet needs STRK — fund STARKNET_DEPLOYER_ADDRESS (~10 STRK) and retry";
   }
   if (m.includes("privacy proof submission was rejected")) {
-    return "Privacy proof was rejected on Sepolia — reconnect Ready from Account and retry";
+    return "Private proof was rejected on Sepolia — reconnect Ready from Account and retry";
   }
 
   if (m.includes("privacy authorization signature did not verify")) {
@@ -259,7 +259,7 @@ function mapKnownPhrase(raw: string): string | null {
     m.includes("expected valid private key")
     || (m.includes("invalid private key") && m.includes("got 0"))
   ) {
-    return "Local privacy state is invalid — reconnect Ready from Account";
+    return "Local private state is invalid — reconnect Ready from Account";
   }
 
   if (m.includes("auth_failed") || m === "auth_failed") {
@@ -465,17 +465,17 @@ export function userFacingError(
   return fallback;
 }
 
-/** Fire a short error toast — never dump raw viem/API blobs. */
-export function toastErr(e: unknown, fallback = "Something went wrong") {
+/** Error toast — never dump raw viem/API blobs. Prefer outcome + next step. */
+export function toastErr(e: unknown, fallback = "Something went wrong — try again") {
   toast.error(userFacingError(e, fallback));
 }
 
-/** Short success toast. */
+/** Success toast — what happened + where it lands. */
 export function toastOk(message: string) {
   toast.success(message);
 }
 
-/** Short info toast (dedupe with `id` when stable). */
+/** Info toast (dedupe with `id` when stable) — status + when UI unlocks. */
 export function toastInfo(message: string, id?: string) {
   toast.message(message, id ? { id } : undefined);
 }

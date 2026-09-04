@@ -1,6 +1,7 @@
 import { ExternalLink, LockKeyhole, ShieldCheck, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { PageShell } from "@/components/PageShell";
+import { PAGE_SUBTITLES } from "@/lib/brand-copy";
 import mainnetDeployment from "../../../../../deployments/mainnet.json";
 
 const actions = [
@@ -34,13 +35,13 @@ function transactionUrl(hash: string): string {
 export default function MainnetDemoPage() {
   const managed = mainnetDeployment.walletManagedPrivacy;
   return (
-    <PageShell title="Wotta on Mainnet" subtitle="Three real transactions through Starknet’s live STRK20 privacy pool." maxWidth="lg">
+    <PageShell title="Wotta on Mainnet" subtitle={PAGE_SUBTITLES.mainnetDemo} maxWidth="lg">
       <div className="space-y-4">
         <section className="radius-surface border border-warning-border bg-warning-surface p-5 shadow-card sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-warning">Starknet Mainnet</p>
-              <h2 className="mt-1 text-lg font-semibold text-foreground">Ready wallet-managed privacy</h2>
+              <h2 className="mt-1 text-lg font-semibold text-foreground">Ready wallet-managed private USDC</h2>
             </div>
             <span className="rounded-full border border-success/20 bg-success/10 px-3 py-1 text-xs font-semibold text-success">Live pool verified</span>
           </div>

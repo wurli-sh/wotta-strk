@@ -1,6 +1,7 @@
 "use client";
 
 import { formatUsdc } from "@/lib/format/amount";
+import { QUOTE_PRIVACY_NOTE } from "@/lib/brand-copy";
 
 type Props = {
   grossDebit?: bigint | null;
@@ -15,7 +16,7 @@ export function QuoteCard({
   maxFee,
   finality,
   expiry,
-  privacyNote = "Source payment is public. Balance is confidential after claim.",
+  privacyNote = QUOTE_PRIVACY_NOTE,
 }: Props) {
   if (grossDebit == null) return null;
   return (

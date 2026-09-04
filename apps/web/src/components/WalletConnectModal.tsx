@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { WalletAccountV6 } from "starknet";
 import { Button } from "@/components/ui/Button";
 import { TextShimmer } from "@/components/ui/TextShimmer";
+import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import {
   createPrivacyClient,
@@ -56,11 +57,11 @@ const STEP_BAR: { key: ModalStep; label: string }[] = [
 const phaseLabel: Record<LinkPhase, string> = {
   idle: "",
   connecting: "Connecting Ready…",
-  unlocking: "Unlocking local privacy state…",
+  unlocking: "Unlocking local private state…",
   activating: "Activating Ready account…",
   binding: "Confirm wallet binding…",
   deploying: "Deploying private identity…",
-  proving: "Generating privacy proof…",
+  proving: "Generating private proof…",
   submitting: "Submitting proof on Sepolia…",
 };
 
@@ -144,7 +145,7 @@ export function WalletConnectModal({
       setStep("link");
     } catch (error) {
       if (!operation.signal.aborted) {
-        toast.error(userFacingError(error, "Couldn’t connect Ready"));
+        toast.error(userFacingError(error, TOAST.connectReadyFailed));
         setPhase("idle");
       }
     } finally {
@@ -184,7 +185,7 @@ export function WalletConnectModal({
         await session.syncSession();
         const linkedMe = await session.me();
         setStep("done");
-        toast.success(reconnect ? "Ready mainnet wallet reconnected" : "Ready mainnet wallet linked");
+        toast.success(reconnect ? TOAST.readyMainnetReconnected : TOAST.readyMainnetLinked);
         await onLinked(linkedMe);
         return;
       }
@@ -192,7 +193,7 @@ export function WalletConnectModal({
       const config = directPrivacyConfig();
 
       if (await ensureCurrentIdentityClass(account, vault, config)) {
-        toast.message("Private identity upgraded for Wotta — redeploying…");
+        toast.message(TOAST.identityUpgrading);
       }
 
       let identityAddress = vault.state.identityAddress;
@@ -221,12 +222,12 @@ export function WalletConnectModal({
       await session.syncSession();
       const linkedMe = await session.me();
       setStep("done");
-      toast.success(reconnect ? "Ready wallet reconnected" : "Ready wallet and private identity linked");
+      toast.success(reconnect ? TOAST.readyReconnected : TOAST.readyLinkedWithIdentity);
       await onLinked(linkedMe);
     } catch (error) {
       toast.error(userFacingError(
         error,
-        mode === "mainnet" ? "Couldn't link mainnet wallet" : "Couldn't complete private registration",
+        mode === "mainnet" ? TOAST.connectReadyFailed : TOAST.privateRegistrationFailed,
       ));
       setPhase("idle");
     } finally {

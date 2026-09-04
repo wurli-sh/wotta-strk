@@ -18,8 +18,7 @@ const COLD_START_DELAY_MS = 4_000;
 const copy: Record<Service, { loading: string; description: string }> = {
   api: {
     loading: "Waking up Wotta services…",
-    description:
-      "The server may be starting after inactivity. Your request is still running.",
+    description: "The API is starting after idle time — your request is still running.",
   },
 };
 

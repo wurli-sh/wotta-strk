@@ -3,14 +3,14 @@ import { test, expect } from "@playwright/test";
 test("landing + Send shell", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Hold Anywhere/i }),
+    page.getByRole("heading", { name: /Send from anywhere/i }),
   ).toBeVisible();
   await page.goto("/send");
   await expect(page.getByText("1").first()).toBeVisible();
   await expect(page.getByTestId("denom-1")).toBeVisible();
   await expect(page.getByTestId("denom-100")).toBeVisible();
   await expect(page.getByTestId("denom-0.1")).toHaveCount(0);
-  await expect(page.getByText(/admitted testnet source/i)).toBeVisible();
+  await expect(page.getByText(/Settles to private USDC/i)).toBeVisible();
 });
 
 test("balance route redirects to Account wallet", async ({ page }) => {

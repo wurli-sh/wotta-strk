@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { WalletPanelSkeleton } from "@/components/ui/Skeleton";
 import { WalletConnectModal } from "@/components/WalletConnectModal";
 import { apiFetch, type MeResponse } from "@/lib/api/client";
+import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import { routeLogoPath } from "@/lib/crypto-icons";
 import { createClient } from "@/lib/supabase/client";
@@ -35,10 +36,10 @@ export function WalletPanel({
     try {
       await navigator.clipboard.writeText(address);
       setCopied(true);
-      toast.success("Address copied");
+      toast.success(TOAST.addressCopied);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      toast.error("Couldn’t copy address");
+      toast.error(TOAST.addressCopyFailed);
     }
   }
 
@@ -54,14 +55,14 @@ export function WalletPanel({
         body: {},
       });
       clearAllPrivacyVaultLocalState();
-      toast.success("Ready wallet unlinked");
+      toast.success(TOAST.readyUnlinked);
       await onLinked({
         profile: me?.profile ?? null,
         identities: me?.identities ?? [],
         wallet: null,
       });
     } catch (e) {
-      toast.error(userFacingError(e, "Couldn’t unlink wallet"));
+      toast.error(userFacingError(e, TOAST.unlinkWalletFailed));
     } finally {
       setBusy(false);
     }
