@@ -6,9 +6,9 @@ Wotta production is one Vercel web app backed by two fail-closed Render API serv
 | --- | --- | --- |
 | Web | `https://wotta.vercel.app` | Shared UI and Testnet/Mainnet selector |
 | Testnet API | `https://wotta-api-testnet.onrender.com` | `SN_SEPOLIA`, API + indexer + relayer |
-| Mainnet API | `https://wotta-api-mainnet.onrender.com` | `SN_MAIN`, wallet-managed privacy API only |
+| Mainnet API | `https://wotta-api-mainnet.onrender.com` | `SN_MAIN`, all payment routes disabled until their individual gates pass |
 
-The Mainnet service intentionally refuses indexer/relayer flags. Mainnet CCTP and Wotta escrow are out of scope; the shared UI continues to show those actions only in Testnet mode.
+The Mainnet service starts with indexer/relayer and all admissions disabled. Starknet-native send uses Wotta escrow → encrypted inbox → Ready/STRK20 claim, and requires the indexer plus `STARKNET_PRIVATE_ADMITTED=true` only after retained live evidence. Base/Solana additionally require the paired relayer and their independent evidence gates.
 
 The Vercel project Root Directory must be `apps/web`, Framework Preset `Next.js`, and “Include source files outside of the Root Directory” enabled. Build/install/output settings stay on their framework defaults so paths remain relative to `apps/web`.
 
@@ -47,7 +47,19 @@ Required by Mainnet Render API:
 
 - `STARKNET_RPC_URL=<mainnet RPC>`
 - `STARKNET_NETWORK=mainnet`
-- `RUN_INDEXER=false`, `RUN_RELAYER=false`, `CCTP_ADMITTED_ROUTES=`
+- initial closed state: `RUN_INDEXER=false`, `RUN_RELAYER=false`, `STARKNET_PRIVATE_ADMITTED=false`, `CCTP_ADMITTED_ROUTES=`
+- Starknet escrow pilot only after its gate: `RUN_INDEXER=true`, `RUN_RELAYER=false`, `STARKNET_PRIVATE_ADMITTED=true`
+- CCTP pilot only after Phase 2/3 gates: `RUN_INDEXER=true`, `RUN_RELAYER=true`, route-specific `CCTP_ADMITTED_ROUTES`, dedicated relayer credentials, and independent fallback RPCs
+
+Mainnet contract declaration/deployment uses only `STARKNET_MAINNET_RPC_URL`, `STARKNET_MAINNET_DEPLOYER_ADDRESS`, and `STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY`. Pilot policy keeps `authority.owner` identical to the deployer: `pnpm contracts:sync-manifest` (also the first step of `pnpm contracts:preflight`) writes both from `.env` and rehashes `deployments/mainnet.json`. Declare/deploy scripts re-sync the same way before gating. The preflight rejects reuse of the Sepolia deployer, estimates both declarations with bounded fees, and requires the balance to cover both bounds. `STARKNET_MAINNET_RELAYER_ADDRESS` / `STARKNET_MAINNET_RELAYER_PRIVATE_KEY` are required only when the mainnet CCTP relayer is enabled.
+
+Run the automated declaration preflight with one command:
+
+```bash
+pnpm contracts:preflight
+```
+
+It syncs owner/deployer from `.env`, builds, runs Cairo and script tests, verifies SN_MAIN, computes artifact hashes, estimates both declaration bounds with `tip: 0`, and checks deployer balance. It never submits unless `MAINNET_DECLARE_SUBMIT=1` is set explicitly. Deployment likewise requires `MAINNET_DEPLOY_SUBMIT=1`.
 
 Required by Vercel:
 
@@ -96,5 +108,5 @@ Browser smoke test:
 1. Sign in and switch Testnet/Mainnet from the shared account dropdown.
 2. Confirm Send, Inbox, Claim, Account, and Balance use the same shell and clear network-scoped state.
 3. Testnet: create a quote/intent and confirm Inbox/Claim data stays Sepolia-scoped.
-4. Mainnet: connect Ready Mainnet, resolve a Mainnet-ready recipient, and preview the 0.1 USDC private send.
+4. Mainnet: while closed, confirm Starknet Send/Inbox/Claim report the verified-escrow gate. After approved activation, deposit the smallest approved fixed denomination, confirm encrypted inbox delivery, and claim through Ready/STRK20.
 5. Confirm CCTP routes are unavailable on Mainnet and no Sepolia identity or inbox data appears.

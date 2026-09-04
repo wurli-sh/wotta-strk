@@ -86,6 +86,13 @@ Recorded on 2026-08-20:
 
 Contributor note: Node 24 is pinned in the root `.nvmrc` in addition to the workspace `engines.node` field.
 
+## Production dependency audit (2026-09-04)
+
+- `pnpm audit --prod --audit-level moderate`: no known vulnerabilities.
+- The vendored privacy SDK's mistakenly declared runtime `starknet-devnet` dependency is removed during workspace resolution by [`.pnpmfile.cjs`](../.pnpmfile.cjs); this is packaging isolation, not a protocol-code patch.
+- Workspace overrides pin patched `fast-uri`, `postcss`, `sharp`, `uuid`, and `stream-json` releases. The `stream-json` pin resolves GHSA-528h-pc64-c93x in the `@solana/web3.js > jayson` transitive path.
+- pnpm reports one peer-range warning: `ws@7.5.13` asks for `utf-8-validate@^5.0.2` while `6.0.6` is installed. Tests/build pass, but an independent dependency review must still disposition the production graph before public funds.
+
 ## Sepolia direct-SDK verification (2026-08-20)
 
 - Ready remains the public-transaction and SNIP-12 signer; the local test
