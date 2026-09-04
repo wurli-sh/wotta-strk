@@ -101,9 +101,15 @@ export function buildSourceRoutes(
 
 export const TESTNET_SOURCE_ROUTES = buildSourceRoutes();
 
-function routeForChip(routes: RouteRow[], chip: SourceChipKey): RouteRow | undefined {
+function routeForChip(
+  routes: RouteRow[],
+  chip: SourceChipKey,
+  privateMode = false,
+): RouteRow | undefined {
   if (chip === "starknet") {
-    return routes.find((route) => route.key === "starknet-public");
+    return routes.find((route) =>
+      route.key === (privateMode ? NOX_ROUTE_ID : "starknet-public"),
+    );
   }
   return routes.find((route) => route.key === chip);
 }
@@ -112,6 +118,7 @@ export function chipSelectableInMode(
   chip: SourceChipKey,
   routes: RouteRow[],
   privateMode: boolean,
+  allowCrossChainPrivateSources = false,
 ): boolean {
   if (chip === "starknet") {
     const target = privateMode
@@ -119,8 +126,23 @@ export function chipSelectableInMode(
       : routes.find((route) => route.key === "starknet-public");
     return target?.selectable === true;
   }
-  if (privateMode) return false;
+  if (privateMode && !allowCrossChainPrivateSources) return false;
   return routes.find((route) => route.key === chip)?.selectable === true;
+}
+
+/** Live/selectable chips first; preserve relative order within each group. */
+export function orderedSourceChips(
+  chips: readonly SourceChipKey[],
+  routes: RouteRow[],
+  privateMode: boolean,
+  allowCrossChainPrivateSources = false,
+): SourceChipKey[] {
+  return [...chips].sort((left, right) => {
+    const leftOn = chipSelectableInMode(left, routes, privateMode, allowCrossChainPrivateSources);
+    const rightOn = chipSelectableInMode(right, routes, privateMode, allowCrossChainPrivateSources);
+    if (leftOn === rightOn) return 0;
+    return leftOn ? -1 : 1;
+  });
 }
 
 type Props = {
@@ -129,6 +151,8 @@ type Props = {
   onChange: (key: SourceRail) => void;
   disabled?: boolean;
   privateMode?: boolean;
+  /** When private destination is locked (Mainnet), still allow admitted Base/Solana sources. */
+  allowCrossChainPrivateSources?: boolean;
   unavailableReason?: string;
 };
 
@@ -138,10 +162,17 @@ export function SourceChips({
   onChange,
   disabled,
   privateMode = false,
+  allowCrossChainPrivateSources = false,
   unavailableReason,
 }: Props) {
   const reduce = useReducedMotion();
   const selectedChip = value ? sourceChipKey(value) : null;
+  const chips = orderedSourceChips(
+    DISPLAY_CHIPS,
+    routes,
+    privateMode,
+    allowCrossChainPrivateSources,
+  );
 
   return (
     <div className="space-y-2">
@@ -151,13 +182,13 @@ export function SourceChips({
         aria-label="Pay from"
         className="flex flex-wrap gap-1.5"
       >
-        {DISPLAY_CHIPS.map((chip) => {
-          const route = routeForChip(routes, chip);
-          const on = chipSelectableInMode(chip, routes, privateMode);
+        {chips.map((chip) => {
+          const route = routeForChip(routes, chip, privateMode);
+          const on = chipSelectableInMode(chip, routes, privateMode, allowCrossChainPrivateSources);
           const selected = selectedChip === chip;
           const title = !on
             ? unavailableReason
-              ?? (privateMode && chip !== "starknet"
+              ?? (privateMode && !allowCrossChainPrivateSources && chip !== "starknet"
               ? "Switch off private route to use this source"
               : route?.reason ?? "Not selectable")
             : undefined;

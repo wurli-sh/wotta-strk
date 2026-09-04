@@ -169,7 +169,69 @@ export function ClaimPageSkeleton() {
   );
 }
 
-export function SendFormSkeleton() {
+export function PrivateRouteToggleSkeleton() {
+  return (
+    <div
+      className="flex items-center justify-between gap-3"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading private route"
+    >
+      <div className="space-y-1.5">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-3 w-44 max-w-full" />
+      </div>
+      <Skeleton className="h-7 w-12 shrink-0 rounded-full" />
+    </div>
+  );
+}
+
+export function SourceChipsSkeleton() {
+  return (
+    <div className="space-y-2" role="status" aria-busy="true" aria-label="Loading payment sources">
+      <Skeleton className="h-4 w-20" />
+      <div className="flex flex-wrap gap-1.5">
+        <Skeleton className="radius-control h-10 w-[5.5rem]" />
+        <Skeleton className="radius-control h-10 w-24" />
+        <Skeleton className="radius-control h-10 w-28" />
+        <Skeleton className="radius-control h-10 w-[5.5rem]" />
+        <Skeleton className="radius-control h-10 w-20" />
+        <Skeleton className="radius-control h-10 w-24" />
+      </div>
+    </div>
+  );
+}
+
+function AmountChipsSkeleton({ count }: { count: 4 | 5 }) {
+  return (
+    <div className="text-center">
+      <Skeleton className="mx-auto h-4 w-16" />
+      <div
+        className={cn(
+          "mt-3 grid w-full grid-cols-2 gap-2",
+          count > 4 ? "sm:grid-cols-5" : "sm:grid-cols-4",
+        )}
+      >
+        {Array.from({ length: count }, (_, index) => (
+          <Skeleton key={index} className="radius-control h-11 w-full" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecipientSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Skeleton className="h-4 w-20" />
+      <Skeleton className="radius-control h-12 w-full" />
+      <Skeleton className="h-4 w-48 max-w-full" />
+    </div>
+  );
+}
+
+/** Testnet send form: private-route toggle + source chips. */
+export function TestnetSendFormSkeleton() {
   return (
     <div
       className="mx-auto w-full max-w-lg"
@@ -178,35 +240,50 @@ export function SendFormSkeleton() {
       aria-label="Loading send form"
     >
       <div className="radius-surface overflow-hidden border border-border/80 bg-card p-2 shadow-card">
-        <div className="radius-surface-inner border border-brand/15 bg-brand-mist px-6 py-6 text-center sm:px-8 sm:py-7">
-          <Skeleton className="mx-auto h-3 w-36" />
-          <Skeleton className="mx-auto mt-3 h-12 w-40 sm:h-14 sm:w-48" />
-          <div className="mx-auto mt-4 flex justify-center gap-1.5">
-            <Skeleton className="radius-control h-9 w-12" />
-            <Skeleton className="radius-control h-9 w-12" />
-            <Skeleton className="radius-control h-9 w-14" />
-            <Skeleton className="radius-control h-9 w-14" />
-          </div>
+        <div className="radius-surface-inner border border-brand/15 bg-brand-mist px-6 py-6 sm:px-8 sm:py-7">
+          <AmountChipsSkeleton count={4} />
         </div>
         <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-20" />
-            <div className="flex flex-wrap gap-1.5">
-              <Skeleton className="radius-control h-10 w-[5.5rem]" />
-              <Skeleton className="radius-control h-10 w-24" />
-              <Skeleton className="radius-control h-10 w-28" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="radius-control h-12 w-full" />
-            <Skeleton className="radius-control h-10 w-full" />
-          </div>
+          <PrivateRouteToggleSkeleton />
+          <SourceChipsSkeleton />
+          <RecipientSkeleton />
           <Skeleton className="radius-control h-12 w-full" />
         </div>
       </div>
     </div>
   );
+}
+
+/** Mainnet send form: no private-route toggle; amount row includes 0.1. */
+export function MainnetSendFormSkeleton() {
+  return (
+    <div
+      className="mx-auto w-full max-w-lg"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading send form"
+    >
+      <div className="radius-surface overflow-hidden border border-border/80 bg-card p-2 shadow-card">
+        <div className="radius-surface-inner border border-brand/15 bg-brand-mist px-6 py-6 sm:px-8 sm:py-7">
+          <AmountChipsSkeleton count={5} />
+        </div>
+        <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
+          <SourceChipsSkeleton />
+          <RecipientSkeleton />
+          <Skeleton className="h-4 w-56 max-w-full" />
+          <Skeleton className="radius-control h-12 w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SendFormSkeleton({
+  mode = "testnet",
+}: {
+  mode?: "testnet" | "mainnet";
+}) {
+  return mode === "mainnet" ? <MainnetSendFormSkeleton /> : <TestnetSendFormSkeleton />;
 }
 
 export function NoteRowSkeleton() {
@@ -231,13 +308,12 @@ export function InboxTableRowsSkeleton({
       {Array.from({ length: rows }).map((_, r) => (
         <tr key={r} className="border-b border-border/40 last:border-0">
           {Array.from({ length: columns }).map((_, c) => (
-            <td key={c} className="px-5 py-3.5">
+            <td key={c} className="px-3 py-3.5 first:pl-5 last:pr-5">
               <Skeleton
                 className={cn(
-                  "h-4",
-                  c === columns - 1 ? "ml-auto w-16" : "w-20",
+                  "h-4 w-20",
                   c === 0 && "w-16",
-                  c === 1 && "w-28",
+                  c === columns - 1 && "w-16",
                 )}
               />
             </td>
@@ -397,7 +473,11 @@ export function AccountSkeleton({
   );
 }
 
-export function SendPageSkeleton() {
+export function SendPageSkeleton({
+  mode = "testnet",
+}: {
+  mode?: "testnet" | "mainnet";
+}) {
   return (
     <div
       className="mx-auto w-full max-w-xl space-y-6"
@@ -410,7 +490,7 @@ export function SendPageSkeleton() {
         <Skeleton className="radius-control h-10 w-20" />
         <Skeleton className="radius-control h-10 w-20" />
       </div>
-      <SendFormSkeleton />
+      <SendFormSkeleton mode={mode} />
     </div>
   );
 }

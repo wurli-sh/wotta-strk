@@ -19,7 +19,8 @@ function ClaimPageInner({ embedded = false }: { embedded?: boolean }) {
   const params = useSearchParams();
   const noteId = params.get("noteId");
   const { routes, routesReady } = useRoutesHealth(mode, mode === "mainnet");
-  const mainnetEscrowReady = routes.some((route) => route.key === "starknet-private" && route.selectable);
+  const privateRoute = routes.find((route) => route.key === "starknet-private");
+  const mainnetEscrowReady = privateRoute?.selectable === true;
 
   if (mode === "mainnet" && !routesReady) {
     return embedded ? <NoteCardSkeleton /> : (
@@ -31,7 +32,7 @@ function ClaimPageInner({ embedded = false }: { embedded?: boolean }) {
     const unavailable = (
       <WrongModeNotice
         feature="Claim"
-        detail={PRIVATE_CLAIM_ROUTE_UNVERIFIED}
+        detail={privateRoute?.reason ?? PRIVATE_CLAIM_ROUTE_UNVERIFIED}
       />
     );
     return embedded ? unavailable : (

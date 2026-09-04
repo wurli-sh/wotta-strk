@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, ExternalLink, Send, Wallet } from "lucide-react";
+import { ExternalLink, Send, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   connectEvmSource,
@@ -30,11 +30,12 @@ import { Button } from "@/components/ui/Button";
 import { MotionPillButton } from "@/components/ui/MotionLink";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
+  PrivateRouteToggleSkeleton,
   SendPageSkeleton,
+  SourceChipsSkeleton,
 } from "@/components/ui/Skeleton";
 import { TextShimmer } from "@/components/ui/TextShimmer";
 import {
-  MAINNET_BANNER,
   PAGE_SUBTITLES,
   SETTLED_PRIVATELY,
   SETTLED_PRIVATELY_INBOX,
@@ -53,9 +54,9 @@ import { useRoutesHealth } from "@/features/send/useRoutesHealth";
 import { apiFetch } from "@/lib/api/client";
 import { fetchMe, getAccessToken } from "@/lib/auth";
 import { cn } from "@/lib/cn";
-import { MAINNET_DENS, denominationBaseUnits, type Dens } from "@/lib/denoms";
+import { MAINNET_DISPLAY_DENS, coerceMainnetDenomination, denominationBaseUnits, isMainnetDenomination, type Dens } from "@/lib/denoms";
 import { userFacingError } from "@/lib/errors";
-import { starkscanTransactionUrl, type NetworkMode } from "@/lib/network-mode";
+import { starkscanTransactionUrl, readNetworkMode, type NetworkMode } from "@/lib/network-mode";
 import { requireSourceWallet } from "@/lib/wallet-install";
 import type { ProofPhase } from "@/lib/wotta/privacy-proof";
 import {
@@ -179,6 +180,13 @@ function LookupStatus({ lookup, onRetry, mode }: { lookup: Lookup; onRetry: () =
   );
 }
 
+function preferredPrivateRoute(routes: RouteRow[]): SourceRail | null {
+  return routes.find((route) => route.key === PUBLIC_DEFAULT_ROUTE_ID && route.selectable)?.key
+    ?? routes.find((route) => route.key === NOX_ROUTE_ID && route.selectable)?.key
+    ?? routes.find((route) => route.key === "solana" && route.selectable)?.key
+    ?? null;
+}
+
 function preferredPublicRoute(routes: RouteRow[]): SourceRail | null {
   return routes.find((route) => route.key === "starknet-public" && route.selectable)?.key
     ?? routes.find((route) => route.key !== NOX_ROUTE_ID && route.selectable)?.key
@@ -196,7 +204,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   const [denom, setDenom] = useState<Dens>(mainnet ? "0.1" : 1n);
   const [recipient, setRecipient] = useState("");
   const [confidentialMode, setConfidentialMode] = useState(mainnet);
-  const [source, setSource] = useState<SourceRail>(mainnet ? NOX_ROUTE_ID : PUBLIC_DEFAULT_ROUTE_ID);
+  const [source, setSource] = useState<SourceRail>(PUBLIC_DEFAULT_ROUTE_ID);
   const [lookup, setLookup] = useState<Lookup>({ status: "idle" });
   const [lookupRetry, setLookupRetry] = useState(0);
   const [stage, setStage] = useState<SendStage>("idle");
@@ -211,7 +219,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   const [keeperStartedAt, setKeeperStartedAt] = useState<number | null>(null);
   const [showSelfSettle, setShowSelfSettle] = useState(false);
   const [resolvedPrivateRecipient, setResolvedPrivateRecipient] = useState<string | null>(null);
-  const [inlineError, setInlineError] = useState<string | null>(null);
   const lookupRequest = useRef(0);
   const activeSendOperation = useRef<NetworkOperation | null>(null);
 
@@ -227,10 +234,13 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   };
   const sourceLabel = routes.find((route) => route.key === source)?.label
     ?? CONNECT_CHAIN_LABEL[source];
-  // Swoop: `Connect ${routeLabel(routeId)} wallet` — always include "wallet".
-  const connectLabel = isStarknetSource(source) || confidentialMode
+  // Labels derive from selected source, never from confidentialMode alone.
+  const connectLabel = isStarknetSource(source)
     ? "Connect Ready wallet"
-    : `Connect ${sourceLabel} wallet`;
+    : source === "solana"
+      ? "Connect Phantom wallet"
+      : `Connect ${sourceLabel} wallet`;
+  const allowCrossChainPrivateSources = mainnet && confidentialMode;
 
   useEffect(() => {
     const to = new URLSearchParams(window.location.search).get("to");
@@ -238,10 +248,27 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   }, []);
 
   useEffect(() => {
-    if (mainnet) return;
+    if (!mainnet) return;
+    setConfidentialMode(true);
+  }, [mainnet]);
+
+  useEffect(() => {
+    if (!mainnet) return;
+    setDenom((current) => coerceMainnetDenomination(current));
+  }, [mainnet, denom]);
+
+  useEffect(() => {
     if (!routesReady) return;
     if (confidentialMode) {
-      setSource(NOX_ROUTE_ID);
+      if (!mainnet) {
+        setSource(NOX_ROUTE_ID);
+        return;
+      }
+      setSource((current) => {
+        const selected = routes.find((route) => route.key === current);
+        if (selected?.selectable) return current;
+        return preferredPrivateRoute(routes) ?? current;
+      });
       return;
     }
     setSource((current) => {
@@ -251,14 +278,13 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   }, [mainnet, routes, routesReady, confidentialMode]);
 
   useEffect(() => {
-    if (mainnet) return;
     if (!routesReady || confidentialMode) return;
     setSource((current) => {
       const selected = routes.find((route) => route.key === current);
       if (selected?.selectable) return current;
       return preferredPublicRoute(routes) ?? current;
     });
-  }, [mainnet, routes, routesReady, confidentialMode]);
+  }, [routes, routesReady, confidentialMode]);
 
   function onConfidentialModeChange(enabled: boolean) {
     if (mainnet) return;
@@ -334,8 +360,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     activeSendOperation.current = null;
     setBusy(false);
     setStage("idle");
-    setInlineError("Ready confirmation was closed. Nothing was sent — you can retry.");
-    toast.message(TOAST.sendUnlocked);
+    toast.message("Ready confirmation was closed. Nothing was sent — you can retry.");
   }
 
   useEffect(() => {
@@ -445,7 +470,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     if (connecting || busy) return;
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     setConnecting(true);
-    setInlineError(null);
     try {
       if (isStarknetSource(source)) {
         const connected = await connectReady(mode);
@@ -478,7 +502,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
       toast.success(TOAST.sourceConnected(sourceLabel));
     } catch (error) {
       const message = userFacingError(error, "Wallet connect failed");
-      setInlineError(message);
       toast.error(message);
     } finally {
       operation.finish();
@@ -495,7 +518,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     activeSendOperation.current = operation;
     setBusy(true);
-    setInlineError(null);
     setDelivery(null);
     setPendingSourceTx(null);
     setKeeperStartedAt(null);
@@ -510,27 +532,63 @@ function SendForm({ mode }: { mode: NetworkMode }) {
         if (!resolvedPrivateRecipient || lookup.status !== "registered") {
           throw new Error("Recipient isn’t mainnet-ready yet");
         }
-        const result = await session.fundFromStarknetEscrow({
-          denomination: denominationBaseUnits(denom).toString() as Denomination,
-          recipient: parsed.identifier,
-          publicRefundRecipient: me.wallet.address,
-          linkedReadyAddress: me.wallet.address,
-          onStage: setStage,
-        });
-        operation.assertActive();
-        setDelivery("inbox");
-        setSuccessRecipient(parsed.identifier);
-        setSuccessTx(result.sourceTxHash);
-        setSuccessRoute(NOX_ROUTE_ID);
-        rememberSource({
-          routeKey: NOX_ROUTE_ID,
-          family: "starknet",
-          address: result.sourceAccount,
-          label: "Starknet escrow",
-        });
-        setStage("complete");
-        toast.success(SETTLED_PRIVATELY_INBOX);
-        return;
+        if (!isMainnetDenomination(denom)) {
+          throw new Error("Choose 0.1 or 1 USDC on Mainnet");
+        }
+        const denomination = denominationBaseUnits(denom).toString() as Denomination;
+        if (source === "starknet-private") {
+          const result = await session.fundFromStarknetEscrow({
+            denomination,
+            recipient: parsed.identifier,
+            publicRefundRecipient: me.wallet.address,
+            linkedReadyAddress: me.wallet.address,
+            onStage: setStage,
+          });
+          operation.assertActive();
+          setDelivery("inbox");
+          setSuccessRecipient(parsed.identifier);
+          setSuccessTx(result.sourceTxHash);
+          setSuccessRoute(NOX_ROUTE_ID);
+          rememberSource({
+            routeKey: NOX_ROUTE_ID,
+            family: "starknet",
+            address: result.sourceAccount,
+            label: "Starknet escrow",
+          });
+          setStage("complete");
+          toast.success(SETTLED_PRIVATELY_INBOX);
+          return;
+        }
+        if (source === "base" || source === "solana") {
+          const result = await session.fundFromCircleSource({
+            route: source,
+            denomination,
+            recipient: parsed.identifier,
+            publicRefundRecipient: me.wallet.address,
+            onStage: (next) => {
+              setStage(next);
+              if (next === "confirming" || next === "attesting" || next === "settling") {
+                setKeeperStartedAt((current) => current ?? Date.now());
+              }
+            },
+            onSourceTxHash: setPendingSourceTx,
+          });
+          operation.assertActive();
+          setDelivery("inbox");
+          setSuccessRecipient(parsed.identifier);
+          setSuccessTx(result.sourceTxHash);
+          setSuccessRoute(source);
+          rememberSource({
+            routeKey: source,
+            family: source === "solana" ? "solana" : "evm",
+            address: result.sourceAccount,
+            label: routes.find((route) => route.key === source)?.label,
+          });
+          setStage("complete");
+          toast.success(SETTLED_PRIVATELY_INBOX);
+          return;
+        }
+        throw new Error("This source is not available on Mainnet yet");
       }
       if (source === "starknet-private") {
         const result = await session.fundFromStarknetEscrow({
@@ -608,7 +666,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
     } catch (error) {
       if (operation.signal.aborted) return;
       const message = userFacingError(error, "Couldn’t send");
-      setInlineError(message);
       if (/sign in/i.test(message)) setAuthOpen(true);
       if (/settlement is still finishing|continues in the background|still pending/i.test(message)) {
         toast.message(message);
@@ -670,21 +727,22 @@ function SendForm({ mode }: { mode: NetworkMode }) {
             value={denom}
             onChange={setDenom}
             disabled={formLocked}
-            denominations={mainnet ? MAINNET_DENS : undefined}
+            denominations={mainnet ? MAINNET_DISPLAY_DENS : undefined}
+            comingSoon={mainnet ? MAINNET_DISPLAY_DENS.filter((d) => !isMainnetDenomination(d)) : undefined}
           />
         </div>
         <div className="space-y-5 px-3 pb-3 pt-5 sm:px-4 sm:pb-4">
-          {mainnet ? (
-            <div className="radius-surface-inner border border-warning-border bg-warning-surface px-4 py-3 text-xs leading-5 text-warning-foreground" role="status">
-              {MAINNET_BANNER}
-            </div>
+          {!mainnet ? (
+            routesReady ? (
+              <PrivateRouteToggle
+                enabled={confidentialMode}
+                disabled={formLocked}
+                onChange={onConfidentialModeChange}
+              />
+            ) : (
+              <PrivateRouteToggleSkeleton />
+            )
           ) : null}
-          <PrivateRouteToggle
-            enabled={confidentialMode}
-            disabled={mainnet || formLocked || !routesReady}
-            locked={mainnet}
-            onChange={onConfidentialModeChange}
-          />
 
           {routesReady ? (
             <SourceChips
@@ -693,27 +751,24 @@ function SendForm({ mode }: { mode: NetworkMode }) {
               onChange={setSource}
               disabled={formLocked}
               privateMode={confidentialMode}
+              allowCrossChainPrivateSources={allowCrossChainPrivateSources}
             />
-          ) : (
+          ) : routesHealth === "waking" ? (
             <div
               className="radius-surface-inner space-y-2 border border-warning-border bg-warning-surface px-4 py-3 text-xs text-warning-foreground"
               role="status"
             >
-              <p>
-                {routesHealth === "loading"
-                  ? "Checking routes…"
-                  : "API is waking up — chain selection unlocks when route health is back."}
-              </p>
-              {routesHealth === "waking" ? (
-                <button
-                  type="button"
-                  onClick={retryRoutesHealth}
-                  className="text-xs font-medium text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  Retry
-                </button>
-              ) : null}
+              <p>API is waking up — chain selection unlocks when route health is back.</p>
+              <button
+                type="button"
+                onClick={retryRoutesHealth}
+                className="text-xs font-medium text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                Retry
+              </button>
             </div>
+          ) : (
+            <SourceChipsSkeleton />
           )}
 
           {!mainnet && confidentialMode && routesReady && !privateReady ? (
@@ -750,15 +805,6 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                 Details
               </a>
             </p>
-          ) : null}
-          {inlineError ? (
-            <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3" role="alert">
-              <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-destructive">Couldn’t complete the action</p>
-                <p className="mt-1 text-xs leading-5 text-foreground">{inlineError}</p>
-              </div>
-            </div>
           ) : null}
           {stage !== "complete" ? (
             walletConnected ? (
@@ -884,5 +930,13 @@ function SendPageInner() {
 }
 
 export function SendPage() {
-  return <Suspense fallback={<SendPageSkeleton />}><SendPageInner /></Suspense>;
+  const { mode } = useNetworkMode();
+  const skeletonMode = mode === "mainnet" || readNetworkMode() === "mainnet"
+    ? "mainnet"
+    : "testnet";
+  return (
+    <Suspense fallback={<SendPageSkeleton mode={skeletonMode} />}>
+      <SendPageInner />
+    </Suspense>
+  );
 }

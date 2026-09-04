@@ -30,6 +30,8 @@ import {
   PRIVATE_CLAIM_ROUTE_UNVERIFIED,
   TOAST,
 } from "@/lib/brand-copy";
+import { formatUsdc } from "@/lib/format/amount";
+import { canDecryptInboxNote } from "@/lib/wotta/inbox-note-access";
 
 const SELF_SETTLE_MS = 900_000;
 
@@ -51,7 +53,7 @@ function recoveryHintForSent(intent: {
 
 type Row = {
   itemId: string;
-  amount: number;
+  amount: string;
   at: number;
   expiresAt: number;
   status: string;
@@ -60,6 +62,10 @@ type Row = {
   destTxHash?: string | null;
   routeId?: string | null;
   recoveryHint?: string | null;
+  /** Local vault cannot decrypt this still-claimable note (stale inbox key). */
+  lockedOut?: boolean;
+  settled?: boolean;
+  claimable?: boolean;
 };
 type Tab = "incoming" | "sent" | "history";
 type ApiIntent = {
@@ -79,52 +85,131 @@ type ApiNote = {
   intent_id: string;
   created_at: string;
   delivered_at?: string | null;
+  ciphertext: string;
+  nonce: string;
+  sender_public_key: string;
+  algorithm: "x25519-xsalsa20-poly1305";
   intent: ApiIntent;
 };
 type ApiIntentWithCreated = ApiIntent & { created_at?: string };
 
-function formatRowTime(unixSeconds: number): string {
+function formatRowTimeParts(unixSeconds: number): { day: string; time: string } | null {
   const date = new Date(unixSeconds * 1_000);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    day: date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
+    }),
+    time: date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+}
+
+function formatRowTime(unixSeconds: number) {
+  const parts = formatRowTimeParts(unixSeconds);
+  if (!parts) return "—";
+  return (
+    <span className="inline-flex flex-col leading-tight">
+      <span>{parts.day}</span>
+      <span>{parts.time}</span>
+    </span>
+  );
+}
+
+function formatRowTimeInline(unixSeconds: number): string {
+  const parts = formatRowTimeParts(unixSeconds);
+  if (!parts) return "—";
+  return `${parts.day}, ${parts.time}`;
 }
 
 function claimHref(noteId: string): string {
   return `/send?tab=claim&noteId=${encodeURIComponent(noteId)}`;
 }
 
-function amountUsdc(value: number | string): number {
-  return Number(BigInt(value) / 1_000_000n);
+function amountUsdc(value: number | string): string {
+  return formatUsdc(value);
 }
 
 function normalizedStatus(intent: ApiIntent): string {
   return intent.onchain_state ?? intent.state;
 }
 
+/** Short inbox labels — raw snake_case must not spill into the Links column. */
+function statusLabel(status: string): string {
+  switch (status) {
+    case "locked_out":
+      return "Wrong device";
+    case "funded":
+    case "delivered":
+    case "claimable":
+      return "Claimable";
+    case "claimed":
+    case "completed":
+      return "Settled";
+    case "source_submitted":
+      return "Submitted";
+    case "source_confirmed":
+      return "Confirming";
+    case "attestation_ready":
+    case "destination_submitted":
+      return "Settling";
+    case "failed_recoverable":
+      return "Retrying";
+    case "failed_terminal":
+      return "Failed";
+    case "refundable":
+      return "Refundable";
+    case "refunded":
+      return "Refunded";
+    case "expired":
+      return "Expired";
+    case "pending":
+      return "Pending";
+    default:
+      return status.replaceAll("_", " ");
+  }
+}
+
 function StatusPill({ status }: { status: string }) {
+  const inFlight = [
+    "funded",
+    "delivered",
+    "claimable",
+    "pending",
+    "source_submitted",
+    "source_confirmed",
+    "attestation_ready",
+    "destination_submitted",
+  ].includes(status);
   const tone =
-    ["funded", "delivered", "claimable", "pending"].includes(status)
-      ? "border-warning-border bg-warning-surface text-warning"
-      : status === "claimed" || status === "completed"
-        ? "border-success/20 bg-success/10 text-success"
-        : "border-border bg-muted text-muted-foreground";
-  const label =
-    ["funded", "delivered", "claimable"].includes(status)
-      ? "Claimable"
-      : status === "claimed" || status === "completed"
-        ? "Settled"
-        : status.replaceAll("_", " ");
-  return <span className={cn("radius-control inline-flex items-center border px-2.5 py-1 text-xs font-medium capitalize", tone)}>{label}</span>;
+    status === "locked_out"
+      ? "border-border bg-muted text-muted-foreground"
+      : inFlight
+        ? "border-warning-border bg-warning-surface text-warning"
+        : status === "claimed" || status === "completed"
+          ? "border-success/20 bg-success/10 text-success"
+          : "border-border bg-muted text-muted-foreground";
+  const label = statusLabel(status);
+  return (
+    <span
+      title={label}
+      className={cn(
+        "radius-control inline-flex h-7 max-w-full items-center truncate border px-2.5 text-xs font-medium leading-none",
+        tone,
+      )}
+    >
+      {label}
+    </span>
+  );
 }
 
 function TableShell({
   columns,
+  columnWidths,
   empty,
   emptyMessage,
   loading,
@@ -132,6 +217,8 @@ function TableShell({
   mobile,
 }: {
   columns: string[];
+  /** Fixed tracks keep every tab aligned and make the table fill its card. */
+  columnWidths?: string[];
   empty: boolean;
   emptyMessage: string;
   loading: boolean;
@@ -140,10 +227,24 @@ function TableShell({
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-card">
-      <div className="hidden md:block">
-        <table className="w-full text-left text-sm">
+      <div className="hidden overflow-hidden md:block">
+        <table className="w-full table-fixed text-left text-sm">
+          {columnWidths ? (
+            <colgroup>
+              {columnWidths.map((width, index) => <col key={index} style={{ width }} />)}
+            </colgroup>
+          ) : null}
           <thead className="border-b border-border/60 bg-brand-mist/50 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>{columns.map((column) => <th key={column} className="px-5 py-3 font-semibold">{column}</th>)}</tr>
+            <tr>
+              {columns.map((column) => (
+                <th
+                  key={column}
+                  className="truncate whitespace-nowrap px-2 py-2.5 font-semibold first:pl-4 last:pr-4"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {loading ? <InboxTableRowsSkeleton columns={columns.length} rows={3} /> : empty ? (
@@ -194,17 +295,32 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
         ]);
         operation.assertActive();
         const noteReceivedAt = (note: ApiNote) => note.delivered_at ?? note.created_at;
-        const noteRows = notesResult.notes.map((note) => ({
-          itemId: note.id,
-          amount: amountUsdc(note.intent.denomination),
-          at: Math.floor(Date.parse(noteReceivedAt(note)) / 1_000),
-          expiresAt: Math.floor(Date.parse(note.intent.expires_at) / 1_000),
-          status: normalizedStatus(note.intent),
-          counterparty: "Encrypted sender",
-          destTxHash: note.intent.onchain_tx_hash,
-        }));
-        setIncoming(noteRows.filter((row) => ["funded", "delivered", "claimable"].includes(row.status)));
-        setHistory(noteRows.filter((row) => ["claimed", "completed", "refunded"].includes(row.status)));
+        const inboxSecret = vault?.state.inboxSecretKey;
+        const noteRows = notesResult.notes.map((note) => {
+          const onchainStatus = normalizedStatus(note.intent);
+          const claimable = ["funded", "delivered", "claimable"].includes(onchainStatus);
+          const settled = ["claimed", "completed", "refunded"].includes(onchainStatus);
+          // Only flag wrong-device for notes that are still claimable on-chain.
+          // Already-claimed notes stay in History even if this browser lost the key.
+          const openable = !inboxSecret || canDecryptInboxNote(note, inboxSecret);
+          const lockedOut = Boolean(inboxSecret) && !openable && claimable;
+          return {
+            itemId: note.id,
+            amount: amountUsdc(note.intent.denomination),
+            at: Math.floor(Date.parse(noteReceivedAt(note)) / 1_000),
+            expiresAt: Math.floor(Date.parse(note.intent.expires_at) / 1_000),
+            status: lockedOut ? "locked_out" : onchainStatus,
+            counterparty: "Encrypted sender",
+            sourceTxHash: note.intent.source_tx_hash,
+            destTxHash: note.intent.onchain_tx_hash,
+            routeId: note.intent.route_id,
+            lockedOut,
+            settled,
+            claimable,
+          };
+        });
+        setIncoming(noteRows.filter((row) => row.claimable || row.lockedOut));
+        setHistory(noteRows.filter((row) => row.settled));
         setSent(intentsResult.intents.map((intent: ApiIntentWithCreated) => ({
           itemId: intent.id,
           amount: amountUsdc(intent.denomination),
@@ -227,7 +343,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
       operation.finish();
       setBusy(false);
     }
-  }, [mode]);
+  }, [mode, vault]);
 
   useEffect(() => {
     void (async () => {
@@ -312,11 +428,14 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
   const timeColumnLabel = tab === "sent" ? "Sent" : "Received";
   const columns = counterpartyLabel
     ? ["Amount", counterpartyLabel, timeColumnLabel, "Expires at", "Status", "Links"]
-    : ["Amount", timeColumnLabel, "Expires at", "Status", ""];
+    : ["Amount", timeColumnLabel, "Expires at", "Status", "Action"];
+  const columnWidths = counterpartyLabel
+    ? ["16%", "11%", "15%", "15%", "23%", "20%"]
+    : ["25%", "19%", "19%", "21%", "16%"];
   const emptyMessage = tab === "incoming" ? "No live claims right now." : tab === "sent" ? "Nothing sent yet." : "Nothing claimed yet.";
   const networkMode = mode;
 
-  function sentLinks(row: Row) {
+  function rowLinks(row: Row) {
     const sourceUrl = row.sourceTxHash
       ? sourceTxExplorerUrl(row.routeId as SourceRail, row.sourceTxHash, networkMode)
       : null;
@@ -324,13 +443,32 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
     const irisUrl = row.sourceTxHash && row.routeId
       ? irisMessageUrl(row.routeId as SourceRail, row.sourceTxHash, networkMode)
       : null;
+    const links = [
+      sourceUrl ? { href: sourceUrl, label: "Burn", title: "Source burn" } : null,
+      destUrl ? { href: destUrl, label: "Settle", title: "Starknet settle" } : null,
+      row.recoveryHint === "self_settle" && irisUrl
+        ? { href: irisUrl, label: "Self-settle", title: "Settle yourself" }
+        : null,
+    ].filter(Boolean) as Array<{ href: string; label: string; title: string }>;
+
+    if (links.length === 0) {
+      return <span className="text-xs text-muted-foreground">—</span>;
+    }
+
     return (
-      <div className="flex flex-col items-start gap-1 text-xs">
-        {sourceUrl ? <a className="underline underline-offset-2" href={sourceUrl} target="_blank" rel="noreferrer">Source burn</a> : null}
-        {destUrl ? <a className="underline underline-offset-2" href={destUrl} target="_blank" rel="noreferrer">Starknet settle</a> : null}
-        {row.recoveryHint === "self_settle" && irisUrl ? (
-          <a className="font-medium text-foreground underline underline-offset-2" href={irisUrl} target="_blank" rel="noreferrer">Settle yourself</a>
-        ) : null}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {links.map((link) => (
+          <a
+            key={link.label}
+            className="whitespace-nowrap text-xs font-semibold text-brand-ink underline decoration-brand-ink/60 underline-offset-2 hover:text-brand-dark"
+            href={link.href}
+            title={link.title}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {link.label}
+          </a>
+        ))}
       </div>
     );
   }
@@ -338,6 +476,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
   const table = (
     <TableShell
       columns={columns}
+      columnWidths={columnWidths}
       loading={loading}
       empty={!loading && rows.length === 0}
       emptyMessage={emptyMessage}
@@ -345,27 +484,53 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
         <li key={row.itemId} className="space-y-3 p-4">
           <div className="flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-2 text-lg font-semibold tabular-nums">
-              <UsdcIcon className="size-5" /> {row.amount} USDC
+              <UsdcIcon className="size-5" /> {row.amount}
             </span>
             <StatusPill status={row.status} />
           </div>
           {counterpartyLabel ? <p className="text-sm font-medium">{counterpartyLabel} {row.counterparty}</p> : null}
-          <p className="text-xs text-muted-foreground">{timeColumnLabel} {formatRowTime(row.at)}</p>
-          <p className="text-xs text-muted-foreground">Expires at {formatRowTime(row.expiresAt)}</p>
-          {tab === "incoming" ? <Button className="w-full" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button> : null}
-          {tab === "sent" ? sentLinks(row) : null}
+          <p className="text-xs text-muted-foreground">{timeColumnLabel} {formatRowTimeInline(row.at)}</p>
+          <p className="text-xs text-muted-foreground">Expires at {formatRowTimeInline(row.expiresAt)}</p>
+          {tab === "incoming" ? (
+            row.lockedOut ? (
+              <p className="text-xs text-muted-foreground">
+                Encrypted to another device’s inbox key — send a new payment to claim here.
+              </p>
+            ) : (
+              <Button className="w-full" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button>
+            )
+          ) : null}
+          {tab === "sent" || tab === "history" ? rowLinks(row) : null}
         </li>
       ))}
     >
       {rows.map((row) => (
-        <tr key={row.itemId}>
-          <td className="px-5 py-4"><span className="inline-flex items-center gap-2 font-semibold tabular-nums"><UsdcIcon className="size-5" />{row.amount} USDC</span></td>
-          {counterpartyLabel ? <td className="px-5 py-4 font-medium capitalize">{row.counterparty}</td> : null}
-          <td className="px-5 py-4 tabular-nums text-muted-foreground">{formatRowTime(row.at)}</td>
-          <td className="px-5 py-4 tabular-nums text-muted-foreground">{formatRowTime(row.expiresAt)}</td>
-          <td className="px-5 py-4"><StatusPill status={row.status} /></td>
-          {tab === "sent" ? <td className="px-5 py-4">{sentLinks(row)}</td> : null}
-          {!counterpartyLabel ? <td className="px-5 py-4 text-right"><Button size="sm" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button></td> : null}
+        <tr key={row.itemId} className="align-middle">
+          <td className="whitespace-nowrap px-2 py-3.5 first:pl-4">
+            <span className="inline-flex items-center gap-2 font-semibold tabular-nums">
+              <UsdcIcon className="size-5 shrink-0" />
+              {row.amount}
+            </span>
+          </td>
+          {counterpartyLabel ? (
+            <td className="truncate whitespace-nowrap px-2 py-3.5 font-medium capitalize" title={row.counterparty}>{row.counterparty}</td>
+          ) : null}
+          <td className="whitespace-nowrap px-2 py-3.5 tabular-nums text-muted-foreground">{formatRowTime(row.at)}</td>
+          <td className="whitespace-nowrap px-2 py-3.5 tabular-nums text-muted-foreground">{formatRowTime(row.expiresAt)}</td>
+          <td className="max-w-0 overflow-hidden px-2 py-3.5">
+            <StatusPill status={row.status} />
+          </td>
+          {tab === "sent" || tab === "history" ? (
+            <td className="overflow-hidden px-2 py-3.5 last:pr-4">{rowLinks(row)}</td>
+          ) : (
+            <td className="min-w-0 px-2 py-3.5 text-right last:pr-4">
+              {row.lockedOut ? (
+                <span className="block truncate text-xs font-medium text-muted-foreground">Unavailable</span>
+              ) : (
+                <Button size="sm" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button>
+              )}
+            </td>
+          )}
         </tr>
       ))}
     </TableShell>
@@ -404,7 +569,8 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
 export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { mode } = useNetworkMode();
   const { routes, routesReady } = useRoutesHealth(mode, mode === "mainnet");
-  const mainnetEscrowReady = routes.some((route) => route.key === "starknet-private" && route.selectable);
+  const privateRoute = routes.find((route) => route.key === "starknet-private");
+  const mainnetEscrowReady = privateRoute?.selectable === true;
   if (mode === "mainnet" && !routesReady) {
     const loading = <InboxMobileRowsSkeleton rows={2} />;
     return embedded ? loading : (
@@ -415,7 +581,7 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
     const blocked = (
       <WrongModeNotice
         feature="Inbox"
-        detail={PRIVATE_CLAIM_ROUTE_UNVERIFIED}
+        detail={privateRoute?.reason ?? PRIVATE_CLAIM_ROUTE_UNVERIFIED}
         mainnetHref="/account?tab=wallet"
         mainnetLabel="View Mainnet balance"
       />

@@ -93,20 +93,19 @@ export function NoteVisaCard({
                 </div>
               </div>
               {status ? (
-                <span className="radius-control border border-white/20 bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white backdrop-blur-sm">
+                <span className="inline-flex max-w-[10.5rem] shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/20 px-2.5 py-1.5 text-center text-[10px] font-bold uppercase leading-none tracking-[0.12em] text-white">
                   {status}
                 </span>
               ) : null}
             </div>
 
-            {/* Chip — payment-card cue */}
+            {/* Spacer — preserves visa-card proportions after chip removal */}
             <div
               aria-hidden
               className={cn(
-                "rounded-md bg-gradient-to-br from-white/35 via-white/20 to-white/10 shadow-inner ring-1 ring-white/25",
                 compact
-                  ? "mt-3 h-7 w-9 sm:mt-3.5 sm:h-8 sm:w-10"
-                  : "mt-4 h-8 w-10 sm:h-9 sm:w-11",
+                  ? "mt-3 h-7 sm:mt-3.5 sm:h-8"
+                  : "mt-4 h-8 sm:h-9",
               )}
             />
 
@@ -117,19 +116,15 @@ export function NoteVisaCard({
                   compact ? "text-3xl sm:text-[2rem]" : "text-3xl sm:text-4xl",
                 )}
               >
-                <span className="inline-flex items-baseline gap-2">
+                <span className="inline-flex items-center gap-2">
                   <span>{amount}</span>
-                  <span
+                  <UsdcIcon
                     className={cn(
-                      "inline-flex items-center gap-1.5 align-middle font-semibold text-white/90",
-                      compact ? "text-sm sm:text-base" : "text-base sm:text-lg",
+                      "drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]",
+                      compact ? "size-6 sm:size-7" : "size-7 sm:size-8",
                     )}
-                  >
-                    <UsdcIcon
-                      className={cn(compact ? "size-6 sm:size-7" : "size-7 sm:size-8")}
-                    />
-                    {assetLabel}
-                  </span>
+                  />
+                  <span className="sr-only">{assetLabel}</span>
                 </span>
               </p>
               {recipient ? (

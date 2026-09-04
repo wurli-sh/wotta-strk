@@ -52,11 +52,17 @@ test.describe("Mainnet mode isolation", () => {
     await page.addInitScript(() => window.localStorage.setItem("wotta-network-mode", "mainnet"));
   });
 
-  test("Send keeps the shared form and restricts it to Starknet", async ({ page }) => {
+  test("Send keeps private locked and sources fail-closed until admission", async ({ page }) => {
     await page.goto("/send");
     await expect(page.getByRole("heading", { name: "Send", exact: true })).toBeVisible();
-    for (const amount of ["0.1", "1", "10", "50", "100"]) {
+    for (const amount of ["0.1", "1"]) {
       await expect(page.getByTestId(`denom-${amount}`)).toBeVisible();
+      await expect(page.getByTestId(`denom-${amount}`)).toBeEnabled();
+    }
+    for (const amount of ["10", "50", "100"]) {
+      await expect(page.getByTestId(`denom-${amount}`)).toBeVisible();
+      await expect(page.getByTestId(`denom-${amount}`)).toBeDisabled();
+      await expect(page.getByTestId(`denom-${amount}`)).toHaveAttribute("data-status", "soon");
     }
     await expect(page.getByRole("switch", { name: "Private route send mode" })).toBeChecked();
     await expect(page.getByRole("switch", { name: "Private route send mode" })).toBeDisabled();

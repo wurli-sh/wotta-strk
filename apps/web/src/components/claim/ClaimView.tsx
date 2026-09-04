@@ -16,18 +16,26 @@ import { createPrivacyClient } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { claimPrivateFund } from "@/lib/wotta/privacy-flow";
 import { createBrowserProductSession } from "@/lib/wotta/product-session";
+import { ensureClaimInboxKey } from "@/lib/wotta/ensure-inbox-key";
 import { connectReady } from "@/lib/wotta/ready";
 import { beginNetworkOperation } from "@/lib/network-operations";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { starkscanTransactionUrl } from "@/lib/network-mode";
 import { submitMainnetEscrowClaim } from "@/lib/wotta/mainnet-privacy";
-import { SETTLED_PRIVATELY, TOAST } from "@/lib/brand-copy";
+import { TOAST } from "@/lib/brand-copy";
+import { formatUsdc } from "@/lib/format/amount";
+import { isMissingInboxKeyError, isWrongInboxKeyError } from "@/lib/wotta/inbox-note-access";
 
 type ClaimRow = {
   noteId: string;
   intentId: string;
   claimSecret: string;
   escrow: { address: string; classHash: string; denomination: bigint };
+};
+
+type ClaimSuccess = {
+  denomination: bigint;
+  transactionHash: string;
 };
 
 type ClaimPhase =
@@ -61,30 +69,41 @@ type Props = {
   noteId?: string | null;
 };
 
+function isMissingInboxKey(error: string | null, vault: { state: { inboxSecretKey?: string } } | null): boolean {
+  if (vault && !vault.state.inboxSecretKey) return true;
+  return isMissingInboxKeyError(error);
+}
+
 export function ClaimView({ embedded = false, noteId = null }: Props) {
   const { mode } = useNetworkMode();
-  const { vault } = usePrivacyVault();
+  const { vault, unlocking, unlock, sessionReady } = usePrivacyVault();
   const confettiRef = useRef<ConfettiRef>(null);
   const [claim, setClaim] = useState<ClaimRow | null>(null);
+  const [success, setSuccess] = useState<ClaimSuccess | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<ClaimPhase>("idle");
-  const [transactionHash, setTransactionHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   const loadFromVault = useCallback(async () => {
-    if (!vault) return;
+    if (!vault?.state.inboxSecretKey) {
+      setClaim(null);
+      if (vault && !vault.state.inboxSecretKey) {
+        setError("This browser has no Wotta inbox key");
+      }
+      return;
+    }
     const operation = beginNetworkOperation(mode);
     setLoading(true);
     setError(null);
     try {
-        const latest = await createBrowserProductSession().loadClaim(
-          vault,
-          noteId ?? undefined,
-        );
-        operation.assertActive();
-        setClaim(latest);
+      const latest = await createBrowserProductSession().loadClaim(
+        vault,
+        noteId ?? undefined,
+      );
+      operation.assertActive();
+      setClaim(latest);
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") return;
       const message = userFacingError(caught, "No claimable private payment was found");
@@ -109,15 +128,50 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!sessionReady) return;
     if (!vault) {
       setClaim(null);
+      setError(null);
       return;
     }
     void loadFromVault();
-  }, [vault, loadFromVault]);
+  }, [vault, loadFromVault, sessionReady]);
+
+  async function unlockInbox() {
+    setLoading(true);
+    setError(null);
+    try {
+      const { vault: next, account } = await unlock();
+      const { rebound } = await ensureClaimInboxKey(next, account, mode);
+      try {
+        const latest = await createBrowserProductSession().loadClaim(
+          next,
+          noteId ?? undefined,
+        );
+        setClaim(latest);
+        setError(null);
+        if (rebound) {
+          toast.message("Ready re-linked on this device. New payments will claim here.");
+        }
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        const message = rebound
+          ? "Inbox key was reset on this device — older encrypted payments can’t be opened. Ask for a new send."
+          : userFacingError(caught, "No claimable private payment was found");
+        setClaim(null);
+        setError(message);
+        toast.error(message);
+      }
+    } catch (caught) {
+      toast.error(userFacingError(caught, TOAST.inboxUnlockFailed));
+      setError(userFacingError(caught, TOAST.inboxUnlockFailed));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function runClaim() {
-    if (!claim || !vault) {
+    if (!claim || !vault?.state.inboxSecretKey) {
       toast.error(TOAST.unlockInboxFirst);
       return;
     }
@@ -148,11 +202,13 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
             );
           })();
       operation.assertActive();
-      setTransactionHash(hash);
+      setSuccess({ denomination: claim.escrow.denomination, transactionHash: hash });
       setPhase("complete");
       toast.success(TOAST.claimed);
       fireClaimConfetti(confettiRef.current);
-      setClaim(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
+      }
     } catch (caught) {
       const message = userFacingError(caught, "Couldn't claim this payment");
       setError(message);
@@ -164,15 +220,19 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
     }
   }
 
+  const wrongKey = isWrongInboxKeyError(error);
+  const needsUnlock = signedIn === true && !wrongKey && (!vault || isMissingInboxKey(error, vault));
+  const missingKey = isMissingInboxKey(error, vault);
+
   let body: ReactNode;
 
-  if (loading) {
+  if (signedIn === null || !sessionReady || loading) {
     body = <NoteCardSkeleton />;
-  } else if (phase === "complete" && claim) {
+  } else if (phase === "complete" && success) {
     body = (
       <NoteVisaCard
         label="Private balance"
-        amount={(claim.escrow.denomination / 1_000_000n).toString()}
+        amount={formatUsdc(success.denomination)}
         recipient="You"
         status="Claimed"
         note="The proof settled this payment into a fresh private USDC note."
@@ -181,17 +241,15 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
             <Button className="w-full" href="/account?tab=wallet">
               <CheckCircle2 className="size-4" aria-hidden /> View private balance
             </Button>
-            {transactionHash ? (
-              <Button
-                variant="outline"
-                className="w-full"
-                href={starkscanTransactionUrl(mode, transactionHash)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <ExternalLink className="size-4" aria-hidden /> Explorer
-              </Button>
-            ) : null}
+            <Button
+              variant="outline"
+              className="w-full"
+              href={starkscanTransactionUrl(mode, success.transactionHash)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink className="size-4" aria-hidden /> Explorer
+            </Button>
           </div>
         }
       />
@@ -200,9 +258,9 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
     body = (
       <NoteVisaCard
         label="Ready to claim"
-        amount={(claim.escrow.denomination / 1_000_000n).toString()}
+        amount={formatUsdc(claim.escrow.denomination)}
         recipient="Private Starknet balance"
-        status={SETTLED_PRIVATELY}
+        status="Settled privately"
         footer={
           <Button
             variant="brand"
@@ -218,26 +276,71 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       />
     );
   } else {
+    const title = signedIn === false
+      ? "Sign in to claim"
+      : wrongKey
+        ? "Can’t open this payment"
+        : needsUnlock
+          ? "Unlock to claim"
+          : "No claimable payments";
+    const detail = error ?? (signedIn === false
+      ? "Sign in from Account, then unlock your Ready inbox."
+      : !vault
+        ? "Authorize Ready once to decrypt this payment on this device."
+        : missingKey
+          ? "This device is missing the inbox key that can open this payment. Unlock with the same Ready account that linked your Wotta profile — or re-link from Account."
+          : "Nothing claimable right now — check Incoming on Inbox.");
+
     body = (
       <div className="radius-surface flex flex-col items-center gap-4 border border-dashed border-border bg-card px-6 py-10 text-center shadow-card">
         <Inbox className="size-10 text-muted-foreground" aria-hidden />
         <div className="space-y-2">
-          <h2 className="text-base font-semibold text-foreground">No claimable payments</h2>
-          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            {error ?? (signedIn === false
-              ? "Sign in from the navigation, then unlock your inbox."
-              : !vault
-                ? "Unlock your inbox to decrypt claimable payments."
-                : "Nothing claimable right now — check Incoming on Inbox.")}
-          </p>
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">{detail}</p>
         </div>
-        <Button
-          variant="outline"
-          className="min-w-[10rem]"
-          href={signedIn === false ? "/account" : "/inbox"}
-        >
-          {signedIn === false ? "Go to Account" : "Open inbox"}
-        </Button>
+        {signedIn === false ? (
+          <Button variant="outline" className="min-w-[10rem]" href="/account">
+            Go to Account
+          </Button>
+        ) : wrongKey ? (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button variant="brand" className="min-w-[10rem]" href="/send">
+              Send a new payment
+            </Button>
+            <Button variant="outline" className="min-w-[10rem]" href="/inbox">
+              Back to Inbox
+            </Button>
+          </div>
+        ) : needsUnlock && !missingKey ? (
+          <Button
+            variant="brand"
+            className="min-w-[10rem]"
+            disabled={unlocking}
+            aria-busy={unlocking}
+            onClick={() => void unlockInbox()}
+          >
+            {unlocking ? "Unlocking…" : "Unlock inbox"}
+          </Button>
+        ) : missingKey ? (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button
+              variant="brand"
+              className="min-w-[10rem]"
+              disabled={unlocking}
+              aria-busy={unlocking}
+              onClick={() => void unlockInbox()}
+            >
+              {unlocking ? "Unlocking…" : "Unlock Ready"}
+            </Button>
+            <Button variant="outline" className="min-w-[10rem]" href="/account?tab=wallet">
+              Account
+            </Button>
+          </div>
+        ) : (
+          <Button variant="outline" className="min-w-[10rem]" href="/inbox">
+            Open inbox
+          </Button>
+        )}
       </div>
     );
   }

@@ -6,7 +6,6 @@ import {
   LANDING_HEADLINE,
   LANDING_INBOX_PROMPT,
   LANDING_SUBHEAD,
-  MAINNET_BANNER,
   MAINNET_NAV_CONFIRM,
   PAGE_SUBTITLES,
   QUOTE_PRIVACY_NOTE,
@@ -36,7 +35,6 @@ describe("brand-copy", () => {
     expect(TRUTH_LINE).toBe("Source is public. Balance is private. Earn on Vesu.");
     expect(TRUTH_LINE_SHORT).toBe("Source is public. Balance is private.");
     expect(QUOTE_PRIVACY_NOTE).toContain("private after claim");
-    expect(MAINNET_BANNER).toContain("Source deposit is public");
     expect(SETTLED_PRIVATELY).toBe("Settled privately on Starknet");
     expect(SETTLED_PRIVATELY_INBOX).toContain("inbox");
     expect(SUCCESS_NOTE_PIPELINE).toContain("inbox");
@@ -66,7 +64,6 @@ describe("brand-copy", () => {
       TRUTH_LINE,
       TRUTH_LINE_SHORT,
       QUOTE_PRIVACY_NOTE,
-      MAINNET_BANNER,
       HOW_IT_WORKS_STEPS,
       HOW_IT_WORKS_DEMO_NOTE,
       PAGE_SUBTITLES,

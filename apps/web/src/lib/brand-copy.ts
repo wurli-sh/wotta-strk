@@ -15,9 +15,6 @@ export const TRUTH_LINE_SHORT = "Source is public. Balance is private.";
 export const QUOTE_PRIVACY_NOTE =
   "Source payment is public. Balance is private after claim.";
 
-export const MAINNET_BANNER =
-  "Mainnet uses real funds. Source deposit is public; claim is private.";
-
 export const HOW_IT_WORKS_STEPS = [
   {
     title: "Type a handle.",
@@ -56,7 +53,7 @@ export const TOAST = {
   readyConnected: (net: "Mainnet" | "Testnet") => `Ready connected on ${net}`,
   sourceConnected: (label: string) => `${label} wallet connected`,
   networkBlocked: "Finish or cancel the open Ready request, then switch networks",
-  unlockInboxFirst: "Unlock your inbox on Inbox, then claim",
+  unlockInboxFirst: "Unlock your Ready inbox, then claim",
   signedIn: "Signed in",
   signInFailed: "Couldn’t sign in — try again",
   codeSent: "Code sent — check your email",

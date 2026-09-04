@@ -32,6 +32,7 @@ type SourceWalletContextValue = {
   sources: ConnectedSourceWallet[];
   setSource: (wallet: Omit<ConnectedSourceWallet, "chainKey"> & { chainKey?: SourceChipKey }) => void;
   clearSources: () => void;
+  clearSource: (chainKey: SourceChipKey) => void;
   getSource: (routeKey: SourceRail) => ConnectedSourceWallet | null;
   matchesRoute: (routeKey: SourceRail) => boolean;
 };
@@ -46,6 +47,8 @@ const CHAIN_ORDER: SourceChipKey[] = [
   "stellar",
   "starknet",
 ];
+
+const EVM_CHAIN_KEYS = new Set<SourceChipKey>(["ethereum", "arbitrum", "base"]);
 
 const SourceWalletContext = createContext<SourceWalletContextValue | null>(null);
 
@@ -134,10 +137,33 @@ function orderedSources(map: SourcesMap): ConnectedSourceWallet[] {
   });
 }
 
+type Eip1193 = {
+  request(input: { method: string; params?: unknown[] }): Promise<unknown>;
+  on?(event: string, handler: (...args: unknown[]) => void): void;
+  removeListener?(event: string, handler: (...args: unknown[]) => void): void;
+};
+
+type PhantomProvider = {
+  publicKey?: { toBase58(): string } | null;
+  on?(event: string, handler: (...args: unknown[]) => void): void;
+  off?(event: string, handler: (...args: unknown[]) => void): void;
+  removeListener?(event: string, handler: (...args: unknown[]) => void): void;
+};
+
+function injectedEvm(): Eip1193 | undefined {
+  return (globalThis as typeof globalThis & { ethereum?: Eip1193 }).ethereum;
+}
+
+function injectedPhantom(): PhantomProvider | undefined {
+  return (globalThis as typeof globalThis & { phantom?: { solana?: PhantomProvider } }).phantom?.solana
+    ?? (globalThis as typeof globalThis & { solana?: PhantomProvider }).solana;
+}
+
 export function SourceWalletProvider({ children }: { children: ReactNode }) {
   const [byChain, setByChain] = useState<SourcesMap>({});
 
   useEffect(() => {
+    // Persisted wallets are a reconnect hint only — live listeners may clear them.
     setByChain(readStored());
   }, []);
 
@@ -159,10 +185,105 @@ export function SourceWalletProvider({ children }: { children: ReactNode }) {
     setByChain({});
   }, []);
 
+  const clearSource = useCallback((chainKey: SourceChipKey) => {
+    setByChain((prev) => {
+      if (!prev[chainKey]) return prev;
+      const updated = { ...prev };
+      delete updated[chainKey];
+      writeStored(updated);
+      return updated;
+    });
+  }, []);
+
   useEffect(() => {
     window.addEventListener(NETWORK_MODE_EVENT, clearSources);
     return () => window.removeEventListener(NETWORK_MODE_EVENT, clearSources);
   }, [clearSources]);
+
+  useEffect(() => {
+    const provider = injectedEvm();
+    if (!provider?.on || !provider.removeListener) return;
+
+    const onAccountsChanged = (accounts: unknown) => {
+      const list = Array.isArray(accounts) ? accounts.map(String) : [];
+      const active = list[0]?.toLowerCase();
+      setByChain((prev) => {
+        let changed = false;
+        const updated = { ...prev };
+        for (const key of EVM_CHAIN_KEYS) {
+          const wallet = updated[key];
+          if (!wallet) continue;
+          if (!active || wallet.address.toLowerCase() !== active) {
+            delete updated[key];
+            changed = true;
+          }
+        }
+        if (!changed) return prev;
+        writeStored(updated);
+        return updated;
+      });
+    };
+
+    const onChainChanged = () => {
+      // Chain switches invalidate EVM source readiness; user must reconnect/ensureChain.
+      setByChain((prev) => {
+        let changed = false;
+        const updated = { ...prev };
+        for (const key of EVM_CHAIN_KEYS) {
+          if (updated[key]) {
+            delete updated[key];
+            changed = true;
+          }
+        }
+        if (!changed) return prev;
+        writeStored(updated);
+        return updated;
+      });
+    };
+
+    provider.on("accountsChanged", onAccountsChanged);
+    provider.on("chainChanged", onChainChanged);
+    return () => {
+      provider.removeListener?.("accountsChanged", onAccountsChanged);
+      provider.removeListener?.("chainChanged", onChainChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    const provider = injectedPhantom();
+    if (!provider?.on) return;
+
+    const clearSolana = () => clearSource("solana");
+    const onAccountChanged = (publicKey: unknown) => {
+      if (!publicKey) {
+        clearSolana();
+        return;
+      }
+      const next = typeof publicKey === "object" && publicKey && "toBase58" in publicKey
+        ? String((publicKey as { toBase58(): string }).toBase58())
+        : null;
+      setByChain((prev) => {
+        const wallet = prev.solana;
+        if (!wallet) return prev;
+        if (!next || wallet.address !== next) {
+          const updated = { ...prev };
+          delete updated.solana;
+          writeStored(updated);
+          return updated;
+        }
+        return prev;
+      });
+    };
+
+    provider.on("accountChanged", onAccountChanged);
+    provider.on("disconnect", clearSolana);
+    return () => {
+      provider.off?.("accountChanged", onAccountChanged);
+      provider.off?.("disconnect", clearSolana);
+      provider.removeListener?.("accountChanged", onAccountChanged);
+      provider.removeListener?.("disconnect", clearSolana);
+    };
+  }, [clearSource]);
 
   const getSource = useCallback(
     (routeKey: SourceRail) => byChain[chainKeyForRoute(routeKey)] ?? null,
@@ -177,8 +298,8 @@ export function SourceWalletProvider({ children }: { children: ReactNode }) {
   const sources = useMemo(() => orderedSources(byChain), [byChain]);
 
   const value = useMemo(
-    () => ({ sources, setSource, clearSources, getSource, matchesRoute }),
-    [sources, setSource, clearSources, getSource, matchesRoute],
+    () => ({ sources, setSource, clearSources, clearSource, getSource, matchesRoute }),
+    [sources, setSource, clearSources, clearSource, getSource, matchesRoute],
   );
 
   return <SourceWalletContext.Provider value={value}>{children}</SourceWalletContext.Provider>;

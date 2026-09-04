@@ -4,8 +4,19 @@ import { Suspense, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IslandNav } from "@/components/IslandNav";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { RouteSkeletonGate } from "@/components/RouteSkeletonGate";
 import { SendPageSkeleton } from "@/components/ui/Skeleton";
+import { readNetworkMode } from "@/lib/network-mode";
+
+function NetworkAwareSendPageSkeleton() {
+  const { mode } = useNetworkMode();
+  // Prefer stored mode so mainnet doesn't flash the testnet private-route toggle skeleton.
+  const skeletonMode = mode === "mainnet" || readNetworkMode() === "mainnet"
+    ? "mainnet"
+    : "testnet";
+  return <SendPageSkeleton mode={skeletonMode} />;
+}
 
 export function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -41,7 +52,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
       />
       <IslandNav />
       <main className="mx-auto min-h-svh max-w-5xl px-4 pb-12 pt-28">
-        <Suspense fallback={<SendPageSkeleton />}>
+        <Suspense fallback={<NetworkAwareSendPageSkeleton />}>
           <RouteSkeletonGate>{children}</RouteSkeletonGate>
         </Suspense>
       </main>
