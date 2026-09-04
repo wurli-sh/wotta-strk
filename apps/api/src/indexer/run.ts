@@ -4,6 +4,7 @@ import type { Config } from "../config.ts";
 import type { Db } from "../db/client.ts";
 import type { Logger } from "pino";
 import { acquireLease } from "../workers/lease.ts";
+import { applyOnchainProjection, sweepExpiredFunded } from "../intents/recovery.ts";
 
 type Projection = {
   kind: "funded" | "claimed" | "refunded";
@@ -113,6 +114,7 @@ async function persistProjection(db: Db, chainId: string, event: {
     updated_at: new Date().toISOString(),
   }).eq("claim_hash", projection.claimHash);
   if (intentError) throw intentError;
+  await applyOnchainProjection(db, projection.claimHash, projection.kind);
 }
 
 /** Index verified Wotta escrow events and maintain a reorg-replayable status projection. */
@@ -162,8 +164,9 @@ export async function runIndexerOnce(deps: { db: Db; config: Config; log: Logger
   const latestBlock = await provider.getBlockWithTxHashes(latest);
   const { error: saveCursorError } = await deps.db.from("indexer_cursors").upsert({ chain_id: chainId, block_number: latest, block_hash: latestBlock.block_hash, updated_at: new Date().toISOString() }, { onConflict: "chain_id" });
   if (saveCursorError) throw saveCursorError;
-  deps.log.info({ chainId, fromBlock, toBlock: latest, indexed }, "Wotta escrow indexer caught up");
-  return { indexed, fromBlock, toBlock: latest };
+  const swept = await sweepExpiredFunded(deps.db);
+  deps.log.info({ chainId, fromBlock, toBlock: latest, indexed, swept }, "Wotta escrow indexer caught up");
+  return { indexed, fromBlock, toBlock: latest, swept };
 }
 
 export async function runIndexerLoop(deps: { db: Db; config: Config; log: Logger }, signal: AbortSignal) {

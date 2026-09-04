@@ -1,17 +1,21 @@
 import { CairoByteArray, Account, RpcProvider, Signer, type Call, type ResourceBoundsBN } from "starknet";
-import { decodeCircleCctpMessageV2, DENOMINATION_CODES, type IntentState } from "@wotta/shared";
+import { type IntentState } from "@wotta/shared";
 import type { Config } from "../config.ts";
 import type { Db } from "../db/client.ts";
 import type { Logger } from "pino";
 import { acquireLease } from "../workers/lease.ts";
 import { routeById } from "../routes.ts";
-import { fetchAttestation } from "./iris.ts";
+import { fetchAttestationWithBackoff } from "./iris.ts";
 import { transition, transitionAllowed } from "../intents/service.ts";
+import { transitionToward } from "../intents/recovery.ts";
+import { validateSettlement } from "./validate-settlement.ts";
 
 const STRK_TOKEN_ADDRESS =
   "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
 /** CCTP settle is cheaper than privacy apply_actions; keep a floor so we fail loud when empty. */
 const SETTLE_MIN_L2_GAS = 30_000_000n;
+const PROJECTION_WAIT_ATTEMPTS = 6;
+const PROJECTION_WAIT_MS = 1_500;
 
 type JobRow = {
   id: string;
@@ -32,8 +36,29 @@ type JobRow = {
   };
 };
 
-function feltBytes32(value: string): string {
-  return `0x${BigInt(value).toString(16).padStart(64, "0")}`.toLowerCase();
+function intentIdFelt(intentId: string): string {
+  return `0x${intentId.replaceAll("-", "").toLowerCase()}`;
+}
+
+async function routerProcessed(provider: RpcProvider, config: Config, intentId: string): Promise<boolean> {
+  const result = await provider.callContract({
+    contractAddress: config.manifest.router.address,
+    entrypoint: "processed",
+    calldata: [intentIdFelt(intentId)],
+  });
+  return BigInt(result[0] ?? 0) !== 0n;
+}
+
+async function waitForOnchainProjection(db: Db, claimHash: string): Promise<string | null> {
+  for (let attempt = 0; attempt < PROJECTION_WAIT_ATTEMPTS; attempt += 1) {
+    const { data, error } = await db.from("intents").select("onchain_state,onchain_tx_hash").eq("claim_hash", claimHash).maybeSingle();
+    if (error) throw error;
+    if (data?.onchain_state === "funded" || data?.onchain_state === "claimed" || data?.onchain_state === "refunded") {
+      return data.onchain_tx_hash ?? null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, PROJECTION_WAIT_MS));
+  }
+  return null;
 }
 
 function relayerAccount(config: Config) {
@@ -43,6 +68,11 @@ function relayerAccount(config: Config) {
   if (!address || !key || !/^0x[0-9a-f]+$/i.test(key)) throw new Error("relayer_credentials_missing");
   const provider = new RpcProvider({ nodeUrl: config.env.STARKNET_RPC_URL });
   return { provider, account: new Account({ provider, address, signer: new Signer(key) }) };
+}
+
+function relayerFallbackProvider(config: Config): RpcProvider | undefined {
+  const url = config.env.STARKNET_FALLBACK_RPC_URL;
+  return url ? new RpcProvider({ nodeUrl: url }) : undefined;
 }
 
 async function strkBalance(account: Account): Promise<bigint> {
@@ -69,7 +99,7 @@ function clampBoundsToBalance(bounds: ResourceBoundsBN, balance: bigint, account
   const reserved = l1Cost + l1DataCost;
   if (budget <= reserved) {
     throw new Error(
-      `relayer STRK balance too low on Sepolia — fund STARKNET_RELAYER_ADDRESS / STARKNET_DEPLOYER_ADDRESS (${accountAddress}) with at least 10 STRK`,
+      `relayer STRK balance too low — fund STARKNET_RELAYER_ADDRESS / STARKNET_DEPLOYER_ADDRESS (${accountAddress}) with at least 10 STRK`,
     );
   }
   const l2Price = bounds.l2_gas.max_price_per_unit;
@@ -77,7 +107,7 @@ function clampBoundsToBalance(bounds: ResourceBoundsBN, balance: bigint, account
   const l2Max = affordableL2 < bounds.l2_gas.max_amount ? affordableL2 : bounds.l2_gas.max_amount;
   if (l2Max < SETTLE_MIN_L2_GAS) {
     throw new Error(
-      `relayer STRK balance too low on Sepolia — fund STARKNET_RELAYER_ADDRESS / STARKNET_DEPLOYER_ADDRESS (${accountAddress}) with at least 10 STRK`,
+      `relayer STRK balance too low — fund STARKNET_RELAYER_ADDRESS / STARKNET_DEPLOYER_ADDRESS (${accountAddress}) with at least 10 STRK`,
     );
   }
   return {
@@ -100,30 +130,6 @@ function isRelayerFeeExhausted(message: string): boolean {
   return /exceed balance|strk balance too low|resources bounds/i.test(message);
 }
 
-function validateSettlement(config: Config, job: JobRow, message: string) {
-  const decoded = decodeCircleCctpMessageV2(message);
-  const route = routeById(job.intent.route_id, config);
-  if (!route?.enabled || route.domain !== decoded.sourceDomain) throw new Error("settlement_source_mismatch");
-  if (decoded.destinationDomain !== 25) throw new Error("settlement_destination_mismatch");
-  const router = feltBytes32(config.manifest.router.address);
-  if (decoded.destinationCaller.toLowerCase() !== router || decoded.burn.mintRecipient.toLowerCase() !== router) throw new Error("settlement_router_mismatch");
-  if (decoded.wrapper.hook.intentId !== job.intent.id) throw new Error("settlement_intent_mismatch");
-  const pool = config.manifest.pools.find((candidate) => String(candidate.denomination) === String(job.intent.denomination));
-  if (!pool || decoded.wrapper.hook.escrowPool.toLowerCase() !== feltBytes32(pool.address)) throw new Error("settlement_pool_mismatch");
-  const denomination = String(job.intent.denomination) as keyof typeof DENOMINATION_CODES;
-  if (decoded.wrapper.hook.denominationCode !== DENOMINATION_CODES[denomination]) throw new Error("settlement_denomination_mismatch");
-  if (decoded.wrapper.hook.claimHash.toLowerCase() !== feltBytes32(job.intent.claim_hash)) throw new Error("settlement_claim_mismatch");
-  if (decoded.wrapper.hook.publicRefundRecipient.toLowerCase() !== feltBytes32(job.intent.public_refund_recipient)) throw new Error("settlement_refund_mismatch");
-  if (decoded.wrapper.hook.expiresAt !== BigInt(Math.floor(Date.parse(job.intent.expires_at) / 1000))) throw new Error("settlement_expiry_mismatch");
-  if (decoded.wrapper.hook.manifestVersion !== 1) throw new Error("settlement_manifest_mismatch");
-  const signedQuote = job.intent.quote?.quote;
-  if (!signedQuote?.grossDebit || signedQuote.maxFee === undefined || signedQuote.minFinalityThreshold === undefined) throw new Error("settlement_quote_missing");
-  if (decoded.burn.amount !== BigInt(signedQuote.grossDebit) || decoded.burn.maxFee !== BigInt(signedQuote.maxFee)) throw new Error("settlement_fee_binding_mismatch");
-  if (decoded.burn.feeExecuted > decoded.burn.maxFee || decoded.burn.amount - decoded.burn.feeExecuted < BigInt(job.intent.denomination)) throw new Error("settlement_underfunded");
-  if (decoded.minFinalityThreshold !== signedQuote.minFinalityThreshold || decoded.finalityThresholdExecuted < decoded.minFinalityThreshold) throw new Error("settlement_finality_mismatch");
-  return decoded;
-}
-
 async function advance(db: Db, job: JobRow, to: IntentState, evidence: Record<string, unknown>) {
   const updated = await transition(db, job.intent.owner_id, job.intent.id, job.intent.version, to, evidence);
   job.intent.state = updated.state as IntentState;
@@ -133,7 +139,7 @@ async function advance(db: Db, job: JobRow, to: IntentState, evidence: Record<st
 async function processJob(deps: { db: Db; config: Config; log: Logger }, job: JobRow) {
   const route = routeById(job.intent.route_id, deps.config);
   if (!route?.enabled || route.domain === null || !job.intent.source_tx_hash) throw new Error("relayer_route_invalid");
-  const iris = await fetchAttestation(deps.config, route.domain, job.intent.source_tx_hash);
+  const iris = await fetchAttestationWithBackoff(deps.config, route.domain, job.intent.source_tx_hash);
   if (!iris) {
     deps.log.info({ intentId: job.intent.id, sourceTxHash: job.intent.source_tx_hash, route: job.intent.route_id }, "Waiting for Circle Iris attestation");
     return false;
@@ -143,25 +149,90 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
   if (job.intent.state === "source_submitted") await advance(deps.db, job, "source_confirmed", { sourceTxHash: job.intent.source_tx_hash });
   if (job.intent.state === "source_confirmed") await advance(deps.db, job, "attestation_ready", { messageHash: iris.messageHash });
   const { provider, account } = relayerAccount(deps.config);
+  // Proactive STRK balance alert before attempting settlement
+  const currentBalance = await strkBalance(account);
+  if (currentBalance < deps.config.env.STARKNET_RELAYER_ALERT_BALANCE_WEI) {
+    deps.log.warn(
+      { balance: currentBalance.toString(), address: account.address },
+      "relayer STRK balance below alert threshold — fund before exhaustion",
+    );
+  }
   if (job.intent.state === "attestation_ready" && !job.destination_tx_hash) {
-    const message = new CairoByteArray(Buffer.from(iris.message.replace(/^0x/, ""), "hex"));
-    const attestation = new CairoByteArray(Buffer.from(iris.attestation.replace(/^0x/, ""), "hex"));
-    const call = {
-      contractAddress: deps.config.manifest.router.address,
-      entrypoint: "settle",
-      calldata: [...message.toApiRequest(), ...attestation.toApiRequest()],
-    };
-    const response = await executeSettle(account, call);
-    job.destination_tx_hash = response.transaction_hash;
-    await deps.db.from("relayer_jobs").update({ destination_tx_hash: response.transaction_hash, message_hash: iris.messageHash, updated_at: new Date().toISOString() }).eq("id", job.id);
-    await advance(deps.db, job, "destination_submitted", { destinationTxHash: response.transaction_hash, messageHash: iris.messageHash });
+    const { data: projected } = await deps.db.from("intents").select("onchain_state,onchain_tx_hash").eq("id", job.intent.id).maybeSingle();
+    const alreadyOnchain = projected?.onchain_state === "funded" || projected?.onchain_state === "claimed" || projected?.onchain_state === "refunded";
+    const alreadyProcessed = alreadyOnchain || await routerProcessed(provider, deps.config, job.intent.id);
+    if (alreadyProcessed) {
+      job.destination_tx_hash = projected?.onchain_tx_hash ?? job.destination_tx_hash;
+      if (!job.destination_tx_hash) {
+        job.destination_tx_hash = await waitForOnchainProjection(deps.db, job.intent.claim_hash);
+      }
+      if (job.destination_tx_hash) {
+        await deps.db.from("relayer_jobs").update({ destination_tx_hash: job.destination_tx_hash, message_hash: iris.messageHash, updated_at: new Date().toISOString() }).eq("id", job.id);
+      }
+      await advance(deps.db, job, "destination_submitted", {
+        destinationTxHash: job.destination_tx_hash,
+        messageHash: iris.messageHash,
+        recovered: true,
+      });
+    } else {
+      const message = new CairoByteArray(Buffer.from(iris.message.replace(/^0x/, ""), "hex"));
+      const attestation = new CairoByteArray(Buffer.from(iris.attestation.replace(/^0x/, ""), "hex"));
+      const call = {
+        contractAddress: deps.config.manifest.router.address,
+        entrypoint: "settle",
+        calldata: [...message.toApiRequest(), ...attestation.toApiRequest()],
+      };
+      const response = await executeSettle(account, call);
+      job.destination_tx_hash = response.transaction_hash;
+      await deps.db.from("relayer_jobs").update({ destination_tx_hash: response.transaction_hash, message_hash: iris.messageHash, updated_at: new Date().toISOString() }).eq("id", job.id);
+      await advance(deps.db, job, "destination_submitted", { destinationTxHash: response.transaction_hash, messageHash: iris.messageHash });
+    }
   }
   if (job.intent.state === "attestation_ready" && job.destination_tx_hash) {
     await advance(deps.db, job, "destination_submitted", { destinationTxHash: job.destination_tx_hash, messageHash: iris.messageHash, recovered: true });
   }
-  if (!job.destination_tx_hash) throw new Error("destination_transaction_missing");
-  await provider.waitForTransaction(job.destination_tx_hash);
-  if (job.intent.state === "destination_submitted") await advance(deps.db, job, "funded", { destinationTxHash: job.destination_tx_hash, messageHash: iris.messageHash });
+  if (!job.destination_tx_hash) {
+    const updated = await transitionToward(
+      deps.db,
+      job.intent.owner_id,
+      job.intent.id,
+      job.intent.version,
+      job.intent.state,
+      "funded",
+      { recovered: true, messageHash: iris.messageHash },
+    );
+    job.intent.state = updated.state as IntentState;
+    job.intent.version = updated.version as number;
+    await deps.db.from("relayer_jobs").update({ status: "succeeded", message_hash: iris.messageHash, last_error: null, updated_at: new Date().toISOString() }).eq("id", job.id);
+    deps.log.info({ intentId: job.intent.id, recovered: true }, "CCTP intent already settled; workflow caught up without local destination hash");
+    return true;
+  }
+  try {
+    await provider.waitForTransaction(job.destination_tx_hash);
+  } catch (primaryError) {
+    const fallback = relayerFallbackProvider(deps.config);
+    if (!fallback) throw primaryError;
+    deps.log.warn(
+      { error: primaryError instanceof Error ? primaryError.message : String(primaryError) },
+      "primary RPC failed for waitForTransaction, retrying on fallback",
+    );
+    await fallback.waitForTransaction(job.destination_tx_hash);
+  }
+  await waitForOnchainProjection(deps.db, job.intent.claim_hash);
+  if (job.intent.state === "destination_submitted") {
+    await transitionToward(
+      deps.db,
+      job.intent.owner_id,
+      job.intent.id,
+      job.intent.version,
+      job.intent.state,
+      "funded",
+      { destinationTxHash: job.destination_tx_hash, messageHash: iris.messageHash },
+    ).then((updated) => {
+      job.intent.state = updated.state as IntentState;
+      job.intent.version = updated.version as number;
+    });
+  }
   if (job.intent.state === "funded") {
     const [{ data: registered }, { data: pending }] = await Promise.all([
       deps.db.from("encrypted_notes").select("id").eq("intent_id", job.intent.id).limit(1),
@@ -213,9 +284,18 @@ export async function runRelayerOnce(deps: { db: Db; config: Config; log: Logger
 }
 
 export async function runRelayerLoop(deps: { db: Db; config: Config; log: Logger }, signal: AbortSignal) {
+  let idleBackoff = 5_000;
   while (!signal.aborted) {
-    try { await runRelayerOnce(deps); }
-    catch (error) { deps.log.error({ error: error instanceof Error ? error.message : "relayer_failed" }, "Wotta relayer iteration failed"); }
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    try {
+      const result = await runRelayerOnce(deps);
+      // Reset to 5 s when work was processed; otherwise double up to 120 s
+      idleBackoff = result.processed > 0 ? 5_000 : Math.min(120_000, idleBackoff * 2);
+    } catch (error) {
+      deps.log.error({ error: error instanceof Error ? error.message : "relayer_failed" }, "Wotta relayer iteration failed");
+      idleBackoff = Math.min(120_000, idleBackoff * 2);
+    }
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, idleBackoff + Math.floor(Math.random() * 1_000)),
+    );
   }
 }
