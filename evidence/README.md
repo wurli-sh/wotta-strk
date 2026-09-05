@@ -58,5 +58,6 @@ Rules:
 ## Current status
 
 - Sepolia / testnet path: use `pnpm check:phase1:sepolia` (and phase 2 sepolia) for pre-deploy confidence.
-- Mainnet `evidence/<hash>/` may be empty until after declare/deploy + live smoke — that is expected and must not block `MAINNET_DECLARE_SUBMIT`.
-- Before admitting private/CCTP routes on the mainnet API: materialize the summaries above from real flows.
+- Mainnet contracts are live (`deployments/mainnet.json`); router is unpaused with Base/Solana domains admitted on-chain (see `docs/ROUTE_REVIEW_2026-09-05.md`).
+- Mainnet `evidence/<hash>/` is still empty for committed admission summaries — Base has a verified on-chain claim observation in that review, but no redacted `cctp-base-mainnet/summary.json` is checked in yet. Starknet-native and Solana completed live flows remain unverified.
+- Before enabling hosted `CCTP_ADMITTED_ROUTES` / `STARKNET_PRIVATE_ADMITTED`: materialize the summaries above from real flows, then redeploy the API.

@@ -59,14 +59,14 @@ Verified Mainnet contracts (source of truth: `deployments/mainnet.json` — no `
 | 0.1 USDC escrow | `0x0656a3300531b45f559e51120b0cb9bcea8c6c4e626ebef6c46c184da08c0a06` |
 | 1 USDC escrow | `0x041a7424a3779e15d68f7a1da96b7cf95a196563bcfc3ff81eeb8735c4368f0c` |
 
-Approved dens are `100000` / `1000000` only. On-chain posture stays paused with Base domain 6 and Solana domain 5 unadmitted until controlled activation. Indexer must watch only verified approved pools (never `UNDEPLOYED` 10/50/100 placeholders).
+Approved dens are `100000` / `1000000` only. On-chain router posture (2026-09-05): **unpaused** with Base domain **6** and Solana domain **5** admitted; Ethereum / Arbitrum / Stellar remain denied. Indexer must watch only verified approved pools (never `UNDEPLOYED` 10/50/100 placeholders).
 
-Activation after evidence (separate operator authorization):
+API / worker activation (separate from on-chain admission; still operator-controlled):
 
-1. Code merged with fail-closed local Mainnet defaults.
-2. Deploy API with workers/admissions off; confirm closed `/v1/routes`.
+1. Code merged with fail-closed hosted Mainnet defaults (`render.yaml`: workers and `CCTP_ADMITTED_ROUTES` off until release).
+2. Deploy API serving current `deployments/mainnet.json`; confirm `pnpm deploy:check-mainnet` passes (manifest/router/escrows align).
 3. Retain Phase 1 + `starknet-private-mainnet` evidence → `RUN_INDEXER=true` + `STARKNET_PRIVATE_ADMITTED=true`.
-4. Per CCTP rail: relayer + source RPC + Iris production → admit one of `base`/`solana` → owner `set_source_domain_admitted` then `unpause` → retain route evidence → `pnpm check:phase3` → public exposure.
+4. Per CCTP rail: relayer + source RPC + Iris production → set `CCTP_ADMITTED_ROUTES` → retain route evidence under `evidence/<manifestHash>/` → `pnpm check:phase3` → public exposure. On-chain Base/Solana admission + unpause is already live via `pnpm admit:mainnet-router`.
 
 Mainnet contract declaration/deployment uses only `STARKNET_MAINNET_RPC_URL`, `STARKNET_MAINNET_DEPLOYER_ADDRESS`, and `STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY`. An Argent X 5.16.3 deployer with a guardian additionally requires `STARKNET_MAINNET_DEPLOYER_GUARDIAN_PRIVATE_KEY`; the scripts verify it matches the on-chain guardian and compose the required owner-plus-guardian signature. Pilot policy keeps `authority.owner` identical to the deployer: `pnpm contracts:sync-manifest` (also the first step of `pnpm contracts:preflight`) writes both from `.env` and rehashes `deployments/mainnet.json`. Declare/deploy scripts re-sync the same way before gating. The preflight rejects reuse of the Sepolia deployer, estimates both declarations with bounded fees, and requires the balance to cover both bounds. `STARKNET_MAINNET_RELAYER_ADDRESS` / `STARKNET_MAINNET_RELAYER_PRIVATE_KEY` are required only when the mainnet CCTP relayer is enabled.
 

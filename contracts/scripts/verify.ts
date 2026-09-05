@@ -153,9 +153,10 @@ async function main(): Promise<void> {
       verifyGetter(provider, manifest.router.address, "token_messenger", CIRCLE_STARKNET_MAINNET_TOKEN_MESSENGER, routerFailures),
       verifyGetter(provider, manifest.router.address, "usdc", manifest.usdc, routerFailures),
       verifyGetter(provider, manifest.router.address, "owner", manifest.authority.owner, routerFailures),
-      verifyGetter(provider, manifest.router.address, "paused", 1, routerFailures),
-      verifyGetter(provider, manifest.router.address, "is_source_domain_admitted", 0, routerFailures, ["5"]),
-      verifyGetter(provider, manifest.router.address, "is_source_domain_admitted", 0, routerFailures, ["6"]),
+      // Live pilot posture after admit-mainnet-router: unpaused with Base (6) + Solana (5).
+      verifyGetter(provider, manifest.router.address, "paused", 0, routerFailures),
+      verifyGetter(provider, manifest.router.address, "is_source_domain_admitted", 1, routerFailures, ["5"]),
+      verifyGetter(provider, manifest.router.address, "is_source_domain_admitted", 1, routerFailures, ["6"]),
       verifyGetter(provider, manifest.router.address, "is_source_domain_admitted", 0, routerFailures, ["0"]),
       verifyGetter(provider, manifest.router.address, "is_source_domain_admitted", 0, routerFailures, ["3"]),
       verifyGetter(provider, manifest.router.address, "is_source_domain_admitted", 0, routerFailures, ["27"]),
@@ -165,7 +166,9 @@ async function main(): Promise<void> {
   manifest.router.verification = {
     status: routerVerified ? "verified" : "failed",
     checkedAt,
-    notes: routerVerified ? "Sierra/CASM, receipts, Circle bindings, owner, pause, and source domains verified over SN_MAIN RPC." : routerFailures.join("; "),
+    notes: routerVerified
+      ? "Sierra/CASM, receipts, Circle bindings, owner, unpaused state, and admitted Base/Solana source domains verified over SN_MAIN RPC."
+      : routerFailures.join("; "),
   };
 
   const approved = new Set(manifest.approvedCctpDenominations);
@@ -222,7 +225,7 @@ async function main(): Promise<void> {
   ];
   manifest.verified = globalFailures.length === 0 && routerVerified && allApprovedPoolsVerified;
   manifest.verificationNotes = manifest.verified
-    ? "Mainnet router and approved pools passed on-chain declaration, deployment, receipt, and binding verification. Routes remain evidence-gated."
+    ? "Mainnet router and approved pools passed on-chain declaration, deployment, receipt, and binding verification. Router is unpaused with Base (6) and Solana (5) admitted; Ethereum/Arbitrum/Stellar remain denied. API route enablement stays evidence-gated / operator-controlled."
     : `Verification failed: ${failures.join("; ")}`;
   manifest.manifestHash = rehashDeploymentManifest(manifest);
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);

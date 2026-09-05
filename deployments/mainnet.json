@@ -3,10 +3,10 @@
   "chainId": "SN_MAIN",
   "network": "mainnet",
   "rpcUrlEnv": "STARKNET_MAINNET_RPC_URL",
-  "manifestHash": "1860fedb5ec10d3c0540152d28ad3e1dd51bf277580ac3dcb8a3340ce1d021d7",
+  "manifestHash": "6e53072016f96907da1a2acc0311f5d0339e7df2ee681516ec94c7926066bf08",
   "generatedAt": "2026-09-04T17:06:45.225Z",
   "verified": true,
-  "verificationNotes": "Mainnet router and approved pools passed on-chain declaration, deployment, receipt, and binding verification. Routes remain evidence-gated.",
+  "verificationNotes": "Mainnet router and approved pools passed on-chain declaration, deployment, receipt, and binding verification. Router is unpaused with Base (6) and Solana (5) admitted; Ethereum/Arbitrum/Stellar remain denied. API route enablement stays evidence-gated / operator-controlled.",
   "usdc": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
   "strk20Pool": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
   "strk20ClassHash": "0x67dddd89d80fedadc06b6f160798f94800a4a70164e5a24301cd0d6076b554d",
@@ -62,8 +62,8 @@
     ],
     "verification": {
       "status": "verified",
-      "checkedAt": "2026-09-04T17:52:02.897Z",
-      "notes": "Sierra/CASM, receipts, Circle bindings, owner, pause, and source domains verified over SN_MAIN RPC."
+      "checkedAt": "2026-09-05T05:54:11.404Z",
+      "notes": "Sierra/CASM, receipts, Circle bindings, owner, unpaused state, and admitted Base/Solana source domains verified over SN_MAIN RPC."
     }
   },
   "pools": [
@@ -84,7 +84,7 @@
       ],
       "verification": {
         "status": "verified",
-        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "checkedAt": "2026-09-05T05:54:11.404Z",
         "notes": "Sierra/CASM, receipts, and all constructor bindings verified over SN_MAIN RPC."
       },
       "key": "pool01",
@@ -107,7 +107,7 @@
       ],
       "verification": {
         "status": "verified",
-        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "checkedAt": "2026-09-05T05:54:11.404Z",
         "notes": "Sierra/CASM, receipts, and all constructor bindings verified over SN_MAIN RPC."
       },
       "key": "pool1",
@@ -124,7 +124,7 @@
       "constructorCalldata": [],
       "verification": {
         "status": "skipped",
-        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "checkedAt": "2026-09-05T05:54:11.404Z",
         "notes": "Not approved for the mainnet pilot."
       },
       "key": "pool10",
@@ -141,7 +141,7 @@
       "constructorCalldata": [],
       "verification": {
         "status": "skipped",
-        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "checkedAt": "2026-09-05T05:54:11.404Z",
         "notes": "Not approved for the mainnet pilot."
       },
       "key": "pool50",
@@ -158,7 +158,7 @@
       "constructorCalldata": [],
       "verification": {
         "status": "skipped",
-        "checkedAt": "2026-09-04T17:52:02.897Z",
+        "checkedAt": "2026-09-05T05:54:11.404Z",
         "notes": "Not approved for the mainnet pilot."
       },
       "key": "pool100",
