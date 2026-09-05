@@ -37,8 +37,14 @@ export function DenomChips({
         role="group"
         aria-label="Amount"
         className={cn(
-          "mt-3 grid w-full grid-cols-2 gap-2",
-          denominations.length > 4 ? "sm:grid-cols-5" : "sm:grid-cols-4",
+          "mt-3 grid w-full gap-2",
+          denominations.length > 4
+            ? "grid-cols-2 sm:grid-cols-5"
+            : denominations.length === 2
+              ? "grid-cols-2"
+              : denominations.length === 3
+                ? "grid-cols-3"
+                : "grid-cols-2 sm:grid-cols-4",
         )}
       >
         {denominations.map((d) => {
