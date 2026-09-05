@@ -71,6 +71,17 @@ const nextConfig: NextConfig = {
       "VITE_SOLANA_DEVNET_RPC_URL",
       "SOLANA_RPC_URL",
     ),
+    NEXT_PUBLIC_SOLANA_TESTNET_RPC_URL: publicValue(
+      "NEXT_PUBLIC_SOLANA_TESTNET_RPC_URL",
+      "NEXT_PUBLIC_SOLANA_RPC_URL",
+      "SOLANA_DEVNET_RPC_URL",
+      "VITE_SOLANA_DEVNET_RPC_URL",
+      "SOLANA_RPC_URL",
+    ),
+    // Prefer same-origin proxy; dedicated provider URLs override when set.
+    NEXT_PUBLIC_SOLANA_MAINNET_RPC_URL: publicValue(
+      "NEXT_PUBLIC_SOLANA_MAINNET_RPC_URL",
+    ) ?? "/api/solana-mainnet-rpc",
     NEXT_PUBLIC_STELLAR_RPC_URL: publicValue(
       "NEXT_PUBLIC_STELLAR_RPC_URL",
       "STELLAR_TESTNET_RPC_URL",

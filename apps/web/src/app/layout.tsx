@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { GlimmProvider, InterceptLinks } from "glimm/next";
+import { GlimmProvider } from "glimm/next";
 import { AppChrome } from "@/components/AppChrome";
 import { Providers } from "@/components/Providers";
 import { SITE_DESCRIPTION } from "@/lib/brand-copy";
@@ -33,7 +33,6 @@ export default function RootLayout({
       </head>
       <body>
         <GlimmProvider {...BRAND_GLIMM_SWEEP}>
-          <InterceptLinks />
           <Providers>
             <AppChrome>{children}</AppChrome>
           </Providers>

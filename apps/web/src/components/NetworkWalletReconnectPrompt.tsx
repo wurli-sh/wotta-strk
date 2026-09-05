@@ -4,16 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ShieldCheck, X } from "lucide-react";
 import { WalletConnectModal } from "@/components/WalletConnectModal";
-import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { Button } from "@/components/ui/Button";
-import { fetchMe, getAccessToken, notifySessionChanged } from "@/lib/auth";
+import { notifySessionChanged } from "@/lib/auth";
 import {
   networkReconnectBody,
   networkReconnectTitle,
   WALLET_RECONNECT_REQUEST_EVENT,
   type WalletReconnectRequest,
 } from "@/lib/network-reconnect";
-import { NETWORK_MODE_EVENT, readNetworkMode, type NetworkMode } from "@/lib/network-mode";
+import { readNetworkMode, type NetworkMode } from "@/lib/network-mode";
 
 export function NetworkWalletReconnectPrompt() {
   const reduce = useReducedMotion();
@@ -36,25 +35,13 @@ export function NetworkWalletReconnectPrompt() {
   }, []);
 
   useEffect(() => {
-    async function onNetworkChanged(event: Event) {
-      const nextMode = (event as CustomEvent<NetworkMode>).detail;
-      const token = await getAccessToken();
-      if (!token) return;
-      const res = await fetchMe(token, nextMode);
-      if (!res.ok || !res.data.wallet?.address) return;
-      setLinkedWalletAddress(res.data.wallet.address);
-      openReconnect({ linkedWalletAddress: res.data.wallet.address }, nextMode);
-    }
-
     function onReconnectRequest(event: Event) {
       const detail = (event as CustomEvent<WalletReconnectRequest>).detail ?? {};
       openReconnect(detail, readNetworkMode());
     }
 
-    window.addEventListener(NETWORK_MODE_EVENT, onNetworkChanged);
     window.addEventListener(WALLET_RECONNECT_REQUEST_EVENT, onReconnectRequest);
     return () => {
-      window.removeEventListener(NETWORK_MODE_EVENT, onNetworkChanged);
       window.removeEventListener(WALLET_RECONNECT_REQUEST_EVENT, onReconnectRequest);
     };
   }, [openReconnect]);

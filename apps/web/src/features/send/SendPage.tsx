@@ -330,7 +330,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   useEffect(() => () => activeSendOperation.current?.cancel(), []);
 
   useEffect(() => {
-    const keeperStage = stage === "confirming" || stage === "attesting" || stage === "settling";
+    const keeperStage = stage !== "complete" && (Boolean(pendingSourceTx) || stage === "confirming" || stage === "attesting" || stage === "settling");
     if (keeperStage) {
       setKeeperStartedAt((current) => current ?? Date.now());
       return;
@@ -355,13 +355,14 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   }, [keeperStartedAt]);
 
   function unlockAfterReadyClosed() {
+    if (pendingSourceTx) return;
     const operation = activeSendOperation.current;
     if (!operation) return;
     operation.cancel();
     activeSendOperation.current = null;
     setBusy(false);
     setStage("idle");
-    toast.message("Ready confirmation was closed. Nothing was sent — you can retry.");
+    toast.message("Stopped waiting for Ready. Check your wallet and payment activity before retrying.");
   }
 
   useEffect(() => {
@@ -543,6 +544,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
             recipient: parsed.identifier,
             publicRefundRecipient: me.wallet.address,
             linkedReadyAddress: me.wallet.address,
+            onSourceTxHash: setPendingSourceTx,
             onStage: setStage,
           });
           operation.assertActive();
@@ -597,6 +599,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           recipient: parsed.identifier,
           publicRefundRecipient: me.wallet.address,
           linkedReadyAddress: me.wallet.address,
+          onSourceTxHash: setPendingSourceTx,
           privateDelivery: true,
           onStage: setStage,
         });
@@ -620,6 +623,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           recipient: parsed.identifier,
           publicRefundRecipient: me.wallet.address,
           linkedReadyAddress: me.wallet.address,
+          onSourceTxHash: setPendingSourceTx,
           onStage: setStage,
         });
         setDelivery(lookup.status === "registered" ? "inbox" : "pending");
@@ -829,10 +833,18 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                     <><Send className="size-4" aria-hidden />{stageLabel("idle", denom)}</>
                   )}
                 </MotionPillButton>
-                {showSelfSettle && pendingSourceTx ? (
+                {(showSelfSettle || !busy) && pendingSourceTx ? (
                   <p className="mt-3 text-xs leading-5 text-muted-foreground" role="status">
-                    Taking longer than expected. Your burn is complete and cannot be cancelled.
-                    Closing this page does not cancel it.
+                    Taking longer than expected. Your source transaction was submitted and cannot be cancelled here.
+                    Closing this page does not cancel it.{" "}
+                    <a
+                      className="font-medium text-foreground underline underline-offset-4"
+                      href={sourceTxExplorerUrl(source, pendingSourceTx, mode)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View source transaction
+                    </a>.
                     {selfSettleUrl ? (
                       <>
                         {" "}You can{" "}
@@ -849,7 +861,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                     ) : null}
                   </p>
                 ) : null}
-                {busy && mainnet ? (
+                {busy && mainnet && !pendingSourceTx ? (
                   <button
                     type="button"
                     className="mx-auto mt-3 block text-xs font-medium text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

@@ -65,6 +65,32 @@ export function createProductSession(config: ProductApiConfig): ProductSession {
 
 const browserProductSessions: Partial<Record<NetworkMode, ProductSession>> = {};
 
+/** Public Solana Labs hosts that 403 browser Origin requests. */
+const SOLANA_PUBLIC_MAINNET_HOSTS = new Set([
+  "api.mainnet-beta.solana.com",
+  "api.mainnet.solana.com",
+]);
+
+/**
+ * Prefer a same-origin Next proxy so burns work without a paid RPC.
+ * Dedicated provider URLs (Helius/QuickNode/etc.) still win when configured.
+ */
+export function browserSolanaMainnetRpcUrl(origin: string): string {
+  const proxyUrl = new URL("/api/solana-mainnet-rpc", origin).toString();
+  const configured = process.env.NEXT_PUBLIC_SOLANA_MAINNET_RPC_URL?.trim() ?? "";
+  if (configured) {
+    try {
+      const configuredUrl = new URL(configured, origin);
+      if (!SOLANA_PUBLIC_MAINNET_HOSTS.has(configuredUrl.hostname)) {
+        return configuredUrl.toString();
+      }
+    } catch {
+      // Invalid RPC configuration falls back to the same-origin proxy.
+    }
+  }
+  return proxyUrl;
+}
+
 /** Browser product session — shares the app Supabase client (cookie session), not a separate localStorage client. */
 export function createBrowserProductSession(): ProductSession {
   if (typeof window === "undefined") {
@@ -88,7 +114,7 @@ export function createBrowserProductSession(): ProductSession {
     supabaseUrl,
     supabasePublishableKey,
     solanaRpcUrl: network === "mainnet"
-      ? (process.env.NEXT_PUBLIC_SOLANA_MAINNET_RPC_URL ?? "")
+      ? browserSolanaMainnetRpcUrl(window.location.origin)
       : (process.env.NEXT_PUBLIC_SOLANA_TESTNET_RPC_URL ?? process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com"),
     stellarRpcUrl: process.env.NEXT_PUBLIC_STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org",
   });
@@ -307,6 +333,7 @@ export class WottaProductSession {
     publicRefundRecipient: string;
     linkedReadyAddress: string;
     privateDelivery?: boolean;
+    onSourceTxHash?: (txHash: string) => void;
     onStage?: (stage: FundingStage) => void;
     onRecovery?: (recovery: { claimSecret: string; escrow: string; expiresAt: string }) => void;
   }): Promise<{ intentId: string; sourceTxHash: string; sourceAccount: string; claimSecret: string; escrow: string; expiresAt: string; escrowed: true }> {
@@ -389,17 +416,15 @@ export class WottaProductSession {
 
     const sourcePlan = signed.quote.sourcePlan;
     if (!isStarknetPublicDepositPlan(sourcePlan)) throw new Error("Starknet public deposit plan is unavailable");
+    const onSubmitted = this.sourceSubmissionRecorder(intentId, input.onSourceTxHash);
     const deposit = await executeStarknetPublicDeposit({
       account: connected.account,
       plan: sourcePlan,
       amount: BigInt(input.denomination),
+      onSubmitted,
       onStage: (stage) => input.onStage?.(stage),
     });
-    await this.request(`/v1/intents/${intentId}/source-submitted`, {
-      method: "POST",
-      headers: { "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({ expectedVersion: 1, txHash: deposit.txHash }),
-    });
+    await onSubmitted(deposit.txHash);
     input.onStage?.("settling");
     await this.waitForEscrow(intentId);
     return {
@@ -517,10 +542,12 @@ export class WottaProductSession {
     const onEvmStage = (stage: "connecting" | "approving" | "burning" | "confirming") => {
       input.onStage?.(stage === "connecting" ? "connecting_source" : stage);
     };
+    const onSubmitted = this.sourceSubmissionRecorder(intentId, input.onSourceTxHash);
     const result = input.route === "solana"
       ? await executeSolanaCctpBurn({
           plan: sourcePlan as NonEvmCctpBurnPlan,
           rpcUrl: this.config.solanaRpcUrl,
+          onSubmitted,
           expectedSourceAccount: sourceAccount,
           onStage: (stage) => input.onStage?.(stage === "confirming" ? "confirming" : "burning"),
         })
@@ -535,13 +562,9 @@ export class WottaProductSession {
             plan: sourcePlan as EvmCctpBurnPlan,
             expectedSourceAccount: sourceAccount,
             onStage: onEvmStage,
+            onSubmitted,
           });
-    await this.request(`/v1/intents/${intentId}/source-submitted`, {
-      method: "POST",
-      headers: { "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({ expectedVersion: 1, txHash: result.txHash }),
-    });
-    input.onSourceTxHash?.(result.txHash);
+    await onSubmitted(result.txHash);
     input.onStage?.("attesting");
     const settled = await this.waitForEscrow(intentId, undefined, input.onStage);
     return {
@@ -553,6 +576,33 @@ export class WottaProductSession {
       escrow: escrow.address,
       expiresAt,
       escrowed: true,
+    };
+  }
+
+  /** Register a broadcast before waiting on the source RPC; a timeout must not orphan a burn. */
+  private sourceSubmissionRecorder(intentId: string, onSourceTxHash?: (txHash: string) => void) {
+    const key = crypto.randomUUID();
+    let recorded = false;
+    return async (txHash: string) => {
+      if (recorded) return;
+      onSourceTxHash?.(txHash);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await this.request(`/v1/intents/${intentId}/source-submitted`, {
+            method: "POST",
+            headers: { "idempotency-key": key },
+            body: JSON.stringify({ expectedVersion: 1, txHash }),
+            signal: AbortSignal.timeout(15_000),
+          });
+          recorded = true;
+          return;
+        } catch (cause) {
+          if (attempt === 2) {
+            throw new Error(`Source transaction ${txHash} was submitted, but Wotta could not record it for intent ${intentId}. Keep this hash for recovery; do not send again.`, { cause });
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+        }
+      }
     };
   }
 
@@ -573,10 +623,11 @@ export class WottaProductSession {
       try {
         const intent = await this.intent(intentId);
         consecutiveNetworkErrors = 0;
+        if (intent.onchain_state === "claimed" || intent.state === "claimed") return intent;
         if (intent.onchain_state === "funded" || intent.state === "funded" || intent.state === "delivered" || intent.state === "claimable" || intent.state === "completed") return intent;
         if (intent.onchain_state === "refunded" || intent.state === "failed_terminal" || intent.state === "failed_recoverable" || intent.state === "refunded") {
           if (intent.state === "failed_recoverable") {
-            throw new Error("Starknet settlement stalled — Sepolia relayer needs STRK. Fund STARKNET_DEPLOYER_ADDRESS (~10 STRK) and retry.");
+            throw new Error("Starknet settlement needs recovery. Keep the source transaction hash and check payment status before sending again.");
           }
           throw new Error(`Cross-chain payment ended in ${intent.onchain_state ?? intent.state}`);
         }

@@ -26,6 +26,7 @@ export async function executeStarknetPublicDeposit(input: {
   account: WalletAccountV6;
   plan: StarknetPublicDepositPlan;
   amount: bigint;
+  onSubmitted?: (txHash: string) => void | Promise<void>;
   onStage?: (stage: "approving" | "depositing" | "confirming") => void;
 }): Promise<{ txHash: string }> {
   if (input.amount <= 0n) throw new RangeError("amount must be positive");
@@ -47,6 +48,7 @@ export async function executeStarknetPublicDeposit(input: {
     ],
   };
   const response = await input.account.execute([approveCall, depositCall]);
+  await input.onSubmitted?.(response.transaction_hash);
   input.onStage?.("confirming");
   const receipt = await input.account.provider.waitForTransaction(response.transaction_hash);
   if (!receipt.isSuccess()) throw new Error("Public Starknet deposit did not succeed");
