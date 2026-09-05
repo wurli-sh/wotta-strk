@@ -141,9 +141,9 @@ async function runSessionSync(network: NetworkMode): Promise<void> {
 }
 
 /** Reconcile OAuth identities and deliver pending inbox items after sign-in or link. */
-export async function syncWottaSession(options?: { notify?: boolean }): Promise<void> {
+export async function syncWottaSession(options?: { notify?: boolean; network?: NetworkMode }): Promise<void> {
   try {
-    const network = readNetworkMode();
+    const network = options?.network ?? readNetworkMode();
     if (!syncInFlight[network]) {
       syncInFlight[network] = runSessionSync(network).finally(() => {
         delete syncInFlight[network];

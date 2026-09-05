@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Inbox, RefreshCw } from "lucide-react";
+import { AlertTriangle, Inbox, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/PageShell";
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
@@ -21,7 +21,7 @@ import { WrongModeNotice } from "@/components/WrongModeNotice";
 import { beginNetworkOperation } from "@/lib/network-operations";
 import { irisMessageUrl, sourceTxExplorerUrl } from "@/features/send/sourceExplorer";
 import type { SourceRail } from "@/components/SourceChips";
-import { starkscanTransactionUrl } from "@/lib/network-mode";
+import { chainIdForMode, starkscanTransactionUrl } from "@/lib/network-mode";
 import type { NetworkMode } from "@/lib/network-mode";
 import { useRoutesHealth } from "@/features/send/useRoutesHealth";
 import {
@@ -32,6 +32,7 @@ import {
 } from "@/lib/brand-copy";
 import { formatUsdc } from "@/lib/format/amount";
 import { canDecryptInboxNote } from "@/lib/wotta/inbox-note-access";
+import { inboxLinkWarning } from "@/lib/wotta/inbox-binding";
 
 const SELF_SETTLE_MS = 900_000;
 
@@ -39,6 +40,8 @@ function recoveryHintForSent(intent: {
   state: string;
   onchain_state?: string | null;
   updated_at?: string;
+  relayer_status?: string | null;
+  recoveryHint?: string | null;
   created_at?: string;
   route_id: string;
 }): string | null {
@@ -79,6 +82,8 @@ type ApiIntent = {
   expires_at: string;
   created_at?: string;
   updated_at?: string;
+  relayer_status?: string | null;
+  recoveryHint?: string | null;
 };
 type ApiNote = {
   id: string;
@@ -158,7 +163,7 @@ function statusLabel(status: string): string {
     case "destination_submitted":
       return "Settling";
     case "failed_recoverable":
-      return "Retrying";
+      return "Needs retry";
     case "failed_terminal":
       return "Failed";
     case "refundable":
@@ -264,7 +269,7 @@ function TableShell({
 
 function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode: NetworkMode }) {
   const router = useRouter();
-  const { vault, unlocking, unlock, sessionReady } = usePrivacyVault();
+  const { vault, unlocking, unlock, sessionReady, inboxLinkStatus } = usePrivacyVault();
   const [tab, setTab] = useState<Tab>("incoming");
   const [incoming, setIncoming] = useState<Row[]>([]);
   const [sent, setSent] = useState<Row[]>([]);
@@ -287,13 +292,17 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           return;
         }
         setSignedIn(true);
-        await syncWottaSession();
+        await syncWottaSession({ network: mode });
         operation.assertActive();
         const [notesResult, intentsResult] = await Promise.all([
-          apiFetch<{ notes: ApiNote[] }>("/v1/notes", { token, network: mode, signal: operation.signal }),
-          apiFetch<{ intents: ApiIntent[] }>("/v1/intents", { token, network: mode, signal: operation.signal }),
+          apiFetch<{ notes: ApiNote[]; chainId: string }>("/v1/notes", { token, network: mode, signal: operation.signal }),
+          apiFetch<{ intents: ApiIntent[]; chainId: string }>("/v1/intents", { token, network: mode, signal: operation.signal }),
         ]);
         operation.assertActive();
+        const expectedChainId = chainIdForMode(mode);
+        if (notesResult.chainId !== expectedChainId || intentsResult.chainId !== expectedChainId) {
+          throw new Error("inbox_network_scope_mismatch");
+        }
         const noteReceivedAt = (note: ApiNote) => note.delivered_at ?? note.created_at;
         const inboxSecret = vault?.state.inboxSecretKey;
         const noteRows = notesResult.notes.map((note) => {
@@ -321,17 +330,21 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
         });
         setIncoming(noteRows.filter((row) => row.claimable || row.lockedOut));
         setHistory(noteRows.filter((row) => row.settled));
-        setSent(intentsResult.intents.map((intent: ApiIntentWithCreated) => ({
+        setSent(intentsResult.intents
+          // A quote is only a wallet prompt preparation, not a sent payment.
+          // Failed/rejected wallet attempts must not appear as duplicate sends.
+          .filter((intent) => Boolean(intent.source_tx_hash) || !["draft", "quoted"].includes(intent.state))
+          .map((intent: ApiIntentWithCreated) => ({
           itemId: intent.id,
           amount: amountUsdc(intent.denomination),
           at: Math.floor(Date.parse(intent.created_at ?? intent.expires_at) / 1_000),
           expiresAt: Math.floor(Date.parse(intent.expires_at) / 1_000),
-          status: normalizedStatus(intent),
+          status: intent.relayer_status === "failed" ? "failed_recoverable" : normalizedStatus(intent),
           counterparty: intent.route_id,
           sourceTxHash: intent.source_tx_hash,
           destTxHash: intent.onchain_tx_hash,
           routeId: intent.route_id,
-          recoveryHint: recoveryHintForSent(intent),
+          recoveryHint: intent.recoveryHint ?? recoveryHintForSent(intent),
         })));
       };
       if (hold) await withMinSkeleton(work, SKELETON_MAX_MS); else await work();
@@ -446,7 +459,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
     const links = [
       sourceUrl ? { href: sourceUrl, label: "Burn", title: "Source burn" } : null,
       destUrl ? { href: destUrl, label: "Settle", title: "Starknet settle" } : null,
-      row.recoveryHint === "self_settle" && irisUrl
+      (row.recoveryHint === "self_settle" || row.recoveryHint === "failed_recoverable") && irisUrl
         ? { href: irisUrl, label: "Self-settle", title: "Settle yourself" }
         : null,
     ].filter(Boolean) as Array<{ href: string; label: string; title: string }>;
@@ -494,7 +507,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           {tab === "incoming" ? (
             row.lockedOut ? (
               <p className="text-xs text-muted-foreground">
-                Encrypted to another device’s inbox key — send a new payment to claim here.
+                Encrypted to a previous or different inbox key — use the browser that holds that key.
               </p>
             ) : (
               <Button className="w-full" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button>
@@ -538,6 +551,17 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
 
   const content = (
     <>
+      {["key_mismatch", "wrong_wallet", "network_mismatch"].includes(inboxLinkStatus) ? (
+        <section className="mb-4 flex gap-3 rounded-2xl border border-warning-border bg-warning-surface p-4" role="alert">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Inbox link needs attention</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {inboxLinkWarning(mode, inboxLinkStatus)} Existing payments stay tied to the key used when they were sent.
+            </p>
+          </div>
+        </section>
+      ) : null}
       <div className="relative mb-6 flex items-center justify-center">
         <SegmentedTabs
           layoutId="inbox-sections"

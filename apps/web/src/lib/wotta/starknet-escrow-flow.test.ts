@@ -43,6 +43,7 @@ describe("Starknet escrow inbox flow", () => {
       const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
       calls.push({ path, method, body });
       if (path === "/v1/routes") return Response.json({
+        chainId: "SN_MAIN",
         routes: [{ id: "starknet-private", enabled: true }],
         manifestHash: "a".repeat(64),
         pendingDeliveryPublicKey: "unused",
@@ -58,7 +59,7 @@ describe("Starknet escrow inbox flow", () => {
       if (path.endsWith("/source-submitted")) return Response.json({ ok: true });
       if (path === `/v1/intents/${intentId}`) return Response.json({ id: intentId, state: "funded", onchain_state: "funded" });
       if (path === "/v1/session/sync") return Response.json({ ok: true });
-      if (path === "/v1/notes") return Response.json({ notes: [{
+      if (path === "/v1/notes") return Response.json({ chainId: "SN_MAIN", notes: [{
         id: "note-1",
         intent_id: intentId,
         ciphertext: delivered?.ciphertext,

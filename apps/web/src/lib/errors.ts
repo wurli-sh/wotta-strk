@@ -55,6 +55,7 @@ const APP_MESSAGES: Record<string, string> = {
   private_route_disabled: "The private Starknet route is not verified",
   mainnet_api_not_configured: "Wotta’s mainnet API is not configured yet",
   network_mode_mismatch: "This API serves the other Starknet network — switch mode or configure the mainnet API",
+  inbox_network_scope_mismatch: "Inbox data came from the other Starknet network — sending and claiming are blocked",
   mainnet_wallet_not_linked: "Link a Ready wallet on Mainnet from Account first",
   mainnet_wallet_not_deployed: "Activate this Ready Mainnet account first: add STRK and make one outgoing transaction, then retry",
   testnet_wallet_not_deployed: "Fund this Ready Sepolia account with STRK in Ready, then retry",

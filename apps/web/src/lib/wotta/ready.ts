@@ -55,6 +55,11 @@ export function clearReadyConnections(): void {
   runtime.inFlight = {};
 }
 
+/** Read an existing session without connecting Ready or triggering a chain switch. */
+export function peekReadyConnection(mode: NetworkMode): ConnectedReady | undefined {
+  return readyRuntime().connections[mode];
+}
+
 function expectedChainId(mode: NetworkMode) {
   return mode === "mainnet"
     ? constants.StarknetChainId.SN_MAIN

@@ -124,6 +124,7 @@ export function createBrowserProductSession(): ProductSession {
 
 export type FundingStage = "resolving" | "quoting" | "delivering" | "connecting_source" | "approving" | "depositing" | "burning" | "confirming" | "attesting" | "settling";
 export type RouteManifest = {
+  chainId: "SN_MAIN" | "SN_SEPOLIA";
   routes: Array<{ id: string; enabled: boolean; reason?: string }>;
   manifestHash: string;
   pendingDeliveryPublicKey: string;
@@ -284,11 +285,9 @@ export class WottaProductSession {
         return { reconnected: true as const };
       }
       if (!localMatches) {
-        // Server still has the wallet row but this browser lost the inbox secret
-        // (privacy reset, site-data clear, or stale encrypted vault). Re-link.
-        await this.request("/v1/wallet/unlink", { method: "POST" });
-        me = { wallet: null };
-        inboxSecretKey = undefined;
+        // Never rotate an inbox key implicitly. Existing payments are encrypted
+        // to the published key and become permanently unreadable if it changes.
+        throw new Error("wallet_inbox_key_mismatch");
       }
     }
 
@@ -657,7 +656,7 @@ export class WottaProductSession {
     await this.request("/v1/session/sync", { method: "POST" });
     const [routes, inbox] = await Promise.all([
       this.request<RouteManifest>("/v1/routes"),
-      this.request<{ notes: Array<{
+      this.request<{ chainId: string; notes: Array<{
         id: string;
         intent_id: string;
         ciphertext: string;
@@ -668,6 +667,9 @@ export class WottaProductSession {
       }> }>("/v1/notes"),
     ]);
     const expectedChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+    if (inbox.chainId !== expectedChainId || routes.chainId !== expectedChainId) {
+      throw new Error("inbox_network_scope_mismatch");
+    }
     let targetSeen = false;
     let targetFailure: string | null = null;
 

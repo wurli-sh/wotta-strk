@@ -329,7 +329,12 @@ export function WalletConnectModal({
                   </Button>
                 ) : null}
                 {step === "link" ? (
-                  <Button className="w-full" disabled={busy || !account || !vault} onClick={() => void bindAndRegister()}>
+                  <Button
+                    className="w-full"
+                    disabled={busy || !account || !vault}
+                    aria-busy={busy}
+                    onClick={() => void bindAndRegister()}
+                  >
                     {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Wallet className="size-4" aria-hidden />}
                     {busy ? (
                       <TextShimmer>{phaseLabel[phase]}</TextShimmer>
@@ -347,11 +352,6 @@ export function WalletConnectModal({
                     </span>
                     <Button className="w-full" onClick={onClose}>Done</Button>
                   </div>
-                ) : null}
-                {busy && phase !== "idle" ? (
-                  <p className="text-center text-xs text-muted-foreground" role="status" aria-live="polite">
-                    {phaseLabel[phase]}
-                  </p>
                 ) : null}
               </div>
             </div>
