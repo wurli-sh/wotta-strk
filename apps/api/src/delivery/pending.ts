@@ -24,7 +24,7 @@ export async function storeDelivery(db: Db, config: Config, params: { senderId: 
   if (identity) {
     const wallet = await activeWalletBindingForProfile(db, identity.profile_id, config.manifest.chainId, { dedupe: true });
     if (!wallet) throw new Error("recipient_wallet_unbound");
-    const { error } = await db.from("encrypted_notes").upsert({ recipient_profile_id: identity.profile_id, sender_profile_id: params.senderId, intent_id: params.intentId, ciphertext: params.ciphertext, nonce: params.nonce, sender_public_key: params.ephemeralPublicKey, algorithm: params.algorithm }, { onConflict: "recipient_profile_id,intent_id" }); if (error) throw error;
+    const { error } = await db.from("encrypted_notes").upsert({ recipient_profile_id: identity.profile_id, sender_profile_id: params.senderId, intent_id: params.intentId, chain_id: config.manifest.chainId, ciphertext: params.ciphertext, nonce: params.nonce, sender_public_key: params.ephemeralPublicKey, algorithm: params.algorithm }, { onConflict: "recipient_profile_id,intent_id" }); if (error) throw error;
     return "registered" as const;
   }
   const { error } = await db.from("pending_claims").upsert({ sender_profile_id: params.senderId, recipient_lookup_hash: lookupHash(config, params.recipient.provider, params.recipient.identifier), intent_id: params.intentId, sealed_payload: JSON.stringify({ ciphertext: params.ciphertext, nonce: params.nonce, ephemeralPublicKey: params.ephemeralPublicKey, algorithm: params.algorithm }), key_version: 1, expires_at: params.expiresAt }, { onConflict: "intent_id" }); if (error) throw error;
@@ -45,7 +45,7 @@ export async function deliverPendingForProfile(db: Db, config: Config, profileId
     const payload = JSON.parse(row.sealed_payload) as { ciphertext: string; nonce: string; ephemeralPublicKey: string; algorithm: "x25519-xsalsa20-poly1305" };
     const plaintext = nacl.box.open(decode(payload.ciphertext), decode(payload.nonce), decode(payload.ephemeralPublicKey), serverKeys.secretKey); if (!plaintext) throw new Error("pending_decrypt_failed");
     const nonce = nacl.randomBytes(nacl.box.nonceLength), ciphertext = nacl.box(plaintext, nonce, decode(wallet.inbox_pubkey), serverKeys.secretKey);
-    const { error: noteError } = await db.from("encrypted_notes").upsert({ recipient_profile_id: profileId, sender_profile_id: row.sender_profile_id, intent_id: row.intent_id, ciphertext: encode(ciphertext), nonce: encode(nonce), sender_public_key: encode(serverKeys.publicKey), algorithm: payload.algorithm }, { onConflict: "recipient_profile_id,intent_id" }); if (noteError) throw noteError;
+    const { error: noteError } = await db.from("encrypted_notes").upsert({ recipient_profile_id: profileId, sender_profile_id: row.sender_profile_id, intent_id: row.intent_id, chain_id: config.manifest.chainId, ciphertext: encode(ciphertext), nonce: encode(nonce), sender_public_key: encode(serverKeys.publicKey), algorithm: payload.algorithm }, { onConflict: "recipient_profile_id,intent_id" }); if (noteError) throw noteError;
     const { error: finishError } = await db.from("pending_claims").update({ delivered_profile_id: profileId, delivered_at: new Date().toISOString(), purge_after: new Date(Date.now() + 86_400_000).toISOString(), processing_token: null, processing_expires_at: null }).eq("id", row.id).eq("processing_token", token).is("delivered_at", null); if (finishError) throw finishError; delivered++;
   }
   return delivered;
