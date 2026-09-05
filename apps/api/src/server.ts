@@ -22,38 +22,35 @@ import { requestChainId, rpcUrlForChainId } from "./network-scope.ts";
 import { runIndexerLoop } from "./indexer/run.ts";
 import { runRelayerLoop } from "./relayer/run.ts";
 import { healthBody, loadRelayerQueueHealth } from "./relayer/health.ts";
-import { Account, RpcProvider, Signer } from "starknet";
+import { relayerReadiness } from "./relayer/readiness.ts";
 
 type Deps = ReturnType<typeof deps>; function deps(config = loadConfig()) { return { config, db: createDb(config), log: createLogger(config) }; }
 function parse<T>(schema: z.ZodType<T>, body: unknown): T { const result = schema.safeParse(body); if (!result.success) throw new Error(`invalid_body:${result.error.issues[0]?.path.join(".") ?? "value"}`); return result.data; }
-function errorReply(reply: { code: (status: number) => { send: (body: unknown) => unknown } }, error: unknown) { const message = safeError(error); const status = message === "unauthorized" ? 401 : message === "not_found" ? 404 : message === "route_paused" ? 503 : message.includes("route_disabled") || message.includes("identity_already_linked") || message.includes("wallet_already_linked") || message.includes("wallet_inbox_key_mismatch") || message.includes("wallet_binding_ambiguous") || message.includes("invalid_") || message.includes("challenge_") || message.includes("signature_") || message.includes("version_conflict") || message.includes("idempotency_") ? 409 : 400; return reply.code(status).send({ error: { code: message.split(":")[0], message } }); }
+function errorReply(reply: { code: (status: number) => { send: (body: unknown) => unknown } }, error: unknown) { const message = safeError(error); const status = message === "unauthorized" ? 401 : message === "not_found" ? 404 : message === "route_paused" ? 503 : message.includes("route_disabled") || message.includes("network_mode_mismatch") || message.includes("identity_already_linked") || message.includes("wallet_already_linked") || message.includes("wallet_inbox_key_mismatch") || message.includes("wallet_binding_ambiguous") || message.includes("invalid_") || message.includes("challenge_") || message.includes("signature_") || message.includes("version_conflict") || message.includes("idempotency_") ? 409 : 400; return reply.code(status).send({ error: { code: message.split(":")[0], message } }); }
 
 export async function buildServer(d = deps()) {
   const app = Fastify({ bodyLimit: 256 * 1024, loggerInstance: d.log });
   await app.register(cors, { origin: d.config.corsOrigins, credentials: false });
   app.addHook("onRequest", async (request, reply) => { if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method) && request.url.startsWith("/v1/") && request.headers.cookie) return reply.code(400).send({ error: { code: "cookie_auth_forbidden" } }); });
+  // Reject a wrong API deployment before any read or mutation can leak across
+  // the Mainnet/Sepolia product boundary. Previously only wallet endpoints did
+  // this check, so /routes, /notes, /intents, and /resolve could silently serve
+  // the configured API's network when the browser URL was misconfigured.
+  app.addHook("preHandler", async (request, reply) => {
+    if (!request.url.startsWith("/v1/")) return;
+    try {
+      requestChainId(d.config, request);
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
   app.addHook("onSend", async (_request, reply) => { reply.header("Cache-Control", "no-store").header("X-Content-Type-Options", "nosniff").header("X-Frame-Options", "DENY").header("Referrer-Policy", "no-referrer"); });
   app.get("/v1/health", async () => {
     let strkAlert: boolean | null = null;
     if (d.config.env.RUN_RELAYER) {
       try {
-        const address = d.config.env.STARKNET_RELAYER_ADDRESS ?? d.config.env.STARKNET_DEPLOYER_ADDRESS;
-        const rawKey = d.config.env.STARKNET_RELAYER_PRIVATE_KEY ?? d.config.env.STARKNET_RELAYER_KEY_OR_KEYSTORE ?? d.config.env.STARKNET_DEPLOYER_PRIVATE_KEY;
-        const key = rawKey && !rawKey.startsWith("0x") ? `0x${rawKey}` : rawKey;
-        if (address && key && /^0x[0-9a-f]+$/i.test(key)) {
-          const account = new Account({
-            provider: new RpcProvider({ nodeUrl: d.config.env.STARKNET_RPC_URL }),
-            address,
-            signer: new Signer(key),
-          });
-          const result = await account.provider.callContract({
-            contractAddress: "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d",
-            entrypoint: "balanceOf",
-            calldata: [account.address],
-          });
-          const balance = BigInt(result[0] ?? 0) + (BigInt(result[1] ?? 0) << 128n);
-          strkAlert = balance < d.config.env.STARKNET_RELAYER_ALERT_BALANCE_WEI;
-        }
+        const { balance } = await relayerReadiness(d.config);
+        strkAlert = balance < d.config.env.STARKNET_RELAYER_ALERT_BALANCE_WEI;
       } catch {
         strkAlert = null;
       }
@@ -112,7 +109,39 @@ export async function buildServer(d = deps()) {
   app.post("/v1/resolve", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(resolveSchema, request.body); return await resolveDescriptor(d.db, d.config, body.provider, body.identifier); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/quotes", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { return await signQuote(d.db, d.config, auth.userId, parse(quoteSchema, request.body)); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/intents", async (request, reply) => { const auth = await requireAuth(d.db, request), key = request.headers["idempotency-key"]; if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(intentSchema, request.body), idempotencyKey = idempotencySchema.parse(key); const output = await idempotent(d.db, auth.userId, idempotencyKey, body, () => createIntent(d.db, d.config, auth.userId, body)); return reply.code(201).send(output); } catch (error) { return errorReply(reply, error); } });
-  app.get("/v1/intents", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); const rawLimit = Number((request.query as { limit?: string }).limit ?? 25); const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 25; const { data, error } = await d.db.from("intents").select("id,mode,delivery_kind,denomination,route_id,state,version,source_tx_hash,onchain_state,onchain_tx_hash,onchain_block_number,expires_at,created_at,updated_at").eq("owner_id", auth.userId).eq("chain_id", d.config.manifest.chainId).order("created_at", { ascending: false }).limit(limit); return error ? errorReply(reply, error) : { intents: data ?? [] }; });
+  app.get("/v1/intents", async (request, reply) => {
+    const auth = await requireAuth(d.db, request);
+    if (!auth) return errorReply(reply, new Error("unauthorized"));
+    const rawLimit = Number((request.query as { limit?: string }).limit ?? 25);
+    const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 25;
+    const { data, error } = await d.db
+      .from("intents")
+      .select("id,mode,delivery_kind,denomination,route_id,state,version,source_tx_hash,onchain_state,onchain_tx_hash,onchain_block_number,expires_at,created_at,updated_at,relayer_jobs(status,attempts,created_at)")
+      .eq("owner_id", auth.userId)
+      .eq("chain_id", d.config.manifest.chainId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return errorReply(reply, error);
+    return {
+      intents: (data ?? []).map(({ relayer_jobs, ...intent }) => {
+        const job = relayer_jobs[0];
+        return {
+          ...intent,
+          relayer_status: job?.status ?? null,
+          recoveryHint: recoveryHintFor({
+            state: intent.state,
+            onchain_state: intent.onchain_state,
+            updated_at: intent.updated_at,
+            created_at: intent.created_at,
+            route_id: intent.route_id,
+            jobCreatedAt: job?.created_at ?? null,
+            jobStatus: job?.status ?? null,
+          }),
+        };
+      }),
+      chainId: d.config.manifest.chainId,
+    };
+  });
   app.get("/v1/intents/:id", async (request, reply) => {
     const auth = await requireAuth(d.db, request);
     if (!auth) return errorReply(reply, new Error("unauthorized"));
@@ -128,6 +157,7 @@ export async function buildServer(d = deps()) {
           created_at: intent.created_at,
           route_id: intent.route_id,
           jobCreatedAt: job?.created_at ?? null,
+          jobStatus: job?.status ?? null,
         }),
       };
     } catch (error) {
@@ -178,10 +208,11 @@ export async function buildServer(d = deps()) {
       .from("encrypted_notes")
       .select("id,intent_id,ciphertext,nonce,sender_public_key,algorithm,version,delivered_at,created_at")
       .eq("recipient_profile_id", auth.userId)
+      .eq("chain_id", d.config.manifest.chainId)
       .order("created_at", { ascending: false });
     if (error) return errorReply(reply, error);
     const intentIds = [...new Set((notes ?? []).map((note) => note.intent_id))];
-    if (intentIds.length === 0) return { notes: [] };
+    if (intentIds.length === 0) return { notes: [], chainId: d.config.manifest.chainId };
     const { data: relatedIntents, error: intentError } = await d.db
       .from("intents")
       .select("id,denomination,state,onchain_state,expires_at,route_id,source_tx_hash,onchain_tx_hash")
@@ -190,6 +221,7 @@ export async function buildServer(d = deps()) {
     if (intentError) return errorReply(reply, intentError);
     const byIntent = new Map((relatedIntents ?? []).map((intent) => [intent.id, intent]));
     return {
+      chainId: d.config.manifest.chainId,
       notes: (notes ?? []).flatMap((note) => {
         const intent = byIntent.get(note.intent_id);
         return intent ? [{ ...note, intent }] : [];
@@ -208,6 +240,7 @@ export async function buildServer(d = deps()) {
       .select("id,intent_id")
       .eq("id", noteId)
       .eq("recipient_profile_id", auth.userId)
+      .eq("chain_id", d.config.manifest.chainId)
       .maybeSingle();
     if (noteError) return errorReply(reply, noteError);
     if (!note) return errorReply(reply, new Error("not_found"));
@@ -224,6 +257,7 @@ export async function buildServer(d = deps()) {
       .update({ delivered_at: new Date().toISOString() })
       .eq("id", note.id)
       .eq("recipient_profile_id", auth.userId)
+      .eq("chain_id", d.config.manifest.chainId)
       .select("id")
       .maybeSingle();
     return error ? errorReply(reply, error) : data ? { ok: true } : errorReply(reply, new Error("not_found"));
@@ -242,6 +276,7 @@ async function main() {
     assertMainnetWorkerReadiness(config);
     await assertMainnetFallbackRpcNetwork(config);
   }
+  if (config.env.RUN_RELAYER) await relayerReadiness(config);
   if (config.env.RUN_INDEXER) workerTasks.push(runIndexerLoop(d, workers.signal));
   if (config.env.RUN_RELAYER) workerTasks.push(runRelayerLoop(d, workers.signal));
   const close = async () => {
