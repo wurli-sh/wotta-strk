@@ -41,12 +41,11 @@ function recoveryHintForSent(intent: {
   onchain_state?: string | null;
   updated_at?: string;
   relayer_status?: string | null;
-  recoveryHint?: string | null;
   created_at?: string;
   route_id: string;
 }): string | null {
   if (intent.route_id === "starknet-public" || intent.route_id === "starknet-private") return null;
-  if (intent.state === "failed_recoverable") return "failed_recoverable";
+  if (intent.relayer_status === "failed" || intent.state === "failed_recoverable") return "failed_recoverable";
   if (intent.state === "attestation_ready" || intent.state === "destination_submitted") {
     const anchor = intent.updated_at ?? intent.created_at;
     if (anchor && Date.now() - Date.parse(anchor) >= SELF_SETTLE_MS) return "self_settle";
