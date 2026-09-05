@@ -20,6 +20,7 @@ export async function executeEvmCctpBurn(input: {
   plan: EvmCctpBurnPlan;
   provider?: Eip1193;
   expectedSourceAccount?: string;
+  onSubmitted?: (txHash: string) => void | Promise<void>;
   onStage?: (stage: "connecting" | "approving" | "burning" | "confirming") => void;
 }): Promise<{ txHash: string; approvalTxHash?: string; sourceAccount: string }> {
   const provider = input.provider ?? injectedProvider();
@@ -60,8 +61,18 @@ export async function executeEvmCctpBurn(input: {
       );
     }
   }
+  // Approval can leave the wallet open long enough for an account/network
+  // switch. Recheck immediately before sending the irreversible burn.
+  const [activeChain, activeAccounts] = await Promise.all([
+    provider.request({ method: "eth_chainId" }),
+    provider.request({ method: "eth_accounts" }),
+  ]);
+  if (BigInt(String(activeChain)) !== BigInt(chainId)) throw new Error("EVM network changed; request a new quote");
+  if (!Array.isArray(activeAccounts) || String(activeAccounts[0]).toLowerCase() !== sourceAccount.toLowerCase()) {
+    throw new Error("EVM account changed; request a new quote");
+  }
   input.onStage?.("burning");
-  const txHash = await simulateSendWait(provider, sourceAccount, input.plan.calls[1], () => input.onStage?.("confirming"));
+  const txHash = await simulateSendWait(provider, sourceAccount, input.plan.calls[1], () => input.onStage?.("confirming"), input.onSubmitted);
   return approvalTxHash ? { txHash, approvalTxHash, sourceAccount } : { txHash, sourceAccount };
 }
 
@@ -130,10 +141,11 @@ async function waitForAllowance(
   return latest;
 }
 
-async function simulateSendWait(provider: Eip1193, from: string, call: { to: string; data: string; value: string }, beforeWait?: () => void) {
+async function simulateSendWait(provider: Eip1193, from: string, call: { to: string; data: string; value: string }, beforeWait?: () => void, onSubmitted?: (txHash: string) => void | Promise<void>) {
   await provider.request({ method: "eth_estimateGas", params: [{ from, ...call }] });
   const hash = String(await provider.request({ method: "eth_sendTransaction", params: [{ from, ...call }] }));
   if (!/^0x[0-9a-f]{64}$/i.test(hash)) throw new Error("Wallet returned an invalid transaction hash");
+  await onSubmitted?.(hash);
   beforeWait?.();
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [hash] }) as { status?: string } | null;

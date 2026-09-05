@@ -2,6 +2,7 @@ import {
   Connection,
   Keypair,
   PublicKey,
+  type BlockhashWithExpiryBlockHeight,
   SystemProgram,
   Transaction,
   TransactionInstruction,
@@ -30,6 +31,7 @@ export async function executeSolanaCctpBurn(input: {
   plan: NonEvmCctpBurnPlan;
   rpcUrl: string;
   expectedSourceAccount?: string;
+  onSubmitted?: (txHash: string) => void | Promise<void>;
   onStage?: (stage: "connecting" | "simulating" | "signing" | "confirming") => void;
 }): Promise<{ txHash: string; sourceAccount: string }> {
   const provider = phantom();
@@ -83,10 +85,67 @@ export async function executeSolanaCctpBurn(input: {
   } catch (cause) {
     throw new Error("Phantom could not submit the Solana transaction", { cause });
   }
+  await input.onSubmitted?.(sent.signature);
   input.onStage?.("confirming");
-  const confirmation = await connection.confirmTransaction({ signature: sent.signature, ...latest }, "confirmed");
-  if (confirmation.value.err) throw new Error(`Solana CCTP burn reverted: ${JSON.stringify(confirmation.value.err)}`);
+  await confirmSolanaCctpBurn(connection, sent.signature, latest);
   return { txHash: sent.signature, sourceAccount: owner.toBase58() };
+}
+
+/** Confirm over HTTP because the same-origin Next RPC proxy does not expose WebSockets. */
+export async function confirmSolanaCctpBurn(
+  connection: Connection,
+  signature: string,
+  latest: BlockhashWithExpiryBlockHeight,
+): Promise<void> {
+  const startedAt = Date.now();
+  let lastRpcError: unknown;
+  while (Date.now() - startedAt < 120_000) {
+    let status: Awaited<ReturnType<Connection["getSignatureStatuses"]>>["value"][number] | null = null;
+    try {
+      status = (await connection.getSignatureStatuses(
+        [signature],
+        { searchTransactionHistory: true },
+      )).value[0] ?? null;
+    } catch (cause) {
+      lastRpcError = cause;
+    }
+    if (status?.err) {
+      throw new Error(`Solana CCTP burn reverted: ${JSON.stringify(status.err)}`);
+    }
+    if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") {
+      return;
+    }
+
+    let blockhashValid: boolean | undefined;
+    try {
+      blockhashValid = (await connection.isBlockhashValid(
+        latest.blockhash,
+        { commitment: "confirmed" },
+      )).value;
+    } catch (cause) {
+      lastRpcError = cause;
+    }
+    if (blockhashValid === false) {
+      try {
+        const transaction = await connection.getTransaction(signature, {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: 0,
+        });
+        if (transaction?.meta?.err) {
+          throw new Error(`Solana CCTP burn reverted: ${JSON.stringify(transaction.meta.err)}`);
+        }
+        if (transaction) return;
+      } catch (recoveryCause) {
+        if (recoveryCause instanceof Error && recoveryCause.message.startsWith("Solana CCTP burn reverted:")) {
+          throw recoveryCause;
+        }
+      }
+      throw new Error(`Signature ${signature} has expired: block height exceeded.`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error("Timed out while confirming the Solana CCTP burn", { cause: lastRpcError });
 }
 
 export async function connectSolanaSource() {
