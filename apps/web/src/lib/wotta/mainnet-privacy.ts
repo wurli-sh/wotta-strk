@@ -225,7 +225,8 @@ async function submitMainnetPrivacyActions(
     if (notRegistered(error)) throw mainnetPrivacyRegistrationRequired();
     throw error;
   }
-  await account.provider.waitForTransaction(result.transaction_hash);
+  const receipt = await account.provider.waitForTransaction(result.transaction_hash);
+  if (!receipt.isSuccess()) throw new Error("Mainnet private transaction reverted");
   signal?.throwIfAborted();
   return String(result.transaction_hash);
 }

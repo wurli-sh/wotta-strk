@@ -19,7 +19,7 @@ import {
   unlockPrivacyVault,
   type PrivacyVault,
 } from "@/lib/wotta/privacy-state";
-import { connectReady } from "@/lib/wotta/ready";
+import { clearReadyConnections, connectReady } from "@/lib/wotta/ready";
 
 type PrivacyVaultContextValue = {
   vault: PrivacyVault | null;
@@ -33,7 +33,7 @@ type PrivacyVaultContextValue = {
 const PrivacyVaultContext = createContext<PrivacyVaultContextValue | null>(null);
 
 export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
-  const { mode } = useNetworkMode();
+  const { mode, ready: networkReady } = useNetworkMode();
   const [vault, setVault] = useState<PrivacyVault | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
@@ -42,6 +42,11 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
     let active = true;
     setVault(null);
     setSessionReady(false);
+    if (!networkReady) {
+      return () => {
+        active = false;
+      };
+    }
     void (async () => {
       try {
         const { data } = await createClient().auth.getSession();
@@ -63,9 +68,10 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [mode]);
+  }, [mode, networkReady]);
 
   const unlock = useCallback(async () => {
+    if (!networkReady) throw new Error("Network selection is still loading");
     setUnlocking(true);
     try {
       const connected = await connectReady(mode);
@@ -75,10 +81,11 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
     } finally {
       setUnlocking(false);
     }
-  }, [mode]);
+  }, [mode, networkReady]);
 
   const clearVault = useCallback(() => {
     setVault(null);
+    clearReadyConnections();
     clearAllPrivacyVaultLocalState();
   }, []);
 

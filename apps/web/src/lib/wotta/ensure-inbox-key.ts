@@ -5,7 +5,6 @@ import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { mainnetPrivacyConfig } from "@/lib/wotta/mainnet-privacy";
 import {
   restorePrivacyVaultFromSession,
-  unlockPrivacyVault,
   type PrivacyVault,
 } from "@/lib/wotta/privacy-state";
 import { createBrowserProductSession } from "@/lib/wotta/product-session";
@@ -16,8 +15,9 @@ function otherUnlockConfig(mode: NetworkMode) {
 
 /**
  * Claim needs the X25519 inbox secret that was published at wallet link time.
- * Unlock alone only restores the viewing-key vault — if this network's vault
- * never stored the secret, try the other network's vault before re-linking.
+ * Unlock alone only restores the viewing-key vault. A legacy matching secret
+ * may be copied from an already-unlocked tab session, but claim must never
+ * switch networks behind the user's back to unlock a different chain's vault.
  */
 export async function ensureClaimInboxKey(
   vault: PrivacyVault,
@@ -37,16 +37,13 @@ export async function ensureClaimInboxKey(
 
   const other = otherUnlockConfig(mode);
   try {
-    let donor = await restorePrivacyVaultFromSession(account.address, other);
-    if (!donor?.state.inboxSecretKey) {
-      donor = await unlockPrivacyVault(account, other);
-    }
-    if (matches(donor.state.inboxSecretKey)) {
+    const donor = await restorePrivacyVaultFromSession(account.address, other);
+    if (donor?.state.inboxSecretKey && matches(donor.state.inboxSecretKey)) {
       await vault.setInboxSecretKey(donor.state.inboxSecretKey!);
       return { rebound: false };
     }
   } catch {
-    // Fall through to re-link when the other vault is unavailable.
+    // Fall through without prompting a cross-network wallet switch.
   }
 
   if (me.wallet?.inbox_pubkey) {

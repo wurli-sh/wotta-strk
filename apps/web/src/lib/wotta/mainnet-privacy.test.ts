@@ -128,7 +128,7 @@ describe("Ready-managed mainnet privacy", () => {
       provider: {
         getChainId: async () => constants.StarknetChainId.SN_MAIN,
         getClassHashAt: async () => config.poolClassHash,
-        waitForTransaction: async (hash: string) => ({ hash }),
+        waitForTransaction: async (hash: string) => ({ hash, isSuccess: () => true }),
       },
       strk20PrepareInvoke: async (actions: Array<{ amount: string }>, simulate: boolean) => {
         calls.push({ amount: actions[0]!.amount, simulate });
@@ -152,6 +152,23 @@ describe("Ready-managed mainnet privacy", () => {
     ]);
   });
 
+  it("rejects a finalized but reverted private claim transaction", async () => {
+    const config = mainnetPrivacyConfig();
+    const account = {
+      provider: {
+        getChainId: async () => constants.StarknetChainId.SN_MAIN,
+        getClassHashAt: async () => config.poolClassHash,
+        waitForTransaction: async () => ({ isSuccess: () => false }),
+      },
+      strk20PrepareInvoke: async () => ({
+        call: { contract_address: config.poolAddress },
+        proof: { data: "", output: [], proof_facts: [] },
+      }),
+      strk20InvokeTransaction: async () => ({ transaction_hash: "0xbad" }),
+    } as unknown as WalletAccountV6;
+    await expect(submitMainnetPrivacyAction(account, "shield")).rejects.toThrow("Mainnet private transaction reverted");
+  });
+
   it("submits shield plus transfer as one wallet transaction", async () => {
     const config = mainnetPrivacyConfig();
     const calls: Array<Array<{ type: string; amount: string }>> = [];
@@ -159,7 +176,7 @@ describe("Ready-managed mainnet privacy", () => {
       provider: {
         getChainId: async () => constants.StarknetChainId.SN_MAIN,
         getClassHashAt: async () => config.poolClassHash,
-        waitForTransaction: async (hash: string) => ({ hash }),
+        waitForTransaction: async (hash: string) => ({ hash, isSuccess: () => true }),
       },
       strk20PrepareInvoke: async (actions: Array<{ type: string; amount: string }>) => {
         calls.push(actions);

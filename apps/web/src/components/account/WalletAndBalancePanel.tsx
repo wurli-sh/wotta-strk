@@ -17,7 +17,7 @@ import { createPrivacyClient } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateBalance } from "@/lib/wotta/privacy-flow";
 import { unlockPrivacyVault, clearAllPrivacyVaultLocalState } from "@/lib/wotta/privacy-state";
-import { connectReady } from "@/lib/wotta/ready";
+import { clearReadyConnections, connectReady } from "@/lib/wotta/ready";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { readMainnetPrivateBalance } from "@/lib/wotta/mainnet-privacy";
 import { UsdcIcon } from "@/components/UsdcIcon";
@@ -90,6 +90,7 @@ export function WalletAndBalancePanel({
         network: mode,
         signal: operation.signal,
       });
+      clearReadyConnections();
       clearAllPrivacyVaultLocalState();
       toast.success(TOAST.readyUnlinked);
       await onLinked({
@@ -125,7 +126,7 @@ export function WalletAndBalancePanel({
           // First Wallet API call after SPA navigation can hang on a stale
           // Ready session; one reconnect usually clears it.
           if (!isBalanceTimeout(error)) throw error;
-          const retried = await connectReady(mode);
+          const retried = await connectReady(mode, { forceReconnect: true });
           operation.assertActive();
           if (BigInt(retried.address) !== BigInt(me.wallet.address)) {
             throw new Error("Connect the Ready account linked to this Wotta profile");

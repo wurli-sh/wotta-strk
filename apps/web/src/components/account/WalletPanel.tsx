@@ -12,6 +12,7 @@ import { userFacingError } from "@/lib/errors";
 import { routeLogoPath } from "@/lib/crypto-icons";
 import { createClient } from "@/lib/supabase/client";
 import { clearAllPrivacyVaultLocalState } from "@/lib/wotta/privacy-state";
+import { clearReadyConnections } from "@/lib/wotta/ready";
 
 type Props = {
   me: MeResponse | null;
@@ -54,6 +55,7 @@ export function WalletPanel({
         method: "POST",
         body: {},
       });
+      clearReadyConnections();
       clearAllPrivacyVaultLocalState();
       toast.success(TOAST.readyUnlinked);
       await onLinked({

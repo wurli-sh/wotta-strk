@@ -3,7 +3,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 const me = vi.fn();
 const bindReadyAndIdentity = vi.fn();
 const restorePrivacyVaultFromSession = vi.fn();
-const unlockPrivacyVault = vi.fn();
 
 vi.mock("@/lib/wotta/product-session", () => ({
   createBrowserProductSession: () => ({ me, bindReadyAndIdentity }),
@@ -11,7 +10,6 @@ vi.mock("@/lib/wotta/product-session", () => ({
 
 vi.mock("@/lib/wotta/privacy-state", () => ({
   restorePrivacyVaultFromSession: (...args: unknown[]) => restorePrivacyVaultFromSession(...args),
-  unlockPrivacyVault: (...args: unknown[]) => unlockPrivacyVault(...args),
 }));
 
 vi.mock("@wotta/crypto", () => ({
@@ -33,7 +31,6 @@ describe("ensureClaimInboxKey", () => {
     me.mockReset();
     bindReadyAndIdentity.mockReset();
     restorePrivacyVaultFromSession.mockReset();
-    unlockPrivacyVault.mockReset();
   });
 
   it("no-ops when the local secret already matches the linked inbox", async () => {
@@ -64,7 +61,6 @@ describe("ensureClaimInboxKey", () => {
   it("refuses to re-link when a wallet is already bound but the secret is missing", async () => {
     me.mockResolvedValue({ wallet: { address: "0x1", inbox_pubkey: "pub:old" } });
     restorePrivacyVaultFromSession.mockResolvedValue(null);
-    unlockPrivacyVault.mockResolvedValue({ state: {} });
     const vault = { state: { inboxSecretKey: undefined as string | undefined }, setInboxSecretKey: vi.fn() };
     await expect(
       ensureClaimInboxKey(vault as never, { address: "0x1" } as never, "testnet"),
@@ -75,7 +71,6 @@ describe("ensureClaimInboxKey", () => {
   it("links when no wallet is bound yet", async () => {
     me.mockResolvedValue({ wallet: null });
     restorePrivacyVaultFromSession.mockResolvedValue(null);
-    unlockPrivacyVault.mockResolvedValue({ state: {} });
     bindReadyAndIdentity.mockImplementation(async (_account, vault) => {
       vault.state.inboxSecretKey = "fresh";
     });
@@ -83,5 +78,20 @@ describe("ensureClaimInboxKey", () => {
     const result = await ensureClaimInboxKey(vault as never, { address: "0x1" } as never, "testnet");
     expect(result).toEqual({ rebound: true });
     expect(bindReadyAndIdentity).toHaveBeenCalledOnce();
+  });
+
+  it("never asks Ready to unlock the other network during claim recovery", async () => {
+    me.mockResolvedValue({ wallet: { address: "0x1", inbox_pubkey: "pub:mainnet" } });
+    restorePrivacyVaultFromSession.mockResolvedValue(null);
+    const vault = { state: { inboxSecretKey: undefined as string | undefined }, setInboxSecretKey: vi.fn() };
+
+    await expect(
+      ensureClaimInboxKey(vault as never, { address: "0x1" } as never, "mainnet"),
+    ).rejects.toThrow(/can’t decrypt your inbox/);
+    expect(restorePrivacyVaultFromSession).toHaveBeenCalledWith(
+      "0x1",
+      expect.objectContaining({ chainId: "SN_SEPOLIA" }),
+    );
+    expect(bindReadyAndIdentity).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,25 @@ import { cairo, constants, walletV6, WalletAccountV6 } from "starknet";
 import mainnetDeployment from "../../../../../deployments/mainnet.json";
 import type { NetworkMode } from "@/lib/network-mode";
 
+/**
+ * Ready connection lifetimes (keep these separate):
+ *
+ * 1. Wallet extension session — Ready's own unlock / account selection.
+ * 2. App network mode — Mainnet vs Sepolia product toggle (does NOT force reconnect).
+ * 3. Privacy vault unlock — inbox secret decrypted for the active network in this tab.
+ * 4. API wallet binding — `/v1/wallet/*` link for the active chain.
+ *
+ * `connectReady(mode)` caches one WalletAccountV6 per network for the page lifetime.
+ * Reuse only validates the wallet chain (lazy switch if needed). A full
+ * `WalletAccountV6.connect()` runs only on first use per network, concurrent
+ * coalescing of in-flight connects, or `{ forceReconnect: true }`.
+ *
+ * Cache invalidation (`clearReadyConnections`):
+ * - Sign-out / unlink Ready / clear vault (Account + PrivacyVaultProvider)
+ * - Forced reconnect after a confirmed stale-session timeout (balance reveal)
+ * - Never on app network toggle alone — Mainnet and Sepolia caches stay isolated
+ */
+
 const SEPOLIA_STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
 
 export type ConnectedReady = {
@@ -12,7 +31,29 @@ export type ConnectedReady = {
   supportedWalletApi: string[];
 };
 
+type ReadyRuntime = {
+  connections: Partial<Record<NetworkMode, ConnectedReady>>;
+  inFlight: Partial<Record<NetworkMode, Promise<ConnectedReady>>>;
+  generation: number;
+};
+
+declare global {
+  // Shared across routes and retained during client-side navigation/HMR.
+  var __wottaReadyRuntime: ReadyRuntime | undefined;
+}
+
 const READY_CONNECT_TIMEOUT_MS = 30_000;
+
+function readyRuntime(): ReadyRuntime {
+  return globalThis.__wottaReadyRuntime ??= { connections: {}, inFlight: {}, generation: 0 };
+}
+
+export function clearReadyConnections(): void {
+  const runtime = readyRuntime();
+  runtime.generation += 1;
+  runtime.connections = {};
+  runtime.inFlight = {};
+}
 
 function expectedChainId(mode: NetworkMode) {
   return mode === "mainnet"
@@ -159,23 +200,51 @@ export async function ensureReadyAccountDeployed(
   }
 }
 
-export async function connectReady(mode: NetworkMode = "testnet"): Promise<ConnectedReady> {
+export async function connectReady(
+  mode: NetworkMode = "testnet",
+  options?: { forceReconnect?: boolean },
+): Promise<ConnectedReady> {
   const rpcUrl = mode === "mainnet"
     ? process.env.NEXT_PUBLIC_STARKNET_MAINNET_RPC_URL
     : process.env.NEXT_PUBLIC_STARKNET_TESTNET_RPC_URL ?? process.env.NEXT_PUBLIC_STARKNET_RPC_URL;
   if (!rpcUrl) throw new Error(`${mode === "mainnet" ? "Mainnet" : "Sepolia"} Starknet RPC is not configured`);
   const wallet = findReadyWallet();
   if (!wallet) throw new Error("Ready wallet was not found. Install or unlock Ready and retry");
-  // Always go through WalletAccountV6.connect. Reusing discovery `accounts[0]`
-  // after SPA navigations leaves a stale provider where Wallet API calls
-  // (especially strk20Balances) hang until the timeout.
-  const account = await withReadyConnectTimeout(
-    WalletAccountV6.connect({ nodeUrl: rpcUrl }, wallet as never),
-  );
-  await ensureReadyChain(account, mode);
-  const supportedWalletApi = (await walletV6.supportedWalletApi(wallet as never)).map(String);
-  if (mode === "mainnet" && !supportedWalletApi.includes("0.10.3")) {
-    throw new Error("Ready Wallet API 0.10.3 is required for mainnet privacy");
+  const runtime = readyRuntime();
+  if (options?.forceReconnect) {
+    runtime.generation += 1;
+    delete runtime.connections[mode];
+    delete runtime.inFlight[mode];
   }
-  return { account, address: account.address, walletName: wallet.name, supportedWalletApi };
+
+  const cached = runtime.connections[mode];
+  if (cached) {
+    await ensureReadyChain(cached.account, mode);
+    return cached;
+  }
+  const pending = runtime.inFlight[mode];
+  if (pending) return pending;
+
+  const generation = runtime.generation;
+  const connecting = (async () => {
+    const account = await withReadyConnectTimeout(
+      WalletAccountV6.connect({ nodeUrl: rpcUrl }, wallet as never),
+    );
+    await ensureReadyChain(account, mode);
+    const supportedWalletApi = (await walletV6.supportedWalletApi(wallet as never)).map(String);
+    if (mode === "mainnet" && !supportedWalletApi.includes("0.10.3")) {
+      throw new Error("Ready Wallet API 0.10.3 is required for mainnet privacy");
+    }
+    const connected = { account, address: account.address, walletName: wallet.name, supportedWalletApi };
+    // An unlink/sign-out or forced reconnect may have invalidated this request
+    // while the wallet UI was open. Never let that stale result repopulate cache.
+    if (runtime.generation === generation) runtime.connections[mode] = connected;
+    return connected;
+  })();
+  runtime.inFlight[mode] = connecting;
+  try {
+    return await connecting;
+  } finally {
+    if (runtime.inFlight[mode] === connecting) delete runtime.inFlight[mode];
+  }
 }
