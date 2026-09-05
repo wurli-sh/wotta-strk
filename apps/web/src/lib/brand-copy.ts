@@ -1,4 +1,7 @@
-export const LANDING_HEADLINE = ["Send from anywhere.", "Settle privately."] as const;
+export const LANDING_HEADLINE = [
+  "Send from anywhere.",
+  "Settle privately.",
+] as const;
 
 export const LANDING_SUBHEAD =
   "Pay from any chain you hold. They claim private USDC on Starknet — then earn on Vesu.";
@@ -25,8 +28,12 @@ export const HOW_IT_WORKS_STEPS = [
     body: "Send USDC from a chain you already hold.",
   },
   {
-    title: "They claim private — then earn.",
-    body: "Inbox → private USDC on Starknet → Vesu.",
+    title: "They claim privately.",
+    body: "The payment lands as private USDC on Starknet.",
+  },
+  {
+    title: "Put it to work.",
+    body: "Supply any amount to Vesu and receive private vUSDC shares.",
   },
 ] as const;
 
@@ -52,7 +59,8 @@ export const TOAST = {
   invalidRecipient: "Enter a valid @handle or email",
   readyConnected: (net: "Mainnet" | "Testnet") => `Ready connected on ${net}`,
   sourceConnected: (label: string) => `${label} wallet connected`,
-  networkBlocked: "Finish or cancel the open Ready request, then switch networks",
+  networkBlocked:
+    "Finish or cancel the open Ready request, then switch networks",
   unlockInboxFirst: "Unlock your Ready inbox, then claim",
   signedIn: "Signed in",
   signInFailed: "Couldn’t sign in — try again",

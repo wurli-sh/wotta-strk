@@ -27,7 +27,8 @@ describe("brand-copy", () => {
     expect(SITE_DESCRIPTION).toBe(
       "Send USDC from any chain. Claim private on Starknet. Earn on Vesu.",
     );
-    expect(HOW_IT_WORKS_STEPS).toHaveLength(3);
+    expect(HOW_IT_WORKS_STEPS).toHaveLength(4);
+    expect(HOW_IT_WORKS_STEPS[3]?.body).toContain("Vesu");
     expect(HOW_IT_WORKS_DEMO_NOTE).toContain("Vesu");
   });
 
