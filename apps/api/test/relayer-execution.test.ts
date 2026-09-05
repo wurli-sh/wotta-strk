@@ -46,6 +46,7 @@ test.afterEach(() => resetIrisPollingStateForTest());
 test("a recoverable job without a destination hash attempts settlement instead of claiming funding", async t => {
   const f = fixture("failed_recoverable", null);
   t.mock.method(globalThis, "fetch", async () => Response.json({ messages: [{ message: f.message, attestation: "0x01", status: "complete" }] }));
+  t.mock.method(RpcProvider.prototype, "getClassHashAt", async () => "0xclass");
   t.mock.method(RpcProvider.prototype, "callContract", async ({ entrypoint }: { entrypoint: string }) => entrypoint === "processed" ? ["0x0"] : ["100000000000000000000", "0"]);
   let attempted = false;
   t.mock.method(Account.prototype, "estimateInvokeFee", async () => { attempted = true; throw new Error("settlement unavailable"); });
@@ -58,6 +59,7 @@ test("a recoverable job without a destination hash attempts settlement instead o
 test("a finalized reverted settlement is cleared for retry and never reported funded", async t => {
   const f = fixture("destination_submitted", "0xbad");
   t.mock.method(globalThis, "fetch", async () => Response.json({ messages: [{ message: f.message, attestation: "0x01", status: "complete" }] }));
+  t.mock.method(RpcProvider.prototype, "getClassHashAt", async () => "0xclass");
   t.mock.method(RpcProvider.prototype, "callContract", async () => ["100000000000000000000", "0"]);
   t.mock.method(RpcProvider.prototype, "waitForTransaction", async () => ({ isSuccess: () => false }));
   await assert.rejects(processJob({ db: f.db, config: f.config, log: { info() {}, warn() {} } as unknown as Logger }, f.job), /settlement_reverted/);

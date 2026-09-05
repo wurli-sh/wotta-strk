@@ -9,13 +9,13 @@ import { fetchAttestationWithBackoff } from "./iris.ts";
 import { transition, transitionAllowed } from "../intents/service.ts";
 import { transitionToward } from "../intents/recovery.ts";
 import { validateSettlement } from "./validate-settlement.ts";
+import { resolveRelayerCredentials, STRK_TOKEN_ADDRESS } from "./readiness.ts";
 
-const STRK_TOKEN_ADDRESS =
-  "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
 /** CCTP settle is cheaper than privacy apply_actions; keep a floor so we fail loud when empty. */
 const SETTLE_MIN_L2_GAS = 30_000_000n;
 const PROJECTION_WAIT_ATTEMPTS = 6;
 const PROJECTION_WAIT_MS = 1_500;
+const STALE_PROCESSING_MS = 10 * 60 * 1_000;
 
 type JobRow = {
   id: string;
@@ -74,13 +74,9 @@ async function refreshJobState(db: Db, config: Config, job: JobRow): Promise<voi
   job.intent.version = data.version as number;
 }
 
-function relayerAccount(config: Config) {
-  const address = config.env.STARKNET_RELAYER_ADDRESS ?? config.env.STARKNET_DEPLOYER_ADDRESS;
-  const rawKey = config.env.STARKNET_RELAYER_PRIVATE_KEY ?? config.env.STARKNET_RELAYER_KEY_OR_KEYSTORE ?? config.env.STARKNET_DEPLOYER_PRIVATE_KEY;
-  const key = rawKey && !rawKey.startsWith("0x") ? `0x${rawKey}` : rawKey;
-  if (!address || !key || !/^0x[0-9a-f]+$/i.test(key)) throw new Error("relayer_credentials_missing");
-  const provider = new RpcProvider({ nodeUrl: config.env.STARKNET_RPC_URL });
-  return { provider, account: new Account({ provider, address, signer: new Signer(key) }) };
+async function relayerAccount(config: Config) {
+  const { provider, address, privateKey } = await resolveRelayerCredentials(config);
+  return { provider, account: new Account({ provider, address, signer: new Signer(privateKey) }) };
 }
 
 function relayerFallbackProvider(config: Config): RpcProvider | undefined {
@@ -153,12 +149,40 @@ async function advance(db: Db, job: JobRow, to: IntentState, evidence: Record<st
   job.intent.version = updated.version as number;
 }
 
+async function deliverRegisteredNoteIfReady(deps: { db: Db; config: Config }, job: JobRow): Promise<void> {
+  if (job.intent.state !== "funded") return;
+  const [{ data: registered, error: registeredError }, { data: pending, error: pendingError }] = await Promise.all([
+    deps.db.from("encrypted_notes").select("id").eq("intent_id", job.intent.id).eq("chain_id", deps.config.manifest.chainId).limit(1),
+    deps.db.from("pending_claims").select("id").eq("intent_id", job.intent.id).limit(1),
+  ]);
+  if (registeredError) throw registeredError;
+  if (pendingError) throw pendingError;
+  if ((registered?.length ?? 0) + (pending?.length ?? 0) > 0) {
+    await advance(deps.db, job, "delivered", { encryptedDelivery: true });
+  }
+}
+
 export async function processJob(deps: { db: Db; config: Config; log: Logger }, job: JobRow) {
   const route = routeById(job.intent.route_id, deps.config);
   if (!route?.enabled || route.domain === null || !job.intent.source_tx_hash) throw new Error("relayer_route_invalid");
   const { data: projection, error: projectionError } = await deps.db.from("intents").select("onchain_state,onchain_tx_hash").eq("id", job.intent.id).eq("chain_id", deps.config.manifest.chainId).maybeSingle();
   if (projectionError) throw projectionError;
   if (projection && ["funded", "claimed", "refunded"].includes(projection.onchain_state)) {
+    await refreshJobState(deps.db, deps.config, job);
+    if (projection.onchain_state === "funded" && ["attestation_ready", "destination_submitted", "failed_recoverable"].includes(job.intent.state)) {
+      const updated = await transitionToward(
+        deps.db,
+        job.intent.owner_id,
+        job.intent.id,
+        job.intent.version,
+        job.intent.state,
+        "funded",
+        { recovered: true, destinationTxHash: projection.onchain_tx_hash },
+      );
+      job.intent.state = updated.state as IntentState;
+      job.intent.version = updated.version as number;
+    }
+    await deliverRegisteredNoteIfReady(deps, job);
     const { error } = await deps.db.from("relayer_jobs").update({ status: "succeeded", destination_tx_hash: job.destination_tx_hash ?? projection.onchain_tx_hash, last_error: null, updated_at: new Date().toISOString() }).eq("id", job.id);
     if (error) throw error;
     return true;
@@ -177,7 +201,7 @@ export async function processJob(deps: { db: Db; config: Config; log: Logger }, 
   }
   if (job.intent.state === "source_submitted") await advance(deps.db, job, "source_confirmed", { sourceTxHash: job.intent.source_tx_hash });
   if (job.intent.state === "source_confirmed") await advance(deps.db, job, "attestation_ready", { messageHash: iris.messageHash });
-  const { provider, account } = relayerAccount(deps.config);
+  const { provider, account } = await relayerAccount(deps.config);
   // Proactive STRK balance alert before attempting settlement
   const currentBalance = await strkBalance(account);
   if (currentBalance < deps.config.env.STARKNET_RELAYER_ALERT_BALANCE_WEI) {
@@ -284,15 +308,7 @@ export async function processJob(deps: { db: Db; config: Config; log: Logger }, 
       job.intent.version = updated.version as number;
     });
   }
-  if (job.intent.state === "funded") {
-    const [{ data: registered }, { data: pending }] = await Promise.all([
-      deps.db.from("encrypted_notes").select("id").eq("intent_id", job.intent.id).limit(1),
-      deps.db.from("pending_claims").select("id").eq("intent_id", job.intent.id).limit(1),
-    ]);
-    if ((registered?.length ?? 0) + (pending?.length ?? 0) > 0) {
-      await advance(deps.db, job, "delivered", { encryptedDelivery: true });
-    }
-  }
+  await deliverRegisteredNoteIfReady(deps, job);
   await deps.db.from("relayer_jobs").update({ status: "succeeded", message_hash: iris.messageHash, last_error: null, updated_at: new Date().toISOString() }).eq("id", job.id);
   deps.log.info({ intentId: job.intent.id, destinationTxHash: job.destination_tx_hash }, "CCTP intent settled on Starknet");
   return true;
@@ -303,14 +319,53 @@ export async function runRelayerOnce(deps: { db: Db; config: Config; log: Logger
   // starve the other by contending for a global worker lease.
   const lease = await acquireLease(deps.db, `relayer:${deps.config.manifest.chainId}`);
   if (!lease) return { processed: 0, leased: false };
+  // A process can die after atomically claiming a job. Only the matching
+  // network worker may return an old processing claim to the queue.
+  const staleBefore = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
+  const { data: stale, error: staleError } = await deps.db
+    .from("relayer_jobs")
+    .select("id,intent:intents!inner(chain_id)")
+    .eq("status", "processing")
+    .eq("intent.chain_id", deps.config.manifest.chainId)
+    .lt("updated_at", staleBefore);
+  if (staleError) throw staleError;
+  for (const row of stale ?? []) {
+    const { error: resetError } = await deps.db
+      .from("relayer_jobs")
+      .update({ status: "queued", updated_at: new Date().toISOString() })
+      .eq("id", row.id)
+      .eq("status", "processing")
+      .lt("updated_at", staleBefore);
+    if (resetError) throw resetError;
+  }
   const { data, error } = await deps.db.from("relayer_jobs").select("id,attempts,destination_tx_hash,intent:intents!inner(id,owner_id,state,version,route_id,denomination,source_tx_hash,claim_hash,public_refund_recipient,expires_at,quote)").eq("status", "queued").eq("intent.chain_id", deps.config.manifest.chainId).order("created_at").limit(10);
   if (error) throw error;
   let processed = 0;
   for (const raw of data ?? []) {
     const job = raw as unknown as JobRow;
+    // The global lease may expire during a slow Starknet confirmation. This
+    // compare-and-set prevents another worker from executing the same job.
+    const { data: claimed, error: claimError } = await deps.db
+      .from("relayer_jobs")
+      .update({ status: "processing", updated_at: new Date().toISOString() })
+      .eq("id", job.id)
+      .eq("status", "queued")
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) continue;
     try {
       const done = await processJob(deps, job);
-      if (done) processed += 1;
+      if (done) {
+        processed += 1;
+      } else {
+        const { error: releaseError } = await deps.db
+          .from("relayer_jobs")
+          .update({ status: "queued", updated_at: new Date().toISOString() })
+          .eq("id", job.id)
+          .eq("status", "processing");
+        if (releaseError) throw releaseError;
+      }
     } catch (error) {
       const attempts = job.attempts + 1;
       const message = error instanceof Error ? error.message : "relayer_failed";

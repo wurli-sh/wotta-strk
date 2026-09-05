@@ -25,3 +25,12 @@ test("recoveryHint surfaces self-settle after fifteen minutes", () => {
   assert.equal(recoveryHintFor({ state: "funded", onchain_state: "funded" }), "awaiting_claim");
   assert.equal(recoveryHintFor({ state: "quoted", route_id: "starknet-public" }), "none");
 });
+
+test("recoveryHint exposes an exhausted relayer job instead of claiming it is settling", () => {
+  assert.equal(recoveryHintFor({
+    state: "attestation_ready",
+    route_id: "base",
+    jobStatus: "failed",
+    updated_at: new Date().toISOString(),
+  }), "failed_recoverable");
+});

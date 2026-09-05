@@ -125,8 +125,10 @@ export function recoveryHintFor(input: {
   created_at?: string | null;
   route_id?: string | null;
   jobCreatedAt?: string | null;
+  jobStatus?: string | null;
 }): RecoveryHint {
   if (input.route_id === "starknet-public") return "none";
+  if (input.jobStatus === "failed") return "failed_recoverable";
   if (input.state === "failed_recoverable") return "failed_recoverable";
   if (input.state === "expired" || input.state === "refundable") return "awaiting_refund";
   if (

@@ -35,7 +35,7 @@ const envSchema = z.object({
   RUN_INDEXER: envBoolean.default(false),
   RUN_RELAYER: envBoolean.default(false),
   STARKNET_FALLBACK_RPC_URL: optionalUrl,
-  STARKNET_RELAYER_ALERT_BALANCE_WEI: z.coerce.bigint().positive().default(15_000_000_000_000_000_000n),
+  STARKNET_RELAYER_ALERT_BALANCE_WEI: z.coerce.bigint().positive().default(10_000_000_000_000_000_000n),
   PILOT_MAX_USDC_PER_TX: z.coerce.number().int().positive().optional(),
   PILOT_PAUSED_ROUTES: z.string().default(""),
 }).passthrough();
