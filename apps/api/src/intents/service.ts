@@ -36,21 +36,32 @@ export async function transition(db: Db, ownerId: string, intentId: string, expe
 }
 export async function markSourceSubmitted(db: Db, ownerId: string, intentId: string, expectedVersion: number, txHash: string, chainId?: string) {
   const current = await getIntent(db, ownerId, intentId, chainId);
-  if (current.state !== "quoted" || current.version !== expectedVersion) throw new Error("version_conflict");
-  const { data, error } = await db.from("intents").update({ source_tx_hash: txHash, state: "source_submitted", version: expectedVersion + 1, updated_at: new Date().toISOString() }).eq("id", intentId).eq("owner_id", ownerId).eq("state", "quoted").eq("version", expectedVersion).select("*").maybeSingle();
-  if (error) throw error; if (!data) throw new Error("version_conflict");
-  if (current.route_id !== "starknet-public" && current.route_id !== "starknet-private") {
-    const { data: existingJob, error: existingError } = await db.from("relayer_jobs").select("attempts").eq("intent_id", intentId).maybeSingle();
-    if (existingError) throw existingError;
-    if (existingJob) {
-      const { error: jobError } = await db.from("relayer_jobs").update({ status: "queued", updated_at: new Date().toISOString() }).eq("intent_id", intentId);
-      if (jobError) throw jobError;
-    } else {
-      const { error: jobError } = await db.from("relayer_jobs").insert({ intent_id: intentId, status: "queued", attempts: 0 });
-      if (jobError) throw jobError;
-    }
+  // A response can be lost after the intent update, or the indexer can observe
+  // a fast Starknet deposit before this request. Never rewind that projection.
+  if (current.source_tx_hash && current.source_tx_hash !== txHash) throw new Error("version_conflict");
+  const projected = ["funded", "claimed", "refunded"].includes(current.onchain_state);
+  let data = current;
+  if (!current.source_tx_hash) {
+    if (!projected && (current.state !== "quoted" || current.version !== expectedVersion)) throw new Error("version_conflict");
+    const { data: updated, error } = await db.from("intents").update({
+      source_tx_hash: txHash,
+      ...(projected ? {} : { state: "source_submitted", version: current.version + 1 }),
+      updated_at: new Date().toISOString(),
+    }).eq("id", intentId).eq("owner_id", ownerId).eq("version", current.version).is("source_tx_hash", null).select("*").maybeSingle();
+    if (error) throw error;
+    if (!updated) throw new Error("version_conflict");
+    data = updated;
+    await appendEvent(db, intentId, current.state, data.state, data.version, { txHash }, {});
   }
-  await appendEvent(db, intentId, "quoted", "source_submitted", expectedVersion + 1, { txHash }, {});
+  if (current.route_id !== "starknet-public" && current.route_id !== "starknet-private") {
+    // Retry can repair a failed enqueue without resetting an existing job,
+    // including one which another worker has already settled.
+    const { error: jobError } = await db.from("relayer_jobs").upsert(
+      { intent_id: intentId, status: "queued", attempts: 0 },
+      { onConflict: "intent_id", ignoreDuplicates: true },
+    );
+    if (jobError) throw jobError;
+  }
   return data;
 }
 export async function appendEvent(db: Db, intentId: string, from: string | null, to: string, version: number, evidence: Record<string, unknown>, payload: Record<string, unknown>) { const { error } = await db.from("intent_events").insert({ intent_id: intentId, from_state: from, to_state: to, version, evidence, payload }); if (error) throw error; }

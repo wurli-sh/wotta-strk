@@ -153,9 +153,16 @@ async function advance(db: Db, job: JobRow, to: IntentState, evidence: Record<st
   job.intent.version = updated.version as number;
 }
 
-async function processJob(deps: { db: Db; config: Config; log: Logger }, job: JobRow) {
+export async function processJob(deps: { db: Db; config: Config; log: Logger }, job: JobRow) {
   const route = routeById(job.intent.route_id, deps.config);
   if (!route?.enabled || route.domain === null || !job.intent.source_tx_hash) throw new Error("relayer_route_invalid");
+  const { data: projection, error: projectionError } = await deps.db.from("intents").select("onchain_state,onchain_tx_hash").eq("id", job.intent.id).eq("chain_id", deps.config.manifest.chainId).maybeSingle();
+  if (projectionError) throw projectionError;
+  if (projection && ["funded", "claimed", "refunded"].includes(projection.onchain_state)) {
+    const { error } = await deps.db.from("relayer_jobs").update({ status: "succeeded", destination_tx_hash: job.destination_tx_hash ?? projection.onchain_tx_hash, last_error: null, updated_at: new Date().toISOString() }).eq("id", job.id);
+    if (error) throw error;
+    return true;
+  }
   const iris = await fetchAttestationWithBackoff(deps.config, route.domain, job.intent.source_tx_hash);
   if (!iris) {
     deps.log.info({ intentId: job.intent.id, sourceTxHash: job.intent.source_tx_hash, route: job.intent.route_id }, "Waiting for Circle Iris attestation");
@@ -163,6 +170,11 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
   }
   validateSettlement(deps.config, job, iris.message);
 
+  // Recoverable jobs must re-enter settlement, not fall through to `funded`
+  // merely because no destination hash has been stored yet.
+  if (job.intent.state === "failed_recoverable") {
+    await advance(deps.db, job, "attestation_ready", { messageHash: iris.messageHash, recovered: true });
+  }
   if (job.intent.state === "source_submitted") await advance(deps.db, job, "source_confirmed", { sourceTxHash: job.intent.source_tx_hash });
   if (job.intent.state === "source_confirmed") await advance(deps.db, job, "attestation_ready", { messageHash: iris.messageHash });
   const { provider, account } = relayerAccount(deps.config);
@@ -174,11 +186,13 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
       "relayer STRK balance below alert threshold — fund before exhaustion",
     );
   }
+  let settlementVerified = false;
   if (job.intent.state === "attestation_ready" && !job.destination_tx_hash) {
     const { data: projected } = await deps.db.from("intents").select("onchain_state,onchain_tx_hash").eq("id", job.intent.id).eq("chain_id", deps.config.manifest.chainId).maybeSingle();
     const alreadyOnchain = projected?.onchain_state === "funded" || projected?.onchain_state === "claimed" || projected?.onchain_state === "refunded";
     const alreadyProcessed = alreadyOnchain || await routerProcessed(provider, deps.config, job.intent.id);
     if (alreadyProcessed) {
+      settlementVerified = true;
       job.destination_tx_hash = projected?.onchain_tx_hash ?? job.destination_tx_hash;
       if (!job.destination_tx_hash) {
         job.destination_tx_hash = await waitForOnchainProjection(deps.db, deps.config, job.intent.claim_hash);
@@ -212,6 +226,7 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
     await advance(deps.db, job, "destination_submitted", { destinationTxHash: job.destination_tx_hash, messageHash: iris.messageHash, recovered: true });
   }
   if (!job.destination_tx_hash) {
+    if (!settlementVerified) throw new Error("settlement_confirmation_missing");
     const updated = await transitionToward(
       deps.db,
       job.intent.owner_id,
@@ -227,8 +242,9 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
     deps.log.info({ intentId: job.intent.id, recovered: true }, "CCTP intent already settled; workflow caught up without local destination hash");
     return true;
   }
+  let receipt;
   try {
-    await provider.waitForTransaction(job.destination_tx_hash);
+    receipt = await provider.waitForTransaction(job.destination_tx_hash);
   } catch (primaryError) {
     const fallback = relayerFallbackProvider(deps.config);
     if (!fallback) throw primaryError;
@@ -236,7 +252,19 @@ async function processJob(deps: { db: Db; config: Config; log: Logger }, job: Jo
       { error: primaryError instanceof Error ? primaryError.message : String(primaryError) },
       "primary RPC failed for waitForTransaction, retrying on fallback",
     );
-    await fallback.waitForTransaction(job.destination_tx_hash);
+    receipt = await fallback.waitForTransaction(job.destination_tx_hash);
+  }
+  if (!receipt.isSuccess()) {
+    // A reverted hash cannot succeed on the next poll. Clear it so a retry can
+    // submit a fresh settlement instead of falsely marking the escrow funded.
+    const { error } = await deps.db.from("relayer_jobs").update({ destination_tx_hash: null, updated_at: new Date().toISOString() }).eq("id", job.id);
+    if (error) throw error;
+    job.destination_tx_hash = null;
+    await refreshJobState(deps.db, deps.config, job);
+    if (transitionAllowed(job.intent.state, "failed_recoverable")) {
+      await advance(deps.db, job, "failed_recoverable", { reason: "settlement_reverted" });
+    }
+    throw new Error("settlement_reverted");
   }
   await waitForOnchainProjection(deps.db, deps.config, job.intent.claim_hash);
   // The indexer can project `funded` while this worker waits for confirmation.
