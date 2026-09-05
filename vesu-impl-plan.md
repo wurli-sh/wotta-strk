@@ -1,9 +1,37 @@
 # Vesu shielded-USDC earn integration plan
 
-Status: implementation-ready proposal, with deployment/security gates still open  
+Status: audited and resynced; fail-closed frontend implementation is ready, Mainnet writes remain blocked
 Research date: 2026-09-05 (Asia/Kathmandu)  
 Repository baseline inspected: `ffd7f7f` plus the current uncommitted worktree  
 Target product path: successful private claim → optional earn prompt → Account / Earn → shielded USDC supplied to Vesu
+
+## 0. Audit decision (2026-09-05)
+
+The proposal is internally sound only when implementation and release are treated as separate gates. Schema, transaction builders, position reads, Account/Earn UI, and the post-claim route may be implemented now behind a fail-closed manifest. The product must not expose a Mainnet deposit or redeem transaction until the anonymizer is deployed, independently reviewed, exercised through Ready, and backed by recorded deposit/redeem evidence.
+
+| Gate | Audit result | Evidence / consequence |
+| --- | --- | --- |
+| Wotta SDK pin | Pass | Web and wallet-smoke use `@starkware-libs/starknet-privacy-sdk` `PRIVACY-0.14.3-RC.2`. |
+| Exact anonymizer source | Pinned | `PRIVACY-0.14.3-RC.2`, commit `9bfeb8dd35565a2915a0617dff3f649bd5bb891a`. |
+| Reproducible RC.2 Sierra class hash | Pass | Release build with Scarb 2.17.0 reproduced `0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f`. Record the CASM hash during declaration as well. |
+| Published compatibility hash | Not usable for RC.2 | The compatibility matrix pins the Vesu anonymizer contract to `PRIVACY-0.14.3-RC.0`, class hash `0x3751128dc3ebd36215f982766f14aaca8f78793e4b0f42a73e49372a8e24aae`. RC.2 changed redemption from asset-based `withdraw` to share-based `redeem`; do not copy the RC.0 hash into the RC.2 deployment row. |
+| Prime native-USDC tuple | Pass at audit time | SN_MAIN RPC returned the pinned vToken from `factory.v_token_for_asset`; vToken `asset`, `pool_contract`, and decimals matched; Vesu API reported the exact market as Prime and non-deprecated. |
+| Observed Mainnet class hashes | Pinned for drift checks | Factory `0x5041cc424410e1a63e4f3ef7d65ab3115f19eabb2d45418e7ac245df011d994`; pool `0x317ce57b2de4a0c482f0eed58a635d100ac5b4801b38251607dcfa35a4128`; vToken `0x41b16e0ca0565a58d1379ffc3c7eab7459b382ba8f8208b3b87d18d2aed4f78`; USDC `0x78a357382d29a07ab7e32c5ce3ffae20021abee67c353b8885737b1d643eac9`; privacy pool `0x67dddd89d80fedadc06b6f160798f94800a4a70164e5a24301cd0d6076b554d`. |
+| Exchange-rate read | Pass | `convert_to_assets(1e18)` returned `1,014,500` USDC base units at the audit read, proving shares must be handled at 18 decimals and underlying at 6. |
+| Vesu API browser access | Pass at audit time | `/markets` returned `Access-Control-Allow-Origin: *`; it remains display-only and non-authoritative. |
+| Privacy audit coverage | Blocked | The published OpenZeppelin scope lists `packages/privacy/src` only; it does not cover `packages/vesu_lending_anonymizer`. Independent review remains mandatory. |
+| Fork + Ready vUSDC discovery/spend | Blocked | No recorded proof yet for the exact Wotta Mainnet action shape and Ready Wallet API 0.10.3. |
+| Anonymizer declaration/deployment/smoke | Blocked | No Mainnet address or transaction evidence exists. `vesuEarn.status` must remain `pending`. |
+
+Locked product decisions after audit:
+
+- Deploy the exact upstream stateless RC.2 anonymizer; no Wotta wrapper in v1.
+- Mainnet only. Sepolia may explain that Earn is unavailable but must never construct a Vesu write or show the post-claim Earn prompt.
+- Deposit allowlist is exactly 0.1 and 1 USDC and must intersect the wallet-managed privacy allowlist.
+- `verified` enables deposit and redeem; `withdraw_only` disables deposit while preserving redeem; `pending` disables all writes.
+- Vesu API is browser/display-only. No rewards UI in v1.
+- The post-claim prompt opens only when the runtime `canDeposit` gate passes; accepting only routes to `/account?tab=earn`.
+- P&L is a local, device-bound estimate from confirmed transactions only. Missing local basis renders current value without a fake zero return.
 
 ## 1. Outcome
 
@@ -46,7 +74,7 @@ The dialog must not auto-deposit, auto-route, or imply guaranteed yield. The Ves
 - Mainnet native USDC is already pinned as `0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb`.
 - Mainnet private actions are currently amount-allowlisted to 0.1, 1, 10, 50, and 100 USDC. Keep the first Vesu release inside a reviewed allowlist rather than adding arbitrary amounts immediately.
 - The README and brand copy already promise “Earn on Vesu”, but there is no Vesu transaction implementation or Earn tab.
-- Current Mainnet E2E tests intentionally block Claim because the Mainnet claim route is not yet admitted. Therefore, the post-claim prompt must be feature/network gated; the working Sepolia claim flow must not send users into a non-working Mainnet-only Earn action.
+- Mainnet Claim is admitted only through the verified, network-scoped deployment row. The post-claim prompt remains independently gated by `vesuEarn.status === "verified"`; a working claim must never imply that Earn is admitted.
 
 ### Vesu V2 and the selected market
 
@@ -90,7 +118,7 @@ The upstream `VesuLendingAnonymizer` is called by the privacy pool through `priv
 - approves the calling privacy pool to collect that output; and
 - returns one `OpenNoteDeposit(note_id, out_token, out_amount)`.
 
-The upstream compatibility table lists `0x3751128dc3ebd36215f982766f14aaca8f78793e4b0f42a73e49372a8e24aae` as a **class hash**, not a deployed anonymizer address. A Mainnet RPC check on 2026-09-05 returned “class hash not found”, so implementation includes declaration and deployment; it must not paste that value into runtime config as a contract address.
+The upstream compatibility table lists `0x3751128dc3ebd36215f982766f14aaca8f78793e4b0f42a73e49372a8e24aae` as the **RC.0 class hash**, not a deployed anonymizer address and not the RC.2 artifact Wotta uses. RC.2 commit `9bfeb8dd35565a2915a0617dff3f649bd5bb891a` reproducibly builds Sierra class hash `0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f`. Implementation includes RC.2 declaration and deployment and must never paste either class hash into the runtime address field.
 
 The anonymizer calldata serializes its `u256 amount` as low/high felts:
 
@@ -161,11 +189,11 @@ This flow preserves the proceeds as a private note; it does not make the Vesu in
 
 ## 5. Deployment manifest and fail-closed admission
 
-Add a `vesuEarn` object to `deployments/mainnet.json` only after verification:
+Seed a `vesuEarn` object in `deployments/mainnet.json` as `pending` so every consumer has one typed, fail-closed source of truth. Deployment scripts fill the anonymizer address/receipt fields, and only the evidence-backed admission step may change status to `verified`:
 
 ```json
 {
-  "status": "verified",
+  "status": "pending",
   "network": "SN_MAIN",
   "protocolVersion": "V2",
   "marketSource": "Vesu Prime native-USDC vToken",
@@ -178,8 +206,9 @@ Add a `vesuEarn` object to `deployments/mainnet.json` only after verification:
   "vTokenAddress": "0x00387...4e65",
   "vTokenClassHash": "<observed and pinned>",
   "vTokenDecimals": 18,
-  "anonymizerAddress": "<deployed address>",
-  "anonymizerClassHash": "<declared class hash>",
+  "anonymizerAddress": "UNDEPLOYED",
+  "anonymizerClassHash": "<reproduced Sierra class hash>",
+  "anonymizerCompiledClassHash": "PENDING",
   "privacyPoolAddress": "0x040337...812a",
   "allowedDepositAmounts": ["100000", "1000000"],
   "verifiedAtBlock": "<block>",
@@ -202,7 +231,7 @@ Extend deployment verification/preflight to fail unless all of these hold onchai
 - a simulated Ready action targets only the pinned privacy pool; and
 - successful tiny deposit plus redeem transaction hashes are captured in evidence.
 
-Runtime must fail closed if `vesuEarn.status !== "verified"`. The Account tab may explain unavailability, but must not mount a write action.
+Runtime deposit must fail closed unless `vesuEarn.status === "verified"`. Runtime redeem is allowed only for `verified` or `withdraw_only`, with a live deployed anonymizer and a positive private vUSDC balance. The Account tab may explain a pending state and perform safe reads, but must not offer a write action.
 
 ## 6. Frontend implementation
 
@@ -410,13 +439,17 @@ Risks users must be told about:
 - No server/database log contains private USDC/vUSDC balances or a claim-to-earn correlation record.
 - Mainnet enablement has reproducible anonymizer artifacts, an independent review result, onchain verification, and successful deposit/redeem evidence.
 
-## 12. Open decisions before implementation
+## 12. Resolved decisions and remaining blockers
 
-1. **Anonymizer ownership:** deploy the exact upstream stateless contract, or maintain a Wotta wrapper that hardcodes the approved USDC/vUSDC tuple. A tuple-restricted wrapper reduces misuse surface but creates Wotta-maintained contract scope. Security review should choose.
-2. **Sepolia demo:** omit Earn writes on Sepolia (recommended) or deploy a clearly labeled, non-yield-bearing Vesu test fixture for end-to-end UI demonstrations.
-3. **Deposit denominations:** beta with 0.1/1 USDC (recommended) or enable every existing private-action denomination after evidence.
-4. **Prompt eligibility timing:** wire now behind `canEarn`, then activate when Mainnet Claim is admitted (recommended), rather than showing a dead-end prompt on successful Sepolia claims.
-5. **Rewards:** exclude until private custody and claimability are proven (recommended).
+The five former product decisions are resolved by the locked choices in section 0: exact upstream RC.2 contract, no Sepolia writes, 0.1/1-USDC beta, prompt only after `canDeposit`, and no rewards.
+
+Remaining blockers are evidence, not product ambiguity:
+
+1. independent review of the exact RC.2 anonymizer source and compiled artifacts;
+2. fork proof against the exact Wotta action shape and pinned deployed Vesu classes;
+3. Ready 0.10.3 proof for private vUSDC creation, discovery, and spend;
+4. Mainnet declaration/deployment with Sierra/CASM and receipt evidence; and
+5. a 0.1-USDC deposit/redeem smoke before changing `vesuEarn.status` from `pending`.
 
 ## 13. Sources
 

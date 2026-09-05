@@ -1,4 +1,4 @@
-export const LANDING_HEADLINE = ["Send from anywhere.", "Settle private."] as const;
+export const LANDING_HEADLINE = ["Send from anywhere.", "Settle privately."] as const;
 
 export const LANDING_SUBHEAD =
   "Pay from any chain you hold. They claim private USDC on Starknet — then earn on Vesu.";

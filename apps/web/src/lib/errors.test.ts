@@ -40,6 +40,12 @@ Version: viem@2.55.10`;
     expect(userFacingError(new Error("nonce"))).toBe(
       "Private session is syncing — try again",
     );
+    expect(userFacingError(new Error("vesu_earn_pending"))).toBe(
+      "Vesu Earn is still being verified — no transaction was requested",
+    );
+    expect(userFacingError(new Error("vesu_runtime_mismatch"))).toContain(
+      "earning is paused",
+    );
     expect(
       userFacingError(
         new Error(

@@ -20,7 +20,7 @@ import {
 
 describe("brand-copy", () => {
   it("locks pipeline landing copy", () => {
-    expect(LANDING_HEADLINE).toEqual(["Send from anywhere.", "Settle private."]);
+    expect(LANDING_HEADLINE).toEqual(["Send from anywhere.", "Settle privately."]);
     expect(LANDING_SUBHEAD).toContain("private USDC");
     expect(LANDING_SUBHEAD).toContain("Vesu");
     expect(LANDING_INBOX_PROMPT).toBe("Getting paid? Open your inbox.");

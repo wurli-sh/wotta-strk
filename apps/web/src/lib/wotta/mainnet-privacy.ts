@@ -154,11 +154,19 @@ export async function readMainnetPrivateBalance(
   account: WalletAccountV6,
   options?: { timeoutMs?: number },
 ): Promise<bigint> {
-  const config = mainnetPrivacyConfig();
+  return readMainnetPrivateTokenBalance(account, mainnetPrivacyConfig().usdc, options);
+}
+
+export async function readMainnetPrivateTokenBalance(
+  account: WalletAccountV6,
+  token: string,
+  options?: { timeoutMs?: number },
+): Promise<bigint> {
+  if (!/^0x[0-9a-f]+$/i.test(token)) throw new Error("invalid_private_token");
   let entries;
   try {
     entries = await withBalanceReadTimeout(
-      account.strk20Balances([config.usdc]),
+      account.strk20Balances([token]),
       options?.timeoutMs ?? READY_BALANCE_TIMEOUT_MS,
     );
   } catch (error) {
@@ -167,7 +175,7 @@ export async function readMainnetPrivateBalance(
     if (notRegistered(error)) return 0n;
     throw error;
   }
-  const entry = entries.find((item) => sameFelt(String(item.token), config.usdc));
+  const entry = entries.find((item) => sameFelt(String(item.token), token));
   return entry ? BigInt(String(entry.balance)) : 0n;
 }
 
@@ -191,7 +199,7 @@ export async function readMainnetPublicStrkBalance(account: WalletAccountV6): Pr
   return BigInt(values[0] ?? "0") + (BigInt(values[1] ?? "0") << 128n);
 }
 
-async function submitMainnetPrivacyActions(
+export async function submitMainnetStrk20Actions(
   account: WalletAccountV6,
   actions: STRK20_ACTION[],
   signal?: AbortSignal,
@@ -230,6 +238,8 @@ async function submitMainnetPrivacyActions(
   signal?.throwIfAborted();
   return String(result.transaction_hash);
 }
+
+const submitMainnetPrivacyActions = submitMainnetStrk20Actions;
 
 export async function submitMainnetPrivacyAction(
   account: WalletAccountV6,

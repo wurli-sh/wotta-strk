@@ -70,6 +70,12 @@ const APP_MESSAGES: Record<string, string> = {
   challenge_invalid: "Wallet binding expired — close the modal and try again",
   ready_pool_mismatch: "Ready’s live private pool does not match Wotta’s verified pool",
   mainnet_pool_class_mismatch: "The configured live private pool failed verification",
+  vesu_earn_pending: "Vesu Earn is still being verified — no transaction was requested",
+  vesu_runtime_mismatch: "Vesu’s live contracts no longer match Wotta’s verified configuration — earning is paused",
+  vesu_manifest_mismatch: "Vesu Earn configuration is incomplete or changed — earning is paused",
+  vesu_market_unavailable: "Live Vesu market stats are unavailable — try again later",
+  unsupported_vesu_deposit_amount: "Enter exactly 0.1 or 1 USDC for the Mainnet beta",
+  invalid_vesu_share_amount: "Refresh your private vUSDC balance and try again",
   mainnet_rpc_not_configured: "Mainnet Starknet RPC is not configured on the API",
   private_identity_not_registered:
     "Open Ready → gear → your account → Enable private tokens, then reconnect Wotta",

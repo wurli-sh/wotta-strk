@@ -102,6 +102,34 @@ export const walletManagedPrivacyManifestSchema = z.object({
   verificationNotes: z.string().min(1),
 }).strict();
 
+export const vesuEarnManifestSchema = z.object({
+  status: z.enum(["pending", "verified", "withdraw_only"]),
+  network: z.literal("SN_MAIN"),
+  protocolVersion: z.literal("V2"),
+  marketSource: z.string().min(1),
+  marketPageUrl: z.string().url().startsWith("https://vesu.xyz/"),
+  poolAddress: feltSchema,
+  poolClassHash: optionalHashSchema,
+  factoryAddress: feltSchema,
+  factoryClassHash: optionalHashSchema,
+  underlyingAddress: feltSchema,
+  underlyingDecimals: z.literal(6),
+  vTokenAddress: feltSchema,
+  vTokenClassHash: optionalHashSchema,
+  vTokenDecimals: z.literal(18),
+  anonymizerAddress: optionalAddressSchema,
+  anonymizerClassHash: optionalHashSchema,
+  anonymizerCompiledClassHash: optionalHashSchema,
+  anonymizerDeclareTxHash: txHashSchema,
+  anonymizerDeployTxHash: txHashSchema,
+  anonymizerDeclaredBlock: optionalBlockSchema,
+  anonymizerDeployedBlock: optionalBlockSchema,
+  privacyPoolAddress: feltSchema,
+  allowedDepositAmounts: z.tuple([z.literal("100000"), z.literal("1000000")]),
+  verifiedAtBlock: optionalBlockSchema,
+  verificationNotes: z.string().min(1),
+}).strict();
+
 export const deploymentAuthoritySchema = z.object({
   /** The on-chain owner address used in the router constructor. Must not be "PENDING" before deployment. */
   owner: z.string().min(1).default("PENDING"),
@@ -121,6 +149,7 @@ export const deploymentManifestSchema = z.object({
   strk20ClassHash: optionalHashSchema.default("UNKNOWN"),
   directPrivacy: directPrivacyManifestSchema.optional(),
   walletManagedPrivacy: walletManagedPrivacyManifestSchema.optional(),
+  vesuEarn: vesuEarnManifestSchema.optional(),
   deployer: deploymentActorSchema.default({ address: "UNKNOWN", keySource: "env:STARKNET_DEPLOYER_PRIVATE_KEY" }),
   tooling: deploymentToolingSchema.default({
     starknetJs: STARKNET_JS_VERSION,
@@ -150,6 +179,27 @@ export const deploymentManifestSchema = z.object({
     if (BigInt(manifest.walletManagedPrivacy.poolAddress) !== BigInt(manifest.strk20Pool)) context.addIssue({ code: z.ZodIssueCode.custom, message: "wallet-managed pool must match strk20Pool" });
     if (BigInt(manifest.walletManagedPrivacy.poolClassHash) !== BigInt(manifest.strk20ClassHash)) context.addIssue({ code: z.ZodIssueCode.custom, message: "wallet-managed class must match strk20ClassHash" });
     if (BigInt(manifest.walletManagedPrivacy.usdc) !== BigInt(manifest.usdc)) context.addIssue({ code: z.ZodIssueCode.custom, message: "wallet-managed USDC must match manifest USDC" });
+  }
+  if (manifest.vesuEarn) {
+    const earn = manifest.vesuEarn;
+    if (manifest.network !== "mainnet" || manifest.chainId !== "SN_MAIN") {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Vesu Earn is mainnet-only" });
+    }
+    if (BigInt(earn.privacyPoolAddress) !== BigInt(manifest.strk20Pool)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Vesu Earn privacy pool must match strk20Pool" });
+    }
+    if (BigInt(earn.underlyingAddress) !== BigInt(manifest.usdc)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Vesu Earn underlying must match manifest USDC" });
+    }
+    const liveAddress = /^0x[0-9a-fA-F]+$/.test(earn.anonymizerAddress);
+    const liveClassHash = /^0x[0-9a-fA-F]+$/.test(earn.anonymizerClassHash);
+    const liveCompiledClassHash = /^0x[0-9a-fA-F]+$/.test(earn.anonymizerCompiledClassHash);
+    if (earn.status === "verified" && (!liveAddress || !liveClassHash || !liveCompiledClassHash)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "verified Vesu Earn requires deployed anonymizer hashes" });
+    }
+    if (earn.status === "withdraw_only" && !liveAddress) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "withdraw-only Vesu Earn requires a deployed anonymizer" });
+    }
   }
 });
 

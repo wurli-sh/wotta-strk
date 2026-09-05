@@ -49,6 +49,14 @@ Wotta is not a mixer and must not be marketed as one.
 - A crash between `execute` and persisting `destination_tx_hash` can retry; on-chain `INTENT_USED` prevents double mint.
 - Quote JWTs last 120 seconds and cannot be re-issued on the same intent (`signQuote` only from `draft`). Cancel is allowed only before a source tx hash exists.
 
+## Vesu Earn boundary
+
+- Earn is Mainnet-only and admitted exclusively by the `vesuEarn` row in `deployments/mainnet.json`.
+- `pending` disables all Vesu writes. `verified` permits allowlisted deposits and withdrawals. `withdraw_only` disables new deposits while preserving withdrawal.
+- Transaction addresses come only from the deployment manifest. `api.vesu.xyz` supplies display data and cannot select a write target.
+- Private vUSDC shares and local cost basis stay in the browser. Wotta does not send private balances or claim-to-earn correlation records to its API.
+- The exact RC.2 lending anonymizer is not covered by the published OpenZeppelin privacy-contract audit. Independent review, Ready vUSDC discovery/spend proof, Mainnet deployment, and deposit/redeem smoke evidence are required before changing the manifest from `pending`.
+
 ## Incident and disclosure
 
 Do not invent a vendor. Record a security contact here before treating this file as a launch artifact.

@@ -22,6 +22,8 @@ Pinned toolchain for Phase 1. Update this file whenever a protocol pin changes.
 | OpenZeppelin Cairo | 3.0.0 | Wotta implementation plan section 3 |
 | starknet-privacy tag | PRIVACY-0.14.3-RC.0 (`fe52334...`) | Wotta implementation plan section 3 |
 | direct Privacy SDK smoke | `0.14.3-rc.2` (vendored tarball) | Wotta Sepolia direct privacy row; see `docs/third-party-privacy-sdk.md` |
+| Vesu lending anonymizer source | `PRIVACY-0.14.3-RC.2` (`9bfeb8dd35565a2915a0617dff3f649bd5bb891a`) | Exact stateless Earn integration source; reproduced Sierra class hash `0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f` |
+| Vesu V2 audit baselines | `7a848ce3196d62cae96cbf84fd7f80ee433fe203`, `dd868d54f44c3207047301145a1a2767e63a64a5` | Commits named by the published Vesu V2 audit reports; compare deployed classes before admission |
 
 Record live wallet version, STRK20 pool address/class hash, and smoke outcomes here after Task 1A / Task 2.
 

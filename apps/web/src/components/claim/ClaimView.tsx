@@ -4,13 +4,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { CheckCircle2, ExternalLink, Inbox, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { NoteVisaCard } from "@/components/NoteVisaCard";
+import { EarnAfterClaimDialog } from "@/components/claim/EarnAfterClaimDialog";
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { Button } from "@/components/ui/Button";
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti";
 import { NoteCardSkeleton } from "@/components/ui/Skeleton";
 import { TextShimmer } from "@/components/ui/TextShimmer";
 import { fireClaimConfetti } from "@/features/claim/celebrateClaim";
-import { getAccessToken } from "@/lib/auth";
+import { fetchMe, getAccessToken } from "@/lib/auth";
 import { userFacingError } from "@/lib/errors";
 import { createPrivacyClient } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
@@ -25,6 +26,7 @@ import { submitMainnetEscrowClaim } from "@/lib/wotta/mainnet-privacy";
 import { TOAST } from "@/lib/brand-copy";
 import { formatUsdc } from "@/lib/format/amount";
 import { isMissingInboxKeyError, isWrongInboxKeyError } from "@/lib/wotta/inbox-note-access";
+import { canDeposit } from "@/lib/vesu/config";
 
 type ClaimRow = {
   noteId: string;
@@ -85,6 +87,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
   const [phase, setPhase] = useState<ClaimPhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [earnPromptOpen, setEarnPromptOpen] = useState(false);
 
   const loadFromVault = useCallback(async () => {
     if (!vault?.state.inboxSecretKey) {
@@ -208,6 +211,24 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       fireClaimConfetti(confettiRef.current);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
+      }
+      if (mode === "mainnet") {
+        // Earn eligibility is a non-critical follow-up. A failed account refresh
+        // must never turn a confirmed claim back into an error state.
+        try {
+          const token = await getAccessToken();
+          const me = token ? await fetchMe(token, mode) : null;
+          if (me?.ok && canDeposit({
+            mode,
+            readyAddress: connected.address,
+            linkedAddress: me.data.wallet?.address,
+            amount: claim.escrow.denomination,
+          })) {
+            setEarnPromptOpen(true);
+          }
+        } catch {
+          setEarnPromptOpen(false);
+        }
       }
     } catch (caught) {
       const message = userFacingError(caught, "Couldn't claim this payment");
@@ -352,6 +373,9 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
         manualstart
       />
       {body}
+      {mode === "mainnet" ? (
+        <EarnAfterClaimDialog open={earnPromptOpen} onClose={() => setEarnPromptOpen(false)} />
+      ) : null}
     </div>
   );
 }

@@ -168,4 +168,13 @@ test("deployment manifest accepts the Ready-managed mainnet privacy route", () =
   const parsed = deploymentManifestSchema.parse(manifest);
   assert.equal(parsed.walletManagedPrivacy?.status, "verified");
   assert.equal(parsed.walletManagedPrivacy?.actionAmount, "100000");
+  assert.equal(parsed.vesuEarn?.status, "pending");
+  assert.equal(parsed.vesuEarn?.anonymizerAddress, "UNDEPLOYED");
+  assert.throws(
+    () => deploymentManifestSchema.parse({
+      ...manifest,
+      vesuEarn: { ...manifest.vesuEarn, status: "verified" },
+    }),
+    /verified Vesu Earn requires deployed anonymizer hashes/,
+  );
 });

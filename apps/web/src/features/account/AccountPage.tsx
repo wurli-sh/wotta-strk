@@ -8,6 +8,7 @@ import { PageShell } from "@/components/PageShell";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { HandlesPanel } from "@/components/account/HandlesPanel";
 import { WalletAndBalancePanel } from "@/components/account/WalletAndBalancePanel";
+import { EarnPanel } from "@/components/account/EarnPanel";
 import type { MeResponse } from "@/lib/api/client";
 import { fetchMe, mergeMeResponse, notifySessionChanged, refreshSupabaseSession, syncWottaSession } from "@/lib/auth";
 import { chainIdForMode } from "@/lib/network-mode";
@@ -22,15 +23,17 @@ import {
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { PAGE_SUBTITLES, TOAST } from "@/lib/brand-copy";
 
-type AccountTab = "handles" | "wallet";
+export type AccountTab = "handles" | "wallet" | "earn";
 
 const tabs = [
   { value: "handles", label: "Handles" },
   { value: "wallet", label: "Wallet" },
+  { value: "earn", label: "Earn" },
 ] as const;
 
-function parseTab(value: string | null): AccountTab {
+export function parseTab(value: string | null): AccountTab {
   if (value === "wallet") return "wallet";
+  if (value === "earn") return "earn";
   return "handles";
 }
 
@@ -174,7 +177,7 @@ function AccountContent() {
               items={tabs}
             />
           </div>
-          {tab === "wallet" ? <WalletPanelSkeleton /> : <HandlesPanelSkeleton />}
+          {tab === "handles" ? <HandlesPanelSkeleton /> : <WalletPanelSkeleton />}
         </>
       ) : null}
 
@@ -197,7 +200,7 @@ function AccountContent() {
                   void refreshAccount({ hold: true });
                 }}
               />
-            ) : (
+            ) : tab === "wallet" ? (
               <WalletAndBalancePanel
                 me={me}
                 autoOpenConnect={autoOpenWallet}
@@ -229,6 +232,8 @@ function AccountContent() {
                   void refreshAccount({ hold: true });
                 }}
               />
+            ) : (
+              <EarnPanel me={me} />
             )}
         </>
       ) : null}
