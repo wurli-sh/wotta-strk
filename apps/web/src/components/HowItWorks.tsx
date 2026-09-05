@@ -40,8 +40,7 @@ function VesuEarnPreview() {
       </div>
 
       <div className="mt-5 rounded-2xl border border-border/70 bg-muted/35 p-4">
-        <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground">
-          <span>Illustrative growth</span>
+        <div className="flex items-center justify-end gap-4 text-xs text-muted-foreground">
           <span>Yield accrues in vUSDC</span>
         </div>
         <svg

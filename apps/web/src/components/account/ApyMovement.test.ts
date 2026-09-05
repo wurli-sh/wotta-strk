@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateApyMovement } from "./ApyMovement";
+import { calculateApyMovement, formatApySignificant } from "./ApyMovement";
 
 describe("calculateApyMovement", () => {
   it("reports an APY increase in points and relative percent", () => {
@@ -16,5 +16,14 @@ describe("calculateApyMovement", () => {
       direction: "down",
       percentagePoints: -0.25,
     });
+  });
+});
+
+describe("formatApySignificant", () => {
+  it("keeps four significant figures for APY and movement amounts", () => {
+    expect(formatApySignificant(3.5124)).toBe("3.512");
+    expect(formatApySignificant(0.2541)).toBe("0.2541");
+    expect(formatApySignificant(0.25)).toBe("0.2500");
+    expect(formatApySignificant(0)).toBe("0.000");
   });
 });

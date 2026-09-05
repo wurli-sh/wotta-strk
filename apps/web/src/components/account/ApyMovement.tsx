@@ -26,8 +26,15 @@ export function calculateApyMovement(
   };
 }
 
-function signed(value: number, digits: number): string {
-  return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(digits)}`;
+/** Format a rate with four significant figures for Earn APY readouts. */
+export function formatApySignificant(value: number, digits = 4): string {
+  if (!Number.isFinite(value)) return "—";
+  return value.toPrecision(digits);
+}
+
+function signedSignificant(value: number, digits = 4): string {
+  const body = formatApySignificant(Math.abs(value), digits);
+  return `${value >= 0 ? "+" : "−"}${body}`;
 }
 
 export function ApyMovement({
@@ -74,16 +81,16 @@ export function ApyMovement({
   const relative =
     movement.relativePercent === null
       ? ""
-      : ` (${signed(movement.relativePercent, 2)}%)`;
+      : ` (${signedSignificant(movement.relativePercent)})`;
 
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
       <span
         className={`inline-flex items-center gap-1 font-mono font-semibold tabular-nums ${color}`}
-        aria-label={`Supply APY is ${movement.direction} ${Math.abs(movement.percentagePoints).toFixed(2)} percentage points since the previous market update`}
+        aria-label={`Supply APY is ${movement.direction} ${formatApySignificant(Math.abs(movement.percentagePoints))} percentage points since the previous market update`}
       >
         <Icon className="size-3.5" aria-hidden />
-        {signed(movement.percentagePoints, 2)} pp{relative}
+        {signedSignificant(movement.percentagePoints)} pp{relative}
       </span>
       <span className="text-muted-foreground">
         Since prior update{utilizationLabel ? ` · ${utilizationLabel}` : ""}

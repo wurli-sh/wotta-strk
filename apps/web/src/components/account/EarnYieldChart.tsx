@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
-import { ApyMovement } from "./ApyMovement";
+import { ApyMovement, formatApySignificant } from "./ApyMovement";
 
 type Period = "1m" | "6m" | "1y";
 
@@ -67,7 +67,7 @@ export function EarnYieldChart({
           <div>
             <p className="text-xs text-muted-foreground">Supply APY</p>
             <p className="mt-1 font-mono text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-              {apy === null ? "—" : `${apy.toFixed(2)}%`}
+              {apy === null ? "—" : `${formatApySignificant(apy)}%`}
             </p>
             <ApyMovement
               apy={apy}
@@ -147,7 +147,7 @@ export function EarnYieldChart({
         <div>
           <p className="text-xs text-muted-foreground">Supply APY</p>
           <p className="mt-1 font-mono text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-            {apy === null ? "—" : `${apy.toFixed(2)}%`}
+            {apy === null ? "—" : `${formatApySignificant(apy)}%`}
           </p>
           <ApyMovement
             apy={apy}
@@ -176,7 +176,7 @@ export function EarnYieldChart({
         <div
           className="mt-3 text-brand"
           role="img"
-          aria-label={`Projected balance after ${selected.label}: ${end.toFixed(2)} USDC at a variable ${apy?.toFixed(2)} percent APY`}
+          aria-label={`Projected balance after ${selected.label}: ${end.toFixed(2)} USDC at a variable ${apy === null ? "—" : formatApySignificant(apy)} percent APY`}
         >
           <svg
             viewBox="0 0 600 176"
