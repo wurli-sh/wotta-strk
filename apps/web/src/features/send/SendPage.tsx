@@ -346,7 +346,19 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   const formLocked = busy || stage === "complete";
   const selfSettleUrl = pendingSourceTx ? irisMessageUrl(source, pendingSourceTx, mode) : null;
 
+  function clearPendingSourceState() {
+    setPendingSourceTx(null);
+    setShowSelfSettle(false);
+    setKeeperStartedAt(null);
+  }
+
   useEffect(() => () => activeSendOperation.current?.cancel(), []);
+
+  // Drop stale burn/self-settle UI when the user changes network or pay-from rail.
+  useEffect(() => {
+    clearPendingSourceState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only reset on mode/source change
+  }, [mode, source]);
 
   useEffect(() => {
     const keeperStage = stage !== "complete" && (Boolean(pendingSourceTx) || stage === "confirming" || stage === "attesting" || stage === "settling");
@@ -355,8 +367,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
       return;
     }
     if (stage === "complete") {
-      setShowSelfSettle(false);
-      setKeeperStartedAt(null);
+      clearPendingSourceState();
       return;
     }
     // Keep self-settle visible after timeout/error while a burn hash is known.
@@ -688,7 +699,11 @@ function SendForm({ mode }: { mode: NetworkMode }) {
       setStage("complete");
       toast.success(SETTLED_PRIVATELY);
     } catch (error) {
-      if (operation.signal.aborted) return;
+      if (operation.signal.aborted) {
+        clearPendingSourceState();
+        setStage("idle");
+        return;
+      }
       const message = userFacingError(error, "Couldn’t send");
       if (/sign in/i.test(message)) setAuthOpen(true);
       if (/settlement is still finishing|continues in the background|still pending/i.test(message)) {
@@ -718,7 +733,16 @@ function SendForm({ mode }: { mode: NetworkMode }) {
             : SUCCESS_NOTE_PIPELINE}
           footer={
             <div className="space-y-2">
-              <MotionPillButton className="w-full" onClick={() => { setStage("idle"); setDelivery(null); setSuccessTx(null); setSuccessRoute(null); }}>
+              <MotionPillButton
+                className="w-full"
+                onClick={() => {
+                  clearPendingSourceState();
+                  setStage("idle");
+                  setDelivery(null);
+                  setSuccessTx(null);
+                  setSuccessRoute(null);
+                }}
+              >
                 Send another
               </MotionPillButton>
               {successTx ? (
@@ -862,7 +886,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                     <><Send className="size-4" aria-hidden />{stageLabel("idle", denom)}</>
                   )}
                 </MotionPillButton>
-                {(showSelfSettle || !busy) && pendingSourceTx ? (
+                {pendingSourceTx && (showSelfSettle || (stage === "idle" && !busy)) ? (
                   <p className="mt-3 text-xs leading-5 text-muted-foreground" role="status">
                     Taking longer than expected. Your source transaction was submitted and cannot be cancelled here.
                     Closing this page does not cancel it.{" "}
@@ -888,6 +912,14 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                         using your Circle message.
                       </>
                     ) : null}
+                    {" "}
+                    <button
+                      type="button"
+                      className="font-medium text-foreground underline underline-offset-4"
+                      onClick={clearPendingSourceState}
+                    >
+                      Dismiss
+                    </button>
                   </p>
                 ) : null}
                 {busy && mainnet && !pendingSourceTx ? (
