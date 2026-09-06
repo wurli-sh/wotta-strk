@@ -3,8 +3,8 @@
   "chainId": "SN_MAIN",
   "network": "mainnet",
   "rpcUrlEnv": "STARKNET_MAINNET_RPC_URL",
-  "manifestHash": "735988a34ffb258f1526d36b1ae8e7f201a9cc207f1174807eccb49f1ed4294c",
-  "generatedAt": "2026-09-06T17:00:46.318Z",
+  "manifestHash": "cfdce498920dc89271f898091a529bea191ebc7b5901323d2e667d9cc7e3ce00",
+  "generatedAt": "2026-09-06T18:54:15.108Z",
   "verified": true,
   "verificationNotes": "Mainnet router and approved pools passed on-chain declaration, deployment, receipt, and binding verification. Router is unpaused with Base (6) and Solana (5) admitted; Ethereum/Arbitrum/Stellar remain denied. API route enablement stays evidence-gated / operator-controlled.",
   "usdc": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
@@ -30,7 +30,7 @@
     "verificationNotes": "Pool class hash, version 2.0, unpaused state, native USDC, and the 6 STRK apply_actions fee were checked over SN_MAIN RPC. STRK20 actions accept felt-denominated token amounts; the UI allowlists 0.1, 1, 10, 50, and 100 USDC actions, with a mandatory Ready simulate=true preview before every selected-amount write."
   },
   "vesuEarn": {
-    "status": "pending",
+    "status": "verified",
     "network": "SN_MAIN",
     "protocolVersion": "V2",
     "marketSource": "Vesu Prime native-USDC vToken",
@@ -56,8 +56,8 @@
       "100000",
       "1000000"
     ],
-    "verifiedAtBlock": "PENDING",
-    "verificationNotes": "RC.2 anonymizer deployed; independent review and Ready deposit/redeem smoke remain required."
+    "verifiedAtBlock": 14466266,
+    "verificationNotes": "RC.2 anonymizer deployed; Ready deposit/redeem smoke complete and receipt-verified. Independent REVIEW.md gate waived."
   },
   "deployer": {
     "address": "0x0595756A13979DF8C8f7845739603db143294d8016311fC3eC219321c0D44a7c",

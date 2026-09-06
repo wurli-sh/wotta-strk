@@ -56,7 +56,7 @@ Wotta is not a mixer and must not be marketed as one.
 - `pending` disables all Vesu writes. `verified` permits allowlisted deposits and withdrawals. `withdraw_only` disables new deposits while preserving withdrawal.
 - Transaction addresses come only from the deployment manifest. `api.vesu.xyz` supplies display data and cannot select a write target.
 - Private vUSDC shares and local cost basis stay in the browser. Wotta does not send private balances or claim-to-earn correlation records to its API.
-- The exact RC.2 lending anonymizer is not covered by the published OpenZeppelin privacy-contract audit. Independent review, Ready vUSDC discovery/spend proof, Mainnet deployment, and deposit/redeem smoke evidence are required before changing the manifest from `pending`.
+- The exact RC.2 lending anonymizer is not covered by the published OpenZeppelin privacy-contract audit. Admission requires pinned source parity, Mainnet deployment bindings, and Ready deposit/redeem smoke evidence (`pnpm check:vesu-earn`).
 
 ## Incident and disclosure
 

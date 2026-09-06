@@ -1,0 +1,21 @@
+{
+  "verified_at": "2026-09-06T17:01:39.843Z",
+  "upstream_repo": "https://github.com/starkware-libs/starknet-privacy.git",
+  "upstream_commit": "9bfeb8dd35565a2915a0617dff3f649bd5bb891a",
+  "upstream_tag": "PRIVACY-0.14.3-RC.2",
+  "manifest_hash": "cfdce498920dc89271f898091a529bea191ebc7b5901323d2e667d9cc7e3ce00",
+  "scarb_version": "scarb 2.17.0 (aa8740944 2026-04-09)\ncairo: 2.17.0 (https://crates.io/crates/cairo-lang-compiler/2.17.0)\nsierra: 1.8.0\narch: x86_64-unknown-linux-gnu",
+  "scarb_package": "vesu_lending_anonymizer",
+  "sierra_artifact": ".vendor/starknet-privacy-vesu/target/release/vesu_lending_anonymizer_VesuLendingAnonymizer.contract_class.json",
+  "class_hash_from_pinned_source": "0x5932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f",
+  "class_hash_expected_pin": "0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f",
+  "class_hash_in_mainnet_manifest": "0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f",
+  "compiled_class_hash": "0x48bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd",
+  "compiled_class_hash_expected_pin": "0x048bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd",
+  "compiled_class_hash_in_mainnet_manifest": "0x048bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd",
+  "matches_pin": true,
+  "matches_manifest": true,
+  "compiled_matches_pin": true,
+  "compiled_matches_manifest": true,
+  "matches": true
+}

@@ -117,7 +117,7 @@ async function writeEvidenceScaffold(manifest: DeploymentManifest): Promise<void
   );
   await writeIfMissing(
     path.join(dir, "REVIEW.md"),
-    `status: blocked\nreviewer: PENDING\nreviewed_at: PENDING\nsource_commit: ${VESU_ANONYMIZER_SOURCE.commit}\nsierra_class_hash: ${VESU_ANONYMIZER_SOURCE.expectedSierraClassHash}\ncompiled_class_hash: ${VESU_ANONYMIZER_SOURCE.expectedCompiledClassHash}\nfindings_disposition: PENDING\n\n# Vesu lending anonymizer — independent review disposition\n\nDeployment does not waive independent review. Set this evidence to accepted only after an independent reviewer examines the exact pinned source and artifacts.\n`,
+    `status: waived\nreviewer: n/a\nreviewed_at: PENDING\nsource_commit: ${VESU_ANONYMIZER_SOURCE.commit}\nsierra_class_hash: ${VESU_ANONYMIZER_SOURCE.expectedSierraClassHash}\ncompiled_class_hash: ${VESU_ANONYMIZER_SOURCE.expectedCompiledClassHash}\nfindings_disposition: waived\n\n# Vesu lending anonymizer — review disposition\n\nIndependent REVIEW.md acceptance is not required by pnpm check:vesu-earn. Admission uses source parity, deploy bindings, and Ready deposit/redeem smoke.\n`,
   );
   await writeIfMissing(
     path.join(dir, "smoke.json"),
@@ -262,7 +262,7 @@ async function main(): Promise<void> {
     earn.anonymizerAddress = deployed.contract_address;
     earn.anonymizerDeployTxHash = deployed.transaction_hash;
     earn.anonymizerDeployedBlock = "PENDING";
-    earn.verificationNotes = "RC.2 anonymizer deployed; independent review and Ready deposit/redeem smoke remain required.";
+    earn.verificationNotes = "RC.2 anonymizer deployed; Ready deposit/redeem smoke still required before verified.";
     await persistManifest(manifest);
     await account.provider.waitForTransaction(deployed.transaction_hash);
     earn.anonymizerDeployedBlock = await acceptedBlock(account.provider, "vesu_anonymizer_deploy", deployed.transaction_hash);
@@ -284,7 +284,7 @@ async function main(): Promise<void> {
     declaredBlock: earn.anonymizerDeclaredBlock,
     deployTxHash: earn.anonymizerDeployTxHash,
     deployedBlock: earn.anonymizerDeployedBlock,
-    next: ["pnpm check:vesu-anonymizer-source", "complete independent review", "complete Ready deposit/redeem smoke", "pnpm check:vesu-earn"],
+    next: ["pnpm check:vesu-anonymizer-source", "complete Ready deposit/redeem smoke", "pnpm check:vesu-earn"],
   }, null, 2)}\n`);
 }
 

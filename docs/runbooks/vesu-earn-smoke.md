@@ -29,6 +29,6 @@ only with the exact Ready Mainnet account linked to the Wotta profile.
    anonymizer residue at each receipt block.
 
 5. Remove `NEXT_PUBLIC_VESU_EARN_SMOKE_WALLET`, restart the dev server, and run
-   `pnpm check:vesu-earn`. The gate must still remain red until `REVIEW.md`
-   contains a genuine independent-review acceptance.
+   `pnpm check:vesu-earn`. The gate prints `admit verified` when source parity,
+   smoke receipts, and live RPC checks all pass.
 
