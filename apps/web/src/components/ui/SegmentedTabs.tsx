@@ -17,6 +17,12 @@ type Props<T extends string> = {
   layoutId: string;
   className?: string;
   itemClassName?: string;
+  /** Extra classes for the sliding active indicator. */
+  indicatorClassName?: string;
+  /** Overrides default active text/weight classes. */
+  activeClassName?: string;
+  /** Overrides default inactive + hover classes. */
+  inactiveClassName?: string;
 };
 
 export function SegmentedTabs<T extends string>({
@@ -27,6 +33,9 @@ export function SegmentedTabs<T extends string>({
   layoutId,
   className,
   itemClassName,
+  indicatorClassName,
+  activeClassName,
+  inactiveClassName,
 }: Props<T>) {
   const reduce = useReducedMotion();
 
@@ -83,8 +92,9 @@ export function SegmentedTabs<T extends string>({
                 "radius-control relative min-h-10 cursor-pointer px-5 py-2.5 text-sm capitalize outline-none transition-colors duration-100 ease-out focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 itemClassName,
                 active
-                  ? "font-semibold text-selection-foreground"
-                  : "font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ? (activeClassName ?? "font-semibold text-selection-foreground")
+                  : (inactiveClassName ??
+                      "font-medium text-muted-foreground hover:bg-muted hover:text-foreground"),
               )}
             >
               {active && (
@@ -96,7 +106,10 @@ export function SegmentedTabs<T extends string>({
                       ? { duration: 0 }
                       : { type: "spring", stiffness: 420, damping: 32 }
                   }
-                  className="radius-control absolute inset-0 border border-selection-hover bg-selection shadow-soft"
+                  className={cn(
+                    "radius-control absolute inset-0 border border-selection-hover bg-selection shadow-soft",
+                    indicatorClassName,
+                  )}
                 />
               )}
               <span className="relative z-10">{item.label}</span>
