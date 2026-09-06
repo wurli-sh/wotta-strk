@@ -345,15 +345,14 @@ export function InboxMobileRowsSkeleton({ rows = 2 }: { rows?: number }) {
   );
 }
 
-export function InboxSkeleton() {
+export function InboxBodySkeleton() {
   return (
     <div
-      className="mx-auto w-full max-w-xl space-y-6"
+      className="w-full space-y-6"
       role="status"
       aria-busy="true"
       aria-label="Loading inbox"
     >
-      <PageHeaderSkeleton titleW="w-28" subW="w-64" />
       <div className="relative">
         <div className="flex justify-center">
           <div className="inline-flex gap-1 rounded-full border border-border/80 bg-muted/60 p-1">
@@ -382,6 +381,22 @@ export function InboxSkeleton() {
         <ul className="divide-y divide-border/50 md:hidden">
           <InboxMobileRowsSkeleton rows={2} />
         </ul>
+      </div>
+    </div>
+  );
+}
+
+export function InboxSkeleton() {
+  return (
+    <div
+      className="mx-auto w-full max-w-5xl space-y-6"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading inbox"
+    >
+      <PageHeaderSkeleton titleW="w-28" subW="w-64" />
+      <div className="mt-8 text-left">
+        <InboxBodySkeleton />
       </div>
     </div>
   );
@@ -442,10 +457,38 @@ export function LandingSkeleton() {
   );
 }
 
+export function AccountBodySkeleton({
+  tab = "handles",
+}: {
+  tab?: "handles" | "wallet" | "earn";
+}) {
+  return (
+    <div
+      className="w-full text-left"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading account"
+    >
+      <div className="mb-6 flex justify-center">
+        <div className="radius-control inline-flex items-center border border-border bg-card p-1 shadow-soft">
+          <Skeleton className="radius-control h-9 w-[4.75rem]" />
+          <Skeleton className="radius-control h-9 w-[4.25rem]" />
+          <Skeleton className="radius-control h-9 w-[3.75rem]" />
+        </div>
+      </div>
+      {tab === "wallet" || tab === "earn" ? (
+        <WalletPanelSkeleton />
+      ) : (
+        <HandlesPanelSkeleton />
+      )}
+    </div>
+  );
+}
+
 export function AccountSkeleton({
   tab = "handles",
 }: {
-  tab?: "handles" | "wallet";
+  tab?: "handles" | "wallet" | "earn";
 }) {
   return (
     <div
@@ -455,18 +498,8 @@ export function AccountSkeleton({
       aria-label="Loading account"
     >
       <PageHeaderSkeleton titleW="w-32 sm:w-36" subW="w-64 sm:w-80" />
-      <div className="mt-8 text-left">
-        <div className="mb-6 flex justify-center">
-          <div className="radius-control inline-flex items-center border border-border bg-card p-1 shadow-soft">
-            <Skeleton className="radius-control h-9 w-[4.75rem]" />
-            <Skeleton className="radius-control h-9 w-[4.25rem]" />
-          </div>
-        </div>
-        {tab === "wallet" ? (
-          <WalletPanelSkeleton />
-        ) : (
-          <HandlesPanelSkeleton />
-        )}
+      <div className="mt-8">
+        <AccountBodySkeleton tab={tab} />
       </div>
     </div>
   );

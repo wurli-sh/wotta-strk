@@ -237,7 +237,7 @@ export function HandlesPanel({ me, session, loading, onLinked }: Props) {
         ) : rows.length === 0 ? (
           <>
             <p className="radius-surface-inner border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-              No identities yet. Sign in with Google, email, or X to get started.
+              No identities yet. Sign in with Google or X to get started.
             </p>
             <ul className="sr-only" data-testid="handles-list">
               <li>empty</li>

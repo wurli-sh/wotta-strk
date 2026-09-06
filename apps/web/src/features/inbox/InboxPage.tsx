@@ -9,12 +9,13 @@ import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
 import { Button } from "@/components/ui/Button";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import { UsdcIcon } from "@/components/UsdcIcon";
-import { InboxMobileRowsSkeleton, InboxTableRowsSkeleton } from "@/components/ui/Skeleton";
+import { InboxMobileRowsSkeleton, InboxTableRowsSkeleton, InboxSkeleton, InboxBodySkeleton } from "@/components/ui/Skeleton";
 import { apiFetch } from "@/lib/api/client";
 import { syncWottaSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { userFacingError } from "@/lib/errors";
 import { withMinSkeleton, SKELETON_MAX_MS } from "@/lib/skeleton-hold";
+import { usePageAuthBoot } from "@/lib/page-auth-boot";
 import { createClient } from "@/lib/supabase/client";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { WrongModeNotice } from "@/components/WrongModeNotice";
@@ -32,6 +33,7 @@ import {
 } from "@/lib/brand-copy";
 import { formatUsdc } from "@/lib/format/amount";
 import { canDecryptInboxNote } from "@/lib/wotta/inbox-note-access";
+import { inboxSecretKeys } from "@/lib/wotta/privacy-state";
 
 const SELF_SETTLE_MS = 900_000;
 
@@ -277,7 +279,8 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
   const [sent, setSent] = useState<Row[]>([]);
   const [history, setHistory] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [signedIn, setSignedIn] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const refresh = useCallback(async (hold = true) => {
     const operation = beginNetworkOperation(mode);
@@ -306,14 +309,14 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           throw new Error("inbox_network_scope_mismatch");
         }
         const noteReceivedAt = (note: ApiNote) => note.delivered_at ?? note.created_at;
-        const inboxSecret = vault?.state.inboxSecretKey;
+        const inboxSecrets = vault ? inboxSecretKeys(vault.state) : [];
         const noteRows = notesResult.notes.map((note) => {
           const onchainStatus = normalizedStatus(note.intent);
           const claimable = ["funded", "delivered", "claimable"].includes(onchainStatus);
           const settled = ["claimed", "completed", "refunded"].includes(onchainStatus);
           // Only flag wrong-device for notes that are still claimable on-chain.
           // Already-claimed notes stay in History even if this browser lost the key.
-          const openable = canDecryptInboxNote(note, inboxSecret);
+          const openable = canDecryptInboxNote(note, inboxSecrets);
           const lockedOut = !openable && claimable;
           return {
             itemId: note.id,
@@ -361,20 +364,14 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
     } finally {
       operation.finish();
       setBusy(false);
+      setHasLoaded(true);
     }
   }, [mode, vault]);
 
   useEffect(() => {
-    void (async () => {
-      const { data } = await createClient().auth.getSession();
-      setSignedIn(Boolean(data.session?.access_token));
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!signedIn || !vault) return;
+    if (!vault) return;
     void refresh(false);
-  }, [signedIn, vault, refresh]);
+  }, [vault, refresh]);
 
   async function unlockInbox() {
     try {
@@ -393,17 +390,39 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
     );
   }
 
-  if (signedIn === null || !sessionReady) {
+  const showBodySkeleton = !sessionReady || (Boolean(vault) && !hasLoaded);
+
+  if (showBodySkeleton) {
     const waiting = (
-      <TableShell
-        columns={["Amount", "Received", "Expires at", "Status", ""]}
-        loading
-        empty={false}
-        emptyMessage=""
-        mobile={<InboxMobileRowsSkeleton rows={2} />}
-      >
-        {null}
-      </TableShell>
+      <>
+        <div className="relative mb-6 flex items-center justify-center">
+          <SegmentedTabs
+            layoutId="inbox-sections"
+            ariaLabel="Inbox sections"
+            value={tab}
+            onValueChange={(value) => setTab(value as Tab)}
+            items={[{ value: "incoming", label: "Incoming" }, { value: "sent", label: "Sent" }, { value: "history", label: "History" }]}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            className="absolute right-0 top-1/2 min-h-8 -translate-y-1/2 px-2.5 py-1 text-xs"
+            disabled
+            aria-busy
+          >
+            <RefreshCw className="size-3.5 animate-spin" aria-hidden /> Refresh
+          </Button>
+        </div>
+        <TableShell
+          columns={["Amount", "Received", "Expires at", "Status", "Action"]}
+          loading
+          empty={false}
+          emptyMessage=""
+          mobile={<InboxMobileRowsSkeleton rows={2} />}
+        >
+          {null}
+        </TableShell>
+      </>
     );
     return embedded ? waiting : (
       <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="2xl">
@@ -412,7 +431,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
     );
   }
 
-  if (signedIn && !vault) {
+  if (!vault) {
     const locked = (
       <div className="flex flex-col items-center gap-4 overflow-hidden rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center shadow-card">
         <Inbox className="size-10 text-muted-foreground" aria-hidden />
@@ -440,7 +459,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
     );
   }
 
-  const loading = signedIn === null || busy;
+  const loading = busy;
   const rows = tab === "incoming" ? incoming : tab === "sent" ? sent : history;
   const counterpartyLabel = tab === "sent" ? "Source" : tab === "history" ? "From" : null;
   const timeColumnLabel = tab === "sent" ? "Sent" : "Received";
@@ -551,7 +570,6 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
                 <Button
                   size="sm"
                   disabled
-                  title="This payment used an older inbox key"
                 >
                   Claim
                 </Button>
@@ -579,7 +597,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           variant="secondary"
           size="sm"
           className="absolute right-0 top-1/2 min-h-8 -translate-y-1/2 px-2.5 py-1 text-xs"
-          disabled={busy || signedIn === null}
+          disabled={busy}
           aria-busy={busy}
           onClick={() => void refresh()}
         >
@@ -600,19 +618,13 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { routes, routesReady } = useRoutesHealth(mode, mode === "mainnet");
   const privateRoute = routes.find((route) => route.key === "starknet-private");
   const mainnetEscrowReady = privateRoute?.selectable === true;
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const { booting, signedIn } = usePageAuthBoot();
 
-  useEffect(() => {
-    let active = true;
-    void createClient().auth.getSession().then(({ data }) => {
-      if (active) setSignedIn(Boolean(data.session?.access_token));
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  if (booting) {
+    return embedded ? <InboxBodySkeleton /> : <InboxSkeleton />;
+  }
 
-  if (signedIn !== true) {
+  if (!signedIn) {
     return embedded ? null : (
       <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="2xl">
         {null}
@@ -622,15 +634,26 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   if (mode === "mainnet" && !routesReady) {
     const loading = (
-      <TableShell
-        columns={["Amount", "Received", "Expires at", "Status", ""]}
-        loading
-        empty={false}
-        emptyMessage=""
-        mobile={<InboxMobileRowsSkeleton rows={2} />}
-      >
-        {null}
-      </TableShell>
+      <>
+        <div className="relative mb-6 flex items-center justify-center">
+          <SegmentedTabs
+            layoutId="inbox-sections"
+            ariaLabel="Inbox sections"
+            value="incoming"
+            onValueChange={() => undefined}
+            items={[{ value: "incoming", label: "Incoming" }, { value: "sent", label: "Sent" }, { value: "history", label: "History" }]}
+          />
+        </div>
+        <TableShell
+          columns={["Amount", "Received", "Expires at", "Status", "Action"]}
+          loading
+          empty={false}
+          emptyMessage=""
+          mobile={<InboxMobileRowsSkeleton rows={2} />}
+        >
+          {null}
+        </TableShell>
+      </>
     );
     return embedded ? loading : (
       <PageShell title="Inbox" subtitle={CHECKING_PRIVATE_CLAIM_ROUTE} maxWidth="2xl">

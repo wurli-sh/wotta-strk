@@ -1,6 +1,9 @@
 /** Max shimmer hold when content is still loading (ms). */
 export const SKELETON_MAX_MS = 400;
 
+/** First-paint body cover for Inbox/Account before auth branching (ms). */
+export const PAGE_BOOT_MS = 500;
+
 /** @deprecated Use `ready` on PageShimmer instead; kept at 0 for legacy call sites. */
 export const SKELETON_MIN_MS = 0;
 
