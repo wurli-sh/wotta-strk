@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wotta Vesu Earn implementation audit</title>
+<style>body{font:16px/1.55 system-ui;margin:0;background:#f5f7fb;color:#18202c}main{max-width:900px;margin:40px auto;padding:32px;background:white;border:1px solid #dce2ec;border-radius:18px}h1,h2{line-height:1.2}.bad{color:#a32626}.good{color:#08775d}code{background:#eef1f6;padding:.15em .35em;border-radius:5px}table{border-collapse:collapse;width:100%}td,th{padding:10px;border-bottom:1px solid #e2e6ee;text-align:left;vertical-align:top}</style>
+</head><body><main><h1>Vesu Earn implementation audit</h1><p>Reviewed 2026-09-06 against the four Limen-style assurance recommendations.</p>
+<h2>Outcome</h2><p class="good">Source and verification tooling are internally ready.</p><p class="bad"><strong>The route is not ready for deployment admission or user funds.</strong> The manifest remains <code>pending</code>, and the machine gate correctly exits non-zero.</p>
+<h2>Core issues fixed</h2><table><thead><tr><th>Finding</th><th>Resolution</th></tr></thead><tbody>
+<tr><td>Receipt verifier trusted pool events without proving Vesu executed.</td><td>Require exactly one pinned vToken Deposit/Withdraw event, anonymizer actors, u256 input, and output equal to the private note.</td></tr>
+<tr><td>Duplicate/lookalike events and malformed felts could pass or throw.</td><td>Unique-event checks and fail-closed parsing added.</td></tr>
+<tr><td>Residue was checked at latest state and not used by the live verifier.</td><td>USDC/vUSDC balances are checked at the receipt block; residue rejects verification.</td></tr>
+<tr><td>UI ledger updated after success, not after mechanism verification.</td><td>Deposit/redeem ledger writes now follow <code>verifyVesuEarnTransaction</code>.</td></tr>
+<tr><td>Source gate ignored CASM and stale manifest hashes.</td><td>Exact Scarb version, Sierra, CASM, unique artifacts, and manifest integrity are enforced.</td></tr>
+<tr><td>Admission evidence was weakly parsed and unbound.</td><td>Review, deployment, smoke, discovery, redaction, chain, contracts, and receipts are manifest-bound.</td></tr>
+</tbody></table>
+<h2>Verification</h2><ul><li>Workspace lint and typecheck: pass.</li><li>Repository tests: pass (including 126 web tests).</li><li>Production build: pass.</li><li>Pinned RC.2 Sierra/CASM reproduction: pass.</li><li>Upstream anonymizer Cairo tests: 7/7 pass.</li><li>Admission gate: expected fail with 16 explicit deployment/review/smoke gaps.</li></ul>
+<h2>Release blockers</h2><ol><li>Independent review is not accepted.</li><li>No Wotta declare/deploy automation or Mainnet deployment receipt/address exists.</li><li>No Ready 0.1-USDC deposit → private vUSDC discovery → redeem → private USDC rediscovery smoke exists.</li><li>No live receipt verification can run until those hashes exist.</li></ol>
+</main></body></html>

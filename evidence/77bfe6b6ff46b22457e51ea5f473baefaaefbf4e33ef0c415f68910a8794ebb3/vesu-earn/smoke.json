@@ -1,0 +1,16 @@
+{
+  "status": "pending",
+  "network": "SN_MAIN",
+  "manifestHash": "77bfe6b6ff46b22457e51ea5f473baefaaefbf4e33ef0c415f68910a8794ebb3",
+  "anonymizerAddress": "UNDEPLOYED",
+  "underlyingAddress": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
+  "vTokenAddress": "0x00387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65",
+  "depositTxHash": null,
+  "redeemTxHash": null,
+  "depositAmount": "100000",
+  "redeemShares": null,
+  "privateVusdcDiscovered": false,
+  "privateUsdcRediscovered": false,
+  "evidenceRedacted": true,
+  "notes": "Populate only from the Ready Mainnet 0.1-USDC deposit/discovery/redeem smoke."
+}

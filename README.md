@@ -161,7 +161,7 @@ maps to one of those three promises:
 - **Handle-first payments** — send to `@handle` or email without requesting a destination address *(like a message)*
 - **Multi-chain source funding** — Ethereum, Arbitrum, Base, Solana, Stellar testnets, plus Starknet public / private routes *(from any chain)*
 - **Private post-claim balance** — Ready private USDC on Sepolia; live-pool private send / balance on Mainnet *(settle privately)*
-- **Vesu Earn (fail-closed preview)** — `/account?tab=earn` reads the curated Prime market and private balances, but writes stay disabled while `deployments/mainnet.json#vesuEarn.status` is `pending`
+- **Vesu Earn (fail-closed preview)** — `/account?tab=earn` reads the curated Prime market and private balances, but writes stay disabled while `deployments/mainnet.json#vesuEarn.status` is `pending`. Admission is machine-gated by `pnpm check:vesu-earn` (not part of default `pnpm check`).
 - **Protected delivery** — encrypted registered inbox notes
 - **Exact-net quotes** — quote includes the desired receive amount, maximum CCTP fee, and finality threshold
 - **One-time claims** — claim-hash commitments, expiry, and replay protection
@@ -204,6 +204,8 @@ for full integration · Ready wallet for private flows
 | `pnpm test:contracts` | Runs Cairo contract tests |
 | `pnpm check:phase1:sepolia` | Runs Sepolia phase-1 hard-gate checks |
 | `pnpm check:phase2:sepolia` | Runs Sepolia phase-2 hard-gate checks |
+| `pnpm check:vesu-anonymizer-source` | Rebuilds pinned RC.2 Vesu anonymizer and compares Sierra + CASM hashes to `mainnet.json` (needs exactly Scarb 2.17.0) |
+| `pnpm check:vesu-earn` | Vesu Earn admission gate; expected to fail until evidence is complete; only this may print `admit verified` |
 | `pnpm deploy:env` | Syncs Vercel variables; creates missing Render services (existing Render env remains Blueprint/dashboard-managed) |
 | `pnpm deploy:env -- --render-only --render-deploy` | Explicitly deploys the current Git commit to the existing Mainnet Render service |
 | `pnpm deploy:check-mainnet` | Fails if the hosted Mainnet API does not match the verified local router, escrows, or manifest hash |

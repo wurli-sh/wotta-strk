@@ -118,7 +118,7 @@ The upstream `VesuLendingAnonymizer` is called by the privacy pool through `priv
 - approves the calling privacy pool to collect that output; and
 - returns one `OpenNoteDeposit(note_id, out_token, out_amount)`.
 
-The upstream compatibility table lists `0x3751128dc3ebd36215f982766f14aaca8f78793e4b0f42a73e49372a8e24aae` as the **RC.0 class hash**, not a deployed anonymizer address and not the RC.2 artifact Wotta uses. RC.2 commit `9bfeb8dd35565a2915a0617dff3f649bd5bb891a` reproducibly builds Sierra class hash `0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f`. Implementation includes RC.2 declaration and deployment and must never paste either class hash into the runtime address field.
+The upstream compatibility table lists `0x3751128dc3ebd36215f982766f14aaca8f78793e4b0f42a73e49372a8e24aae` as the **RC.0 class hash**, not a deployed anonymizer address and not the RC.2 artifact Wotta uses. RC.2 commit `9bfeb8dd35565a2915a0617dff3f649bd5bb891a` reproducibly builds Sierra class hash `0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f` and CASM hash `0x048bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd`. Declaration/deployment automation is not implemented yet; the eventual deploy path must consume these exact artifacts and must never paste either class hash into the runtime address field.
 
 The anonymizer calldata serializes its `u256 amount` as low/high felts:
 
@@ -363,22 +363,42 @@ Refactor `submitMainnetPrivacyActions` carefully. It currently has valuable inva
 
 ## 9. Security and product release gates
 
+### Source and admission assurance layer (implemented; deployment remains blocked)
+
+Run these before declare/deploy and before flipping `vesuEarn.status`. They are **not** included in default `pnpm check`; `pnpm check:vesu-earn` is expected to fail until evidence exists.
+
+| Command | Role |
+| --- | --- |
+| Unit: `apps/web/src/lib/vesu/verify-receipt.ts` | Reconstruct deposit/redeem from pool events (Limen-style); fixture tests offline |
+| `pnpm check:vesu-anonymizer-source` | Vendor RC.2 commit → exact Scarb build → Sierra + CASM hashes vs pins and `mainnet.json` |
+| `assertVesuRuntime` | Live Vesu + STRK20 pool version/fee/denylist/USDC decimals preflight |
+| `pnpm check:vesu-earn` | Machine admission gate; only this may print `admit verified` |
+
+Evidence tree: `evidence/<manifestHash>/vesu-earn/` (`REVIEW.md`, `smoke.json`, `anonymizer-source-parity.json`, `GO-NO-GO.md`).
+
+Current audit status: source reproduction, runtime drift checks, offline mechanism
+verification, and the fail-closed admission script are in place. A Wotta
+declaration/deployment command, independent review, and live Ready smoke evidence
+are not in place. Therefore the artefact is reproducible, but the route is not
+deployment-complete or yield-ready.
+
 Do not enable Mainnet writes until all gates pass:
 
 - [ ] Review the exact Vesu V2 deployed class/commit against its published V2 audits.
-- [ ] Independently review/audit the Vesu lending anonymizer. The published OpenZeppelin Starknet Privacy audit scoped `packages/privacy/src`; it did **not** list `packages/vesu_lending_anonymizer`.
-- [ ] Pin the anonymizer source commit and reproducible Sierra/CASM class hashes.
+- [ ] Independently review/audit the Vesu lending anonymizer. The published OpenZeppelin Starknet Privacy audit scoped `packages/privacy/src`; it did **not** list `packages/vesu_lending_anonymizer`. Flip `REVIEW.md` `status:` to `accepted` when done.
+- [x] Pin the anonymizer source commit and reproducible Sierra/CASM class hashes (`scripts/vesu-anonymizer-pins.ts` + `check:vesu-anonymizer-source`).
 - [ ] Declare/deploy the anonymizer and record address, class hash, tx hash, deployer, and block.
 - [ ] Confirm the Mainnet privacy pool permits and correctly executes this invoke flow through Ready Wallet API 0.10.3.
 - [ ] Confirm Ready can discover and spend the selected private vUSDC token.
 - [ ] Confirm Vesu Prime's pool/vToken tuple onchain and in Vesu's current curated frontend.
 - [ ] Threat-model a malicious or replaced Vesu API response; it must affect display only.
-- [ ] Verify deposit/redeem rounding and dust behavior at 0.1 and 1 USDC.
+- [ ] Verify deposit/redeem rounding and dust behavior at 0.1 and 1 USDC (fill `smoke.json`; pass `verifyVesuEarnTransaction`).
 - [ ] Verify withdrawals under high utilization and document that liquidity can be temporarily unavailable.
 - [ ] Confirm whether STRK/DeFi Spring rewards accrue, who owns the claim, and whether they are recoverable. Hide reward claims until proven.
 - [ ] Add monitoring for pool/vToken/anonymizer class-hash drift, pool pause state, API freshness, and deposit/redeem failures.
 - [ ] Add a kill switch by changing `vesuEarn.status` through the existing deployment/admission process; disabling deposits must not remove the emergency withdrawal path without an explicit incident decision.
 - [ ] Update privacy copy and risk disclosures before enabling the CTA.
+- [ ] `pnpm check:vesu-earn` prints `admit verified` before changing status away from `pending`.
 
 Risks users must be told about:
 

@@ -38,4 +38,7 @@ superpowers/
 # Local research notes (not versioned)
 docs/research/
 
+# Upstream checkouts for source-to-class gates
+.vendor/
+
 improv-plan.md
