@@ -25,6 +25,51 @@ export function sameWalletAddress(left: string, right: string): boolean {
   }
 }
 
+export function isLiveInboxClaim(intent: {
+  state?: string | null;
+  onchain_state?: string | null;
+  expires_at?: string | null;
+} | null | undefined, now = Date.now()): boolean {
+  // Missing join / corrupt row: fail closed so rotate/unlink cannot orphan ciphertext.
+  if (!intent) return true;
+
+  const onchain = intent.onchain_state ?? "";
+  const state = intent.state ?? "";
+  // Terminal (or past claim window): key change is safe for this note.
+  if (
+    ["claimed", "refunded"].includes(onchain)
+    || ["claimed", "completed", "refunded", "failed_terminal", "expired", "refundable"].includes(state)
+  ) {
+    return false;
+  }
+
+  if (!intent.expires_at) return true;
+  const expires = Date.parse(intent.expires_at);
+  if (Number.isNaN(expires)) return true;
+  if (expires <= now) return false;
+
+  // Any non-terminal, unexpired intent with a stored note is live — including
+  // quoted / source_submitted where delivery already wrote encrypted_notes.
+  return true;
+}
+
+export async function assertNoLiveClaimsBeforeKeyChange(
+  db: Db,
+  binding: ActiveWalletBinding,
+  errorCode:
+    | "wallet_reclaim_blocked_active_claims" = "wallet_reclaim_blocked_active_claims",
+): Promise<void> {
+  const { data, error } = await db
+    .from("encrypted_notes")
+    .select("id,intent:intents(state,onchain_state,expires_at)")
+    .eq("recipient_profile_id", binding.profile_id)
+    .eq("chain_id", binding.chain_id);
+  if (error) throw error;
+  if ((data ?? []).some((row) => isLiveInboxClaim(row.intent as never))) {
+    throw new Error(errorCode);
+  }
+}
+
 export async function reconnectExistingWalletBinding(
   db: Db,
   existing: ActiveWalletBinding | null,
@@ -35,6 +80,8 @@ export async function reconnectExistingWalletBinding(
   if (!existing || !sameWalletAddress(existing.address, address)) return null;
   if (existing.inbox_pubkey !== inboxPublicKey) {
     if (!rotateInboxKey) throw new Error("wallet_inbox_key_mismatch");
+    // Allow rotate while live notes exist: ciphertext sealed to the old pubkey
+    // stays claimable only with the old secret (Inbox shows "Older inbox key").
     const { error } = await db
       .from("wallet_bindings")
       .update({
@@ -163,6 +210,11 @@ export async function consumeWalletChallenge(db: Db, config: Config, profileId: 
 
   // Signature proves wallet ownership — reclaim address from a stale profile binding.
   if (existingByAddress) {
+    await assertNoLiveClaimsBeforeKeyChange(
+      db,
+      existingByAddress,
+      "wallet_reclaim_blocked_active_claims",
+    );
     const { error: revokeStaleError } = await db
       .from("wallet_bindings")
       .update({ revoked_at: new Date().toISOString() })

@@ -138,6 +138,9 @@
                   "inboxPublicKey": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "rotateInboxKey": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -422,6 +425,10 @@
                     "type": "string",
                     "pattern": "^[A-Za-z0-9_-]{43}$"
                   },
+                  "recipientInboxPublicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
                   "algorithm": {
                     "type": "string",
                     "const": "x25519-xsalsa20-poly1305"
@@ -454,6 +461,7 @@
                   "ciphertext",
                   "nonce",
                   "ephemeralPublicKey",
+                  "recipientInboxPublicKey",
                   "algorithm",
                   "recipient"
                 ],

@@ -36,8 +36,11 @@ import {
   walletBindingTypedData,
   normalizeWalletAddress,
   reconnectExistingWalletBinding,
+  isLiveInboxClaim,
+  assertNoLiveClaimsBeforeKeyChange,
 } from "../src/auth/challenge.ts";
 import { requestChainId } from "../src/network-scope.ts";
+import { assertRecipientInboxKey } from "../src/delivery/pending.ts";
 
 test("identity normalization rejects unverified-shaped inputs", () => {
   assert.equal(normalizeIdentifier("x", "@Wotta_User"), "wotta_user");
@@ -580,7 +583,7 @@ test("inbox key rotation is rejected unless explicitly confirmed", async () => {
     /wallet_inbox_key_mismatch/,
   );
 });
-test("confirmed inbox key rotation increments the binding version", async () => {
+test("explicit inbox key rotation is allowed while live notes exist", async () => {
   const updates: Array<Record<string, unknown>> = [];
   const db = {
     from: () => ({
@@ -589,6 +592,110 @@ test("confirmed inbox key rotation increments the binding version", async () => 
         return { eq: async () => ({ error: null }) };
       },
     }),
+  };
+  const result = await reconnectExistingWalletBinding(
+    db as never,
+    {
+      id: "binding-1",
+      profile_id: "profile-1",
+      address: "0x123",
+      chain_id: "SN_MAIN",
+      inbox_pubkey: "old-key",
+      key_version: 2,
+    },
+    "0x123",
+    "new-key",
+    true,
+  );
+  assert.equal(result?.keyRotated, true);
+  assert.equal(updates[0]?.inbox_pubkey, "new-key");
+  assert.equal(updates[0]?.key_version, 3);
+});
+test("live inbox claim detector stays fail-closed for non-terminal notes", () => {
+  const future = new Date(Date.now() + 60_000).toISOString();
+  const past = new Date(Date.now() - 60_000).toISOString();
+  assert.equal(isLiveInboxClaim({ state: "funded", expires_at: future }), true);
+  assert.equal(isLiveInboxClaim({ state: "quoted", expires_at: future }), true);
+  assert.equal(isLiveInboxClaim({ state: "claimed", expires_at: future }), false);
+  assert.equal(isLiveInboxClaim({ state: "funded", expires_at: past }), false);
+  assert.equal(isLiveInboxClaim({ state: "expired", expires_at: future }), false);
+  assert.equal(isLiveInboxClaim({ state: "funded", expires_at: null }), true);
+  assert.equal(isLiveInboxClaim({ onchain_state: "claimable", expires_at: "not-a-date" }), true);
+  assert.equal(isLiveInboxClaim(null), true);
+});
+test("address reclaim is blocked while live inbox claims exist", async () => {
+  const future = new Date(Date.now() + 60_000).toISOString();
+  const db = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: async () => ({
+            data: [{ intent: { state: "quoted", expires_at: future } }],
+            error: null,
+          }),
+        }),
+      }),
+    }),
+  };
+  await assert.rejects(
+    () =>
+      assertNoLiveClaimsBeforeKeyChange(
+        db as never,
+        {
+          id: "b1",
+          profile_id: "p1",
+          address: "0x1",
+          chain_id: "SN_MAIN",
+          inbox_pubkey: "pub",
+        },
+        "wallet_reclaim_blocked_active_claims",
+      ),
+    /wallet_reclaim_blocked_active_claims/,
+  );
+});
+test("null intent join fails closed for reclaim checks", async () => {
+  const db = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: async () => ({
+            data: [{ intent: null }],
+            error: null,
+          }),
+        }),
+      }),
+    }),
+  };
+  await assert.rejects(
+    () =>
+      assertNoLiveClaimsBeforeKeyChange(
+        db as never,
+        {
+          id: "b1",
+          profile_id: "p1",
+          address: "0x1",
+          chain_id: "SN_MAIN",
+          inbox_pubkey: "pub",
+        },
+      ),
+    /wallet_reclaim_blocked_active_claims/,
+  );
+});
+test("confirmed inbox key rotation increments the binding version", async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const db = {
+    from: (table: string) => table === "encrypted_notes"
+      ? ({
+          select: () => ({
+            eq: () => ({ eq: async () => ({ data: [], error: null }) }),
+          }),
+        })
+      : ({
+          update: (value: Record<string, unknown>) => {
+            updates.push(value);
+            return { eq: async () => ({ error: null }) };
+          },
+        }),
   };
   const result = await reconnectExistingWalletBinding(
     db as never,
@@ -607,6 +714,13 @@ test("confirmed inbox key rotation increments the binding version", async () => 
   assert.equal(result?.keyRotated, true);
   assert.equal(updates[0]?.inbox_pubkey, "new-key");
   assert.equal(updates[0]?.key_version, 4);
+});
+test("delivery fails before funding when the resolved inbox key went stale", () => {
+  assert.doesNotThrow(() => assertRecipientInboxKey("current-key", "current-key"));
+  assert.throws(
+    () => assertRecipientInboxKey("current-key", "stale-key"),
+    /recipient_inbox_key_changed/,
+  );
 });
 
 // --- Phase 1: route reason code assertions ---
