@@ -3,9 +3,30 @@ import { hasLiveVesuAddresses, loadVesuEarn, sameFelt, type VesuEarnConfig } fro
 
 const U128 = 1n << 128n;
 
+/**
+ * Wallet API 0.10.3 FELT encoding:
+ * `^0x(0|[a-fA-F1-9]{1}[a-fA-F0-9]{0,62})$`
+ *
+ * Leading-zero padded addresses fail Ready's invoke-calldata schema and surface
+ * as INVALID_REQUEST_PAYLOAD. Token fields on withdraw/transfer stay in the
+ * manifest/padded form Ready used when indexing private notes — rewriting those
+ * to canonical felts can make Ready report INSUFFICIENT_PRIVATE_BALANCE even
+ * when Wotta's balance read (felt-equal) still shows funds.
+ */
+export function toWalletApiFelt(value: string | bigint): `0x${string}` {
+  let n: bigint;
+  try {
+    n = typeof value === "bigint" ? value : BigInt(value);
+  } catch {
+    throw new Error("invalid_felt");
+  }
+  if (n < 0n) throw new Error("invalid_felt");
+  return `0x${n.toString(16)}`;
+}
+
 export function splitU256(value: bigint): [`0x${string}`, `0x${string}`] {
   if (value < 0n || value >= (1n << 256n)) throw new Error("invalid_u256");
-  return [`0x${(value % U128).toString(16)}`, `0x${(value / U128).toString(16)}`];
+  return [toWalletApiFelt(value % U128), toWalletApiFelt(value / U128)];
 }
 
 function assertPinned(config: VesuEarnConfig): void {
@@ -38,11 +59,33 @@ export function vesuDepositActions(
   if (!config.allowedDepositAmounts.includes(assets) || assets <= 0n) throw new Error("unsupported_vesu_deposit_amount");
   if (!/^0x[0-9a-f]+$/i.test(readyAddress)) throw new Error("invalid_private_recipient");
   const [low, high] = splitU256(assets);
-  const amount = `0x${assets.toString(16)}` as const;
+  const amount = toWalletApiFelt(assets);
+  const anonymizer = toWalletApiFelt(config.anonymizerAddress);
   return [
-    { type: "withdraw", token: config.underlyingAddress, amount, recipient: config.anonymizerAddress },
-    { type: "transfer", token: config.vTokenAddress, amount: "OPEN", recipient: readyAddress },
-    { type: "invoke", contract: config.anonymizerAddress, calldata: ["0x0", config.underlyingAddress, config.vTokenAddress, low, high, "${openNoteIds[0]}"] },
+    {
+      type: "withdraw",
+      token: config.underlyingAddress,
+      amount,
+      recipient: anonymizer,
+    },
+    {
+      type: "transfer",
+      token: config.vTokenAddress,
+      amount: "OPEN",
+      recipient: readyAddress,
+    },
+    {
+      type: "invoke",
+      contract: anonymizer,
+      calldata: [
+        "0x0",
+        toWalletApiFelt(config.underlyingAddress),
+        toWalletApiFelt(config.vTokenAddress),
+        low,
+        high,
+        "${openNoteIds[0]}",
+      ],
+    },
   ];
 }
 
@@ -66,10 +109,32 @@ export function vesuRedeemActions(
   if (shares <= 0n || shares > privateShareBalance) throw new Error("invalid_vesu_share_amount");
   if (!/^0x[0-9a-f]+$/i.test(readyAddress)) throw new Error("invalid_private_recipient");
   const [low, high] = splitU256(shares);
-  const amount = `0x${shares.toString(16)}` as const;
+  const amount = toWalletApiFelt(shares);
+  const anonymizer = toWalletApiFelt(config.anonymizerAddress);
   return [
-    { type: "withdraw", token: config.vTokenAddress, amount, recipient: config.anonymizerAddress },
-    { type: "transfer", token: config.underlyingAddress, amount: "OPEN", recipient: readyAddress },
-    { type: "invoke", contract: config.anonymizerAddress, calldata: ["0x1", config.vTokenAddress, config.underlyingAddress, low, high, "${openNoteIds[0]}"] },
+    {
+      type: "withdraw",
+      token: config.vTokenAddress,
+      amount,
+      recipient: anonymizer,
+    },
+    {
+      type: "transfer",
+      token: config.underlyingAddress,
+      amount: "OPEN",
+      recipient: readyAddress,
+    },
+    {
+      type: "invoke",
+      contract: anonymizer,
+      calldata: [
+        "0x1",
+        toWalletApiFelt(config.vTokenAddress),
+        toWalletApiFelt(config.underlyingAddress),
+        low,
+        high,
+        "${openNoteIds[0]}",
+      ],
+    },
   ];
 }

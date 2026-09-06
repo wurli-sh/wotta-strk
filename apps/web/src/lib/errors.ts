@@ -54,7 +54,7 @@ const APP_MESSAGES: Record<string, string> = {
   inbox_key_rotation_blocked_active_claims:
     "Inbox-key upgrade could not complete — retry from Account",
   wallet_unlink_blocked_active_claims:
-    "Unlink could not complete — retry from Account",
+    "This wallet still has live inbox payments — claim them or wait for refund before unlinking",
   wallet_reclaim_blocked_active_claims:
     "This Ready wallet still has live inbox payments on another Wotta account — claim or wait for refund before linking here",
   wallet_already_linked:
@@ -236,6 +236,14 @@ function mapKnownPhrase(raw: string): string | null {
 
   if (m.includes("user_refused_op")) {
     return "Ready declined the request — approve the network switch if prompted, then retry";
+  }
+
+  if (m.includes("invalid_request_payload")) {
+    return "Ready rejected the private action payload — refresh and retry";
+  }
+
+  if (m.includes("insufficient_private_balance")) {
+    return "Not enough private balance in Ready for this action — refresh Earn, or shield a bit more USDC and retry";
   }
 
   if (

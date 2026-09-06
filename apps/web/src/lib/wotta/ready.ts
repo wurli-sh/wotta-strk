@@ -1,6 +1,6 @@
 import { createStore } from "@starknet-io/get-starknet-discovery";
 import { cairo, constants, walletV6, WalletAccountV6 } from "starknet";
-import mainnetDeployment from "../../../../../deployments/mainnet.json";
+import mainnetDeployment from "../../../../../deployments/mainnet.json" with { type: "json" };
 import type { NetworkMode } from "@/lib/network-mode";
 
 /**

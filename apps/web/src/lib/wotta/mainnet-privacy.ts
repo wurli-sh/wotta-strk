@@ -1,5 +1,5 @@
 import { type STRK20_ACTION, type WalletAccountV6 } from "starknet";
-import mainnetDeployment from "../../../../../deployments/mainnet.json";
+import mainnetDeployment from "../../../../../deployments/mainnet.json" with { type: "json" };
 import { ensureReadyChain } from "./ready.ts";
 
 export const MAINNET_USDC_AMOUNT = 100_000n;
@@ -204,25 +204,13 @@ export async function submitMainnetStrk20Actions(
   actions: STRK20_ACTION[],
   signal?: AbortSignal,
 ): Promise<string> {
-  const config = mainnetPrivacyConfig();
-  const startsWithShield = actions[0]?.type === "deposit";
   signal?.throwIfAborted();
   await assertMainnetPrivacyRuntime(account);
   signal?.throwIfAborted();
-  try {
-    const preview = await account.strk20PrepareInvoke(actions, true);
-    if (!preview.call?.contract_address || !sameFelt(preview.call.contract_address, config.poolAddress)) {
-      throw new Error("ready_pool_mismatch");
-    }
-    if (preview.proof.data !== "" || preview.proof.output.length || preview.proof.proof_facts.length) {
-      throw new Error("invalid_private_simulation_preview");
-    }
-  } catch (error) {
-    // A preview cannot be built before Ready has initialized its own private
-    // state. Let the real action request surface the wallet's setup UI if it can.
-    if (!startsWithShield || !notRegistered(error)) throw error;
-  }
-  signal?.throwIfAborted();
+  // Do not call strk20PrepareInvoke before invoke: Ready currently shows a
+  // second, identical approval UI for simulate=true prepare, which caused
+  // duplicate pops and false INSUFFICIENT_PRIVATE_BALANCE on the spare prompt.
+  // Pool targeting stays enforced by assertMainnetPrivacyRuntime above.
   let result;
   try {
     result = await account.strk20InvokeTransaction(actions);

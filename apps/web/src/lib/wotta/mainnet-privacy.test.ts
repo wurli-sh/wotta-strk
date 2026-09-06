@@ -108,9 +108,6 @@ describe("Ready-managed mainnet privacy", () => {
         getChainId: async () => constants.StarknetChainId.SN_MAIN,
         getClassHashAt: async () => config.poolClassHash,
       },
-      strk20PrepareInvoke: async () => {
-        throw new Error("An error occurred (NOT_REGISTERED)");
-      },
       strk20InvokeTransaction: async () => {
         throw new Error("An error occurred (NOT_REGISTERED)");
       },
@@ -121,24 +118,20 @@ describe("Ready-managed mainnet privacy", () => {
     );
   });
 
-  it("simulates, validates, submits, and confirms the selected Mainnet amount", async () => {
+  it("submits and confirms the selected Mainnet amount with a single Ready invoke", async () => {
     const config = mainnetPrivacyConfig();
-    const calls: Array<{ amount: string; simulate: boolean }> = [];
+    const calls: Array<{ amount: string }> = [];
     const account = {
       provider: {
         getChainId: async () => constants.StarknetChainId.SN_MAIN,
         getClassHashAt: async () => config.poolClassHash,
         waitForTransaction: async (hash: string) => ({ hash, isSuccess: () => true }),
       },
-      strk20PrepareInvoke: async (actions: Array<{ amount: string }>, simulate: boolean) => {
-        calls.push({ amount: actions[0]!.amount, simulate });
-        return {
-          call: { contract_address: config.poolAddress },
-          proof: { data: "", output: [], proof_facts: [] },
-        };
+      strk20PrepareInvoke: async () => {
+        throw new Error("should not prepare — Ready double-prompts on simulate");
       },
       strk20InvokeTransaction: async (actions: Array<{ amount: string }>) => {
-        calls.push({ amount: actions[0]!.amount, simulate: false });
+        calls.push({ amount: actions[0]!.amount });
         return { transaction_hash: "0xabc" };
       },
     } as unknown as WalletAccountV6;
@@ -146,10 +139,7 @@ describe("Ready-managed mainnet privacy", () => {
     await expect(
       submitMainnetPrivacyAction(account, "transfer", "0x123", undefined, 100_000_000n),
     ).resolves.toBe("0xabc");
-    expect(calls).toEqual([
-      { amount: "0x5f5e100", simulate: true },
-      { amount: "0x5f5e100", simulate: false },
-    ]);
+    expect(calls).toEqual([{ amount: "0x5f5e100" }]);
   });
 
   it("rejects a finalized but reverted private claim transaction", async () => {
@@ -160,10 +150,6 @@ describe("Ready-managed mainnet privacy", () => {
         getClassHashAt: async () => config.poolClassHash,
         waitForTransaction: async () => ({ isSuccess: () => false }),
       },
-      strk20PrepareInvoke: async () => ({
-        call: { contract_address: config.poolAddress },
-        proof: { data: "", output: [], proof_facts: [] },
-      }),
       strk20InvokeTransaction: async () => ({ transaction_hash: "0xbad" }),
     } as unknown as WalletAccountV6;
     await expect(submitMainnetPrivacyAction(account, "shield")).rejects.toThrow("Mainnet private transaction reverted");
@@ -178,12 +164,8 @@ describe("Ready-managed mainnet privacy", () => {
         getClassHashAt: async () => config.poolClassHash,
         waitForTransaction: async (hash: string) => ({ hash, isSuccess: () => true }),
       },
-      strk20PrepareInvoke: async (actions: Array<{ type: string; amount: string }>) => {
-        calls.push(actions);
-        return {
-          call: { contract_address: config.poolAddress },
-          proof: { data: "", output: [], proof_facts: [] },
-        };
+      strk20PrepareInvoke: async () => {
+        throw new Error("should not prepare — Ready double-prompts on simulate");
       },
       strk20InvokeTransaction: async (actions: Array<{ type: string; amount: string }>) => {
         calls.push(actions);
@@ -194,9 +176,8 @@ describe("Ready-managed mainnet privacy", () => {
     await expect(
       submitMainnetShieldedTransfer(account, "0x123", undefined, 10_000_000n),
     ).resolves.toBe("0xdef");
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(1);
     expect(calls[0]?.map((action) => action.type)).toEqual(["deposit", "transfer"]);
-    expect(calls[1]?.map((action) => action.type)).toEqual(["deposit", "transfer"]);
   });
 
   it("fails closed before signing when the connected chain is not Mainnet", async () => {
@@ -206,9 +187,6 @@ describe("Ready-managed mainnet privacy", () => {
       provider: {
         getChainId: async () => constants.StarknetChainId.SN_SEPOLIA,
         getClassHashAt: async () => config.poolClassHash,
-      },
-      strk20PrepareInvoke: async () => {
-        throw new Error("should not simulate");
       },
       strk20InvokeTransaction: async () => {
         invoked = true;

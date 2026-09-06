@@ -87,7 +87,13 @@ describe("Starknet escrow inbox flow", () => {
       publicRefundRecipient: "0xabc",
       linkedReadyAddress: "0xabc",
     });
-    const claim = await session.loadClaim({ state: { inboxSecretKey: inbox.secretKey }, setInboxSecretKey: vi.fn() });
+    const claim = await session.loadClaim({
+      state: {
+        inboxSecretKey: generateInboxKeyPair().secretKey,
+        previousInboxSecretKeys: [inbox.secretKey],
+      },
+      setInboxSecretKey: vi.fn(),
+    });
 
     expect(mocks.executeDeposit).toHaveBeenCalledWith(expect.objectContaining({ plan: sourcePlan, amount: 1_000_000n }));
     expect(calls.find((call) => call.path === "/v1/quotes")?.body).toMatchObject({ routeId: "starknet-private", mode: "private", deliveryKind: "registered" });
