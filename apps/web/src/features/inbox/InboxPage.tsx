@@ -546,7 +546,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           {tab === "sent" || tab === "history" ? (
             <td className="overflow-hidden px-2 py-3.5 last:pr-4">{rowLinks(row)}</td>
           ) : (
-            <td className="min-w-0 px-2 py-3.5 text-right last:pr-4">
+            <td className="min-w-0 px-2 py-3.5 text-left last:pr-4">
               {row.lockedOut ? (
                 <Button
                   size="sm"
