@@ -1,5 +1,5 @@
-import mainnetDeployment from "../../../../../deployments/mainnet.json";
-import type { NetworkMode } from "@/lib/network-mode";
+import mainnetDeployment from "../../../../../deployments/mainnet.json" with { type: "json" };
+import type { NetworkMode } from "../network-mode.ts";
 
 export type VesuEarnStatus = "pending" | "verified" | "withdraw_only";
 

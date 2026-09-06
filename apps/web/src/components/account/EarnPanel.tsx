@@ -46,6 +46,7 @@ import { rememberApySnapshot } from "@/lib/vesu/market-snapshot";
 import { readVesuPosition } from "@/lib/vesu/position";
 import { readLedger, recordDeposit, recordRedeem } from "@/lib/vesu/ledger";
 import { assertVesuRuntime } from "@/lib/vesu/runtime";
+import { verifyVesuEarnTransaction } from "@/lib/vesu/verify-receipt";
 
 type EarnPhase =
   | "idle"
@@ -190,6 +191,14 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
         actions,
         operation.signal,
       );
+      const verification = await verifyVesuEarnTransaction(
+        connected.account.provider,
+        hash,
+        { operation: "deposit", expectedInAmount: amount, config },
+      );
+      if (!verification.ok) {
+        throw new Error(`vesu_receipt_verification_failed:${verification.problems.join("|")}`);
+      }
       recordDeposit(connected.address, config.vTokenAddress, amount);
       toast.success("Private USDC supplied to Vesu", {
         action: {
@@ -247,6 +256,14 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
         buildVesuRedeemActions(connected.address, redeemShares, freshShares),
         operation.signal,
       );
+      const verification = await verifyVesuEarnTransaction(
+        connected.account.provider,
+        hash,
+        { operation: "redeem", expectedInAmount: redeemShares, config },
+      );
+      if (!verification.ok) {
+        throw new Error(`vesu_receipt_verification_failed:${verification.problems.join("|")}`);
+      }
       recordRedeem(
         connected.address,
         config.vTokenAddress,
