@@ -7,8 +7,9 @@ function live(status: VesuEarnConfig["status"]): VesuEarnConfig {
 
 describe("Vesu admission", () => {
   it("fails closed while the manifest is pending", () => {
-    expect(canDeposit({ mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", amount: 100_000n })).toBe(false);
-    expect(canWithdraw({ mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", privateShares: 1n })).toBe(false);
+    const config = live("pending");
+    expect(canDeposit({ mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", amount: 100_000n }, config)).toBe(false);
+    expect(canWithdraw({ mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", privateShares: 1n }, config)).toBe(false);
   });
 
   it("allows only the 0.1 USDC operator smoke while pending", () => {

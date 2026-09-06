@@ -76,7 +76,8 @@ describe("Vesu runtime validation", () => {
         },
       },
     } as unknown as WalletAccountV6;
-    await expect(assertVesuRuntime(account)).rejects.toThrow("vesu_earn_pending");
+    const pending = { ...loadVesuEarn(), status: "pending" as const };
+    await expect(assertVesuRuntimeWithConfig(account, pending)).rejects.toThrow("vesu_earn_pending");
     expect(called).toBe(false);
   });
 

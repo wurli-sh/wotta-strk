@@ -43,26 +43,28 @@ const testnetApi = required({
   STARKNET_RELAYER_PRIVATE_KEY: env.STARKNET_RELAYER_PRIVATE_KEY || env.STARKNET_DEPLOYER_PRIVATE_KEY,
 });
 // Match local force-admit (`scripts/local-mainnet-api-env.ts`): private + Base/Solana + workers.
-const mainnetApi = required({
-  ...commonApi,
-  API_ORIGIN: mainnetApiOrigin,
-  STARKNET_NETWORK: "mainnet",
-  STARKNET_RPC_URL: pick("STARKNET_MAINNET_RPC_URL"),
-  DEPLOYMENT_MANIFEST_PATH: "/app/deployments/mainnet.json",
-  MAINNET_FORCE_ADMIT: "true",
-  STARKNET_PRIVATE_ADMITTED: "true",
-  CCTP_ADMITTED_ROUTES: "base,solana",
-  RUN_INDEXER: "true",
-  RUN_RELAYER: "true",
-  CIRCLE_IRIS_BASE_URL: "https://iris-api.circle.com",
-  BASE_MAINNET_RPC_URL: pick("BASE_MAINNET_RPC_URL"),
-  SOLANA_MAINNET_RPC_URL: pick("SOLANA_MAINNET_RPC_URL"),
-  STARKNET_FALLBACK_RPC_URL: pick("STARKNET_FALLBACK_RPC_URL"),
-  STARKNET_RELAYER_ADDRESS: pick("STARKNET_MAINNET_RELAYER_ADDRESS", "STARKNET_RELAYER_ADDRESS"),
-  STARKNET_RELAYER_PRIVATE_KEY: pick("STARKNET_MAINNET_RELAYER_PRIVATE_KEY", "STARKNET_RELAYER_PRIVATE_KEY"),
+const mainnetApi = {
+  ...required({
+    ...commonApi,
+    API_ORIGIN: mainnetApiOrigin,
+    STARKNET_NETWORK: "mainnet",
+    STARKNET_RPC_URL: pick("STARKNET_MAINNET_RPC_URL"),
+    DEPLOYMENT_MANIFEST_PATH: "/app/deployments/mainnet.json",
+    MAINNET_FORCE_ADMIT: "true",
+    STARKNET_PRIVATE_ADMITTED: "true",
+    CCTP_ADMITTED_ROUTES: "base,solana",
+    RUN_INDEXER: "true",
+    RUN_RELAYER: "true",
+    CIRCLE_IRIS_BASE_URL: "https://iris-api.circle.com",
+    BASE_MAINNET_RPC_URL: pick("BASE_MAINNET_RPC_URL"),
+    SOLANA_MAINNET_RPC_URL: pick("SOLANA_MAINNET_RPC_URL"),
+    STARKNET_FALLBACK_RPC_URL: pick("STARKNET_FALLBACK_RPC_URL"),
+    STARKNET_RELAYER_ADDRESS: pick("STARKNET_MAINNET_RELAYER_ADDRESS", "STARKNET_RELAYER_ADDRESS"),
+    STARKNET_RELAYER_PRIVATE_KEY: pick("STARKNET_MAINNET_RELAYER_PRIVATE_KEY", "STARKNET_RELAYER_PRIVATE_KEY"),
+  }),
   PILOT_PAUSED_ROUTES: env.PILOT_PAUSED_ROUTES || "",
   ...(pickOptional("PILOT_MAX_USDC_PER_TX") ? { PILOT_MAX_USDC_PER_TX: pickOptional("PILOT_MAX_USDC_PER_TX") } : {}),
-});
+};
 
 const web = required({
   NEXT_PUBLIC_APP_ORIGIN: webOrigin,
