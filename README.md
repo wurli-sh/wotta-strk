@@ -15,15 +15,13 @@ side should not force a public destination balance.
 handle or email, not an address; the transport and private settlement are Wotta’s
 job, not yours.
 
-Wotta lets anyone send USDC to an `@handle` or email. It resolves the recipient,
-creates a signed claim, transports USDC from supported source chains with Circle
-CCTP V2, and delivers a protected claim notice. Registered recipients receive an
-encrypted inbox note; claims settle privately on **Starknet Sepolia** and can be
-redeemed into a private Ready balance — then put to work on Vesu.
-
-On **Starknet Mainnet**, Wotta focuses on Ready wallet-managed live-pool private
-sends and balance (no CCTP escrow inbox). Switch networks from the signed-in
-account menu.
+Wotta lets anyone send USDC to an `@handle` or email. Sign in with **Google or X**,
+link a **Ready** wallet, and resolve recipients through the API. Wotta creates a
+signed claim, transports USDC from supported source chains with Circle CCTP V2,
+and delivers an encrypted inbox note. Claims settle privately on **Starknet
+Mainnet** into a Ready private balance — then put that USDC to work on **Vesu
+Earn**. Live-pool private send / balance runs through the Ready-managed STRK20
+pool.
 
 ### Mainnet STRK20 evidence
 
@@ -45,23 +43,24 @@ Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
 | Resource | Value |
 | -------- | ----- |
 | Frontend | [wotta.vercel.app](https://wotta.vercel.app) — `/` · `/send` · `/inbox` · `/account` · `/claim` |
-| Testnet API | [wotta-api-testnet.onrender.com](https://wotta-api-testnet.onrender.com) |
 | Mainnet API | [wotta-api-mainnet.onrender.com](https://wotta-api-mainnet.onrender.com) |
-| Settlement network (testnet) | Starknet Sepolia (`SN_SEPOLIA`) |
-| Explorer | [Starknet Sepolia Voyager](https://sepolia.voyager.online) · [Starkscan](https://sepolia.starkscan.co) |
-| Circle Sepolia USDC | [`0x0512…8343`](https://sepolia.starkscan.co/contract/0x0512feac6339ff7889822cb5aa2a86c848e9d392bb0e3e237c008674feed8343) |
-| Wotta CCTP Router | [`0x26d4…d81b`](https://sepolia.starkscan.co/contract/0x26d49a2014db61fd072284cefa28c5d4a4ede40a2d90ed439ad3dfc0053d81b) |
-| Direct privacy escrow (1 USDC) | [`0x7e5b…e8c`](https://sepolia.starkscan.co/contract/0x7e5b61d637f7c5c557ac4814202a7c922ebfe3233d51c9ec266a6c3c3826e8c) |
-| STRK20 private pool (Sepolia) | [`0x0254…0d91`](https://sepolia.starkscan.co/contract/0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91) |
-| Sepolia deployment manifest | [`deployments/sepolia.json`](deployments/sepolia.json) |
-| Mainnet deployment manifest | [`deployments/mainnet.json`](deployments/mainnet.json) |
+| Settlement network | Starknet Mainnet (`SN_MAIN`) |
+| Explorer | [Voyager](https://voyager.online) · [Starkscan](https://starkscan.co) |
+| Native USDC (Mainnet) | [`0x0330…35fb`](https://starkscan.co/contract/0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb) |
+| Wotta CCTP Router | [`0x24a2…00fd`](https://starkscan.co/contract/0x24a2c1a79b97794ed4d143ff0f6f5b05b3569832c85957aa10bc7c3dcc000fd) |
+| STRK20 private pool | [`0x0403…812a`](https://voyager.online/contract/0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a) |
+| Escrow 0.1 USDC | [`0x656a…0a06`](https://starkscan.co/contract/0x656a3300531b45f559e51120b0cb9bcea8c6c4e626ebef6c46c184da08c0a06) |
+| Escrow 1 USDC | [`0x41a7…8f0c`](https://starkscan.co/contract/0x41a7424a3779e15d68f7a1da96b7cf95a196563bcfc3ff81eeb8735c4368f0c) |
+| Vesu Earn anonymizer (RC.2) | [`0x4ee6…e38`](https://starkscan.co/contract/0x4ee621484a3dfda3976b5fd37749e50727a7697296a46fbd0fd81c4d42dfe38) |
+| Deployment manifest | [`deployments/mainnet.json`](deployments/mainnet.json) |
 
-Route configuration: [`apps/web/public/manifests/routes.testnet.json`](apps/web/public/manifests/routes.testnet.json) · deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [evidence](evidence/README.md)
+Deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [evidence](evidence/README.md)
 
-Testnet CCTP denominations and escrows are getter-verified in
-[`deployments/sepolia.json`](deployments/sepolia.json). Mainnet pins the live
-STRK20 pool for Ready wallet-managed private actions; Wotta CCTP escrow remains
-testnet-scoped.
+Mainnet pins the live STRK20 pool for Ready wallet-managed private actions,
+verified 0.1 / 1 USDC CCTP escrows (Base and Solana domains admitted on the
+router), and a live Vesu Earn anonymizer with deposit+redeem smoke above.
+`vesuEarn.status` is **`verified`** — see
+[`GO-NO-GO`](evidence/cfdce498920dc89271f898091a529bea191ebc7b5901323d2e667d9cc7e3ce00/vesu-earn/GO-NO-GO.md).
 
 ---
 
@@ -69,7 +68,7 @@ testnet-scoped.
 
 | Package / app | Purpose |
 | ------------- | ------- |
-| [`apps/web`](apps/web) | Next.js product UI — send, claim, inbox, account, balance, and network mode |
+| [`apps/web`](apps/web) | Next.js product UI — send, claim, inbox, account, balance, and Earn |
 | [`apps/api`](apps/api) | Fastify API — identity, resolution, quotes, intents, delivery, indexer, and relayer |
 | [`apps/wallet-smoke`](apps/wallet-smoke) | Browser smoke harness for Ready / privacy / product flows |
 | [`contracts`](contracts) | Cairo / Scarb — CCTP router, denomination escrows, privacy identity |
@@ -83,18 +82,22 @@ testnet-scoped.
 
 ```text
 Sender (browser)
-  → signs in (Google / email / optional X handle)
-  → binds Ready wallet (network-scoped) and optional private identity
+  → signs in (Google or X OAuth)
+  → binds Ready wallet on Starknet Mainnet and optional private identity
   → resolves @handle / email through Wotta API
   → creates intentId, claim secret, and claim hash locally
   → verifies a signed exact-net quote and recipient descriptor
-  → funds USDC through CCTP V2 (testnet) or Starknet public / private routes
+  → funds USDC through CCTP V2 (Base / Solana) or Starknet private routes
   → delivers an encrypted inbox note (or pending delivery)
 
 Recipient (browser)
   → unlocks the encrypted inbox with Ready
   → waits for indexed CCTP / escrow settlement evidence
-  → claims into private Ready balance (or public path where admitted)
+  → claims into private Ready balance
+
+Earn (Ready)
+  → reads Vesu Prime Supply APY and private position in /account?tab=earn
+  → deposits / redeems when vesuEarn.status is verified (or withdraw_only for redeem)
 ```
 
 ```text
@@ -102,14 +105,14 @@ apps/web (Next.js)
   ↓
 @wotta/shared          codecs · hook payloads · typed quote verification · manifests
 @wotta/crypto          encrypted delivery helpers
-@wotta/adapters        Ethereum · Arbitrum · Base · Solana · Stellar · Starknet source actions
+@wotta/adapters        Base · Solana · Starknet source actions (Mainnet rails)
   ↓
 apps/api (Fastify)     handles · quotes · intents · delivery · indexer · relayer
   ↓
 Supabase               auth · handles · wallets · encrypted inbox · intent state
   ↓
-Starknet Sepolia       CCTP V2 router · denomination escrows · STRK20 private pool
-Starknet Mainnet       Verified Wotta CCTP router + 0.1/1 USDC escrows (routes evidence-gated)
+Starknet Mainnet       STRK20 live pool · CCTP router + 0.1/1 USDC escrows
+                       · Vesu Earn anonymizer
 ```
 
 ```text
@@ -124,9 +127,10 @@ wotta/
 │   ├── crypto/          encryption / cryptographic helpers
 │   ├── shared/          protocol types, codecs, and manifests
 │   └── config/          shared TypeScript config
-├── deployments/         checked-in Sepolia and Mainnet manifests
+├── deployments/         checked-in Mainnet manifest
 ├── supabase/migrations/ Postgres schema
 ├── evidence/            retained smoke-test evidence bundles
+├── demo/                voiceover / demo toolkit
 ├── docs/                deployment and privacy docs
 └── scripts/             development, deploy, verification, and gate scripts
 ```
@@ -138,17 +142,18 @@ wotta/
 1. **Resolve** — the sender enters an `@handle` or email. Wotta returns a signed
    recipient descriptor when the recipient is registered.
 2. **Prepare** — the browser generates a claim secret, derives a claim hash, and
-   builds an intent with expiry, refund recipient, and denomination.
+   builds an intent with expiry, refund recipient, and denomination (0.1 or 1 USDC).
 3. **Quote and fund** — Wotta signs an exact-net quote. The source adapter then
-   submits a CCTP V2 burn (EVM / Solana / Stellar) or a Starknet deposit / private
-   fund path.
+   submits a CCTP V2 burn (Base / Solana) or a Starknet private fund path.
 4. **Deliver** — registered users receive an encrypted inbox payload. Pending
    delivery covers recipients who have not finished registration yet.
 5. **Settle** — the indexer / relayer validates Iris attestation and destination
-   evidence, then marks the intent funded on Starknet Sepolia.
+   evidence, then marks the intent funded on Starknet Mainnet.
 6. **Claim** — the recipient unlocks the inbox, authorizes redemption with Ready,
-   and receives USDC into a private balance where the route admits it.
-7. **Refund** — expired, unclaimed escrows follow the on-chain refund path to the
+   and receives USDC into a private balance.
+7. **Earn** — private USDC can be supplied to Vesu through Ready when Earn writes
+   are admitted; the UI shows Supply APY and position.
+8. **Refund** — expired, unclaimed escrows follow the on-chain refund path to the
    public refund recipient.
 
 ---
@@ -159,14 +164,14 @@ Send like a message. Settle privately on Starknet. From any chain — every feat
 maps to one of those three promises:
 
 - **Handle-first payments** — send to `@handle` or email without requesting a destination address *(like a message)*
-- **Multi-chain source funding** — Ethereum, Arbitrum, Base, Solana, Stellar testnets, plus Starknet public / private routes *(from any chain)*
-- **Private post-claim balance** — Ready private USDC on Sepolia; live-pool private send / balance on Mainnet *(settle privately)*
-- **Vesu Earn (fail-closed preview)** — `/account?tab=earn` reads the curated Prime market and private balances, but writes stay disabled while `deployments/mainnet.json#vesuEarn.status` is `pending`. Admission is machine-gated by `pnpm check:vesu-earn` (not part of default `pnpm check`).
-- **Protected delivery** — encrypted registered inbox notes
+- **OAuth sign-in** — Google or X only; X when you want a public handle
+- **Multi-chain source funding** — Base and Solana CCTP into Mainnet escrows, plus Starknet private routes *(from any chain)*
+- **Private post-claim balance** — Ready private USDC via the live STRK20 pool *(settle privately)*
+- **Vesu Earn** — `/account?tab=earn` shows Deposit / Redeem, curated Prime **Supply APY**, and private balances. Mainnet deposit+redeem smoke is receipt-verified; `vesuEarn.status` is **`verified`** (`pnpm check:vesu-earn`).
+- **Protected delivery** — encrypted registered inbox notes; inbox keys derived from Ready
 - **Exact-net quotes** — quote includes the desired receive amount, maximum CCTP fee, and finality threshold
 - **One-time claims** — claim-hash commitments, expiry, and replay protection
-- **Gas-sponsored settlement** — the Sepolia relayer submits CCTP `settle` but cannot redirect recipient funds
-- **Network-scoped product** — Testnet (CCTP + inbox) and Mainnet (Ready live pool) in one UI
+- **Gas-sponsored settlement** — the Mainnet relayer submits CCTP `settle` but cannot redirect recipient funds
 - **OpenAPI contract** — [`apps/api/public/openapi.json`](apps/api/public/openapi.json) supports typed API clients
 
 ---
@@ -178,11 +183,12 @@ maps to one of those three promises:
 | Frontend | Next.js, React, Tailwind, Starknet.js, Ready |
 | API | Fastify, Zod, OpenAPI, Pino |
 | Contracts | Cairo, Scarb, Starknet Foundry |
-| Cross-chain settlement | Circle CCTP V2 → Starknet Sepolia |
+| Cross-chain settlement | Circle CCTP V2 → Starknet Mainnet |
 | Privacy layer | Starknet privacy SDK / STRK20 pool, Ready |
+| Yield | Vesu Prime via privacy anonymizer |
 | Data | Supabase (Postgres + Auth) |
 | Delivery | Encrypted inbox payloads |
-| Source chains | Ethereum, Arbitrum, Base, Solana, Stellar (testnets), Starknet |
+| Source chains | Base, Solana, Starknet |
 
 ---
 
@@ -202,10 +208,8 @@ for full integration · Ready wallet for private flows
 | `pnpm test:api` | Runs API tests |
 | `pnpm test:web` | Runs web tests |
 | `pnpm test:contracts` | Runs Cairo contract tests |
-| `pnpm check:phase1:sepolia` | Runs Sepolia phase-1 hard-gate checks |
-| `pnpm check:phase2:sepolia` | Runs Sepolia phase-2 hard-gate checks |
 | `pnpm check:vesu-anonymizer-source` | Rebuilds pinned RC.2 Vesu anonymizer and compares Sierra + CASM hashes to `mainnet.json` (needs exactly Scarb 2.17.0) |
-| `pnpm check:vesu-earn` | Vesu Earn admission gate; expected to fail until evidence is complete; only this may print `admit verified` |
+| `pnpm check:vesu-earn` | Vesu Earn admission gate; prints `admit verified` when source parity + smoke pass |
 | `pnpm deploy:env` | Syncs Vercel variables; creates missing Render services (existing Render env remains Blueprint/dashboard-managed) |
 | `pnpm deploy:env -- --render-only --render-deploy` | Explicitly deploys the current Git commit to the existing Mainnet Render service |
 | `pnpm deploy:check-mainnet` | Fails if the hosted Mainnet API does not match the verified local router, escrows, or manifest hash |
@@ -217,13 +221,12 @@ Copy [`.env.example`](.env.example) to `.env`, then follow [`docs/DEPLOYMENT.md`
 
 ## Environment & Deployment
 
-The normal hosted topology is a Vercel web app and two Render API services
-(testnet + mainnet), with Supabase and RPC providers.
+The hosted topology is a Vercel web app and a Mainnet Render API service, with
+Supabase and RPC providers.
 
 ```bash
 pnpm deploy:env -- --dry-run \
   --web-origin https://wotta.vercel.app \
-  --testnet-api-origin https://wotta-api-testnet.onrender.com \
   --mainnet-api-origin https://wotta-api-mainnet.onrender.com
 ```
 
@@ -239,19 +242,24 @@ environment synchronization, and operational verification.
 - **Recipient protection** — registered claims bind the recipient profile; claim secrets never leave the encrypted note / client claim flow.
 - **Claim and refund safety** — commitments, expiry, denomination, and one-time claim checks are enforced on chain.
 - **CCTP validation** — settlement accepts CCTP V2 messages only after required finality and fee checks.
-- **Relayer limits** — it can sponsor a valid Sepolia settlement but has no privilege to redirect recipient funds.
+- **Relayer limits** — it can sponsor a valid Mainnet settlement but has no privilege to redirect recipient funds.
 - **Not production-ready** — this is unaudited hackathon software; live route evidence and operational safeguards remain required.
 
-More detail: [`docs/direct-privacy-sepolia.md`](docs/direct-privacy-sepolia.md) · [`docs/phase1-3-send-flow.md`](docs/phase1-3-send-flow.md) · [`docs/third-party-privacy-sdk.md`](docs/third-party-privacy-sdk.md)
+More detail: [`docs/phase1-3-send-flow.md`](docs/phase1-3-send-flow.md) · [`docs/third-party-privacy-sdk.md`](docs/third-party-privacy-sdk.md) · [`docs/runbooks/vesu-earn-smoke.md`](docs/runbooks/vesu-earn-smoke.md) · [`docs/SECURITY.md`](docs/SECURITY.md)
 
 ---
 
 ## Future Plans
 
-- **Harden the core** — Make CCTP → Sepolia settlement, indexer/relayer, and claim/refund paths reliable under real load.
-- **Keep Starknet as settlement** — Grow source rails into one private receive surface, not fragmented pools.
-- **Make privacy feel like messaging** — Sharpen handle/email send, inbox unlock, Ready linking, and claim UX.
-- **Close the Mainnet gap** — Expand live STRK20 / Ready private sends beyond current demo evidence.
-- **Prepare for review** — Threat model, runbooks, and an audit / mainnet readiness plan before production claims.
+The core is live on **Starknet Mainnet** — CCTP pay-in, private claim, Vesu Earn.
+Next we harden that path and grow carefully, without pretending this is audited
+production software.
 
----
+- **Harden the core** — CCTP indexer/relayer, claim/refund, and Earn under real load; clear monitoring when Iris, a source chain, or the relayer is down.
+- **More pools and rails** — expand fixed denominations and additional source routes into the same Starknet private receive surface (Ready + STRK20 + Vesu), not a new pool on every chain.
+- **Privacy like messaging** — sharper inbox unlock, Ready linking, claim recovery, and Earn UX; stay non-custodial.
+- **Honest privacy** — keep labeling what Wotta shields vs what stays public (source burns, timing, escrow funding).
+- **Real use cases** — validate pay-a-handle → claim → earn with community feedback before chasing a long feature list.
+- **Review readiness** — threat model, runbooks, and an audit brief before any production claims.
+
+
