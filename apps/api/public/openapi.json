@@ -139,6 +139,13 @@
                     "type": "string",
                     "pattern": "^[A-Za-z0-9_-]{43}$"
                   },
+                  "inboxKeyScheme": {
+                    "type": "string",
+                    "enum": [
+                      "legacy_random",
+                      "ready_derived_v1"
+                    ]
+                  },
                   "rotateInboxKey": {
                     "type": "boolean"
                   }

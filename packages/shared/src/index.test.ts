@@ -33,11 +33,18 @@ test("wallet link requires an explicit boolean to rotate an inbox key", () => {
   };
   assert.equal(walletLinkSchema.parse(input).rotateInboxKey, undefined);
   assert.equal(
+    walletLinkSchema.parse({ ...input, inboxKeyScheme: "ready_derived_v1" }).inboxKeyScheme,
+    "ready_derived_v1",
+  );
+  assert.equal(
     walletLinkSchema.parse({ ...input, rotateInboxKey: true }).rotateInboxKey,
     true,
   );
   assert.throws(() =>
     walletLinkSchema.parse({ ...input, rotateInboxKey: "true" }),
+  );
+  assert.throws(() =>
+    walletLinkSchema.parse({ ...input, inboxKeyScheme: "ready-ish" }),
   );
 });
 
@@ -200,11 +207,16 @@ test("deployment manifest accepts the Ready-managed mainnet privacy route", () =
   assert.equal(parsed.walletManagedPrivacy?.status, "verified");
   assert.equal(parsed.walletManagedPrivacy?.actionAmount, "100000");
   assert.equal(parsed.vesuEarn?.status, "pending");
-  assert.equal(parsed.vesuEarn?.anonymizerAddress, "UNDEPLOYED");
+  assert.match(parsed.vesuEarn?.anonymizerAddress ?? "", /^0x/);
+  assert.equal(typeof parsed.vesuEarn?.anonymizerDeployedBlock, "number");
   assert.throws(
     () => deploymentManifestSchema.parse({
       ...manifest,
-      vesuEarn: { ...manifest.vesuEarn, status: "verified" },
+      vesuEarn: {
+        ...manifest.vesuEarn,
+        status: "verified",
+        anonymizerAddress: "UNDEPLOYED",
+      },
     }),
     /verified Vesu Earn requires deployed anonymizer hashes/,
   );

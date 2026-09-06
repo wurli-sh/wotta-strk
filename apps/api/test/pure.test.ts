@@ -606,10 +606,12 @@ test("explicit inbox key rotation is allowed while live notes exist", async () =
     "0x123",
     "new-key",
     true,
+    "ready_derived_v1",
   );
   assert.equal(result?.keyRotated, true);
   assert.equal(updates[0]?.inbox_pubkey, "new-key");
   assert.equal(updates[0]?.key_version, 3);
+  assert.equal(updates[0]?.inbox_key_scheme, "ready_derived_v1");
 });
 test("live inbox claim detector stays fail-closed for non-terminal notes", () => {
   const future = new Date(Date.now() + 60_000).toISOString();

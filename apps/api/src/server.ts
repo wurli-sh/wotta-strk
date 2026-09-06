@@ -7,7 +7,7 @@ import { assertMainnetFallbackRpcNetwork, assertMainnetSourceRpcNetworks, assert
 import { createDb } from "./db/client.ts";
 import { createLogger, safeError } from "./logger.ts";
 import { requireAuth } from "./auth/auth.ts";
-import { createWalletChallenge, consumeWalletChallenge, requireWalletOrigin } from "./auth/challenge.ts";
+import { assertNoLiveClaimsBeforeKeyChange, createWalletChallenge, consumeWalletChallenge, requireWalletOrigin } from "./auth/challenge.ts";
 import { bindPrivateIdentity } from "./auth/private-identity.ts";
 import { activeWalletBindingForProfile } from "./auth/wallet-bindings.ts";
 import { syncProfileIdentities } from "./auth/sync.ts";
@@ -26,7 +26,7 @@ import { relayerReadiness } from "./relayer/readiness.ts";
 
 type Deps = ReturnType<typeof deps>; function deps(config = loadConfig()) { return { config, db: createDb(config), log: createLogger(config) }; }
 function parse<T>(schema: z.ZodType<T>, body: unknown): T { const result = schema.safeParse(body); if (!result.success) throw new Error(`invalid_body:${result.error.issues[0]?.path.join(".") ?? "value"}`); return result.data; }
-function errorReply(reply: { code: (status: number) => { send: (body: unknown) => unknown } }, error: unknown) { const message = safeError(error); const status = message === "unauthorized" ? 401 : message === "not_found" ? 404 : message === "route_paused" ? 503 : message.includes("route_disabled") || message.includes("network_mode_mismatch") || message.includes("identity_already_linked") || message.includes("wallet_already_linked") || message.includes("wallet_inbox_key_mismatch") || message.includes("wallet_binding_ambiguous") || message.includes("wallet_reclaim_blocked_active_claims") || message.includes("invalid_") || message.includes("challenge_") || message.includes("signature_") || message.includes("version_conflict") || message.includes("idempotency_") ? 409 : 400; return reply.code(status).send({ error: { code: message.split(":")[0], message } }); }
+function errorReply(reply: { code: (status: number) => { send: (body: unknown) => unknown } }, error: unknown) { const message = safeError(error); const status = message === "unauthorized" ? 401 : message === "not_found" ? 404 : message === "route_paused" ? 503 : message.includes("route_disabled") || message.includes("network_mode_mismatch") || message.includes("identity_already_linked") || message.includes("wallet_already_linked") || message.includes("wallet_inbox_key_mismatch") || message.includes("wallet_binding_ambiguous") || message.includes("wallet_reclaim_blocked_active_claims") || message.includes("wallet_unlink_blocked_active_claims") || message.includes("invalid_") || message.includes("challenge_") || message.includes("signature_") || message.includes("version_conflict") || message.includes("idempotency_") ? 409 : 400; return reply.code(status).send({ error: { code: message.split(":")[0], message } }); }
 
 export async function buildServer(d = deps()) {
   const app = Fastify({ bodyLimit: 256 * 1024, loggerInstance: d.log });
@@ -90,13 +90,21 @@ export async function buildServer(d = deps()) {
     return { profile: profile.data, identities: identities.data ?? [], wallet };
   });
   app.post("/v1/wallet/challenge", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(walletChallengeSchema, request.body), origin = requireWalletOrigin(d.config, request.headers.origin); const chainId = requestChainId(d.config, request); return await createWalletChallenge(d.db, d.config, auth.userId, body.address, origin, chainId); } catch (error) { return errorReply(reply, error); } });
-  app.post("/v1/wallet/link", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(walletLinkSchema, request.body), origin = requireWalletOrigin(d.config, request.headers.origin); const chainId = requestChainId(d.config, request); const rpcUrl = rpcUrlForChainId(d.config, chainId); return await consumeWalletChallenge(d.db, d.config, auth.userId, JSON.parse(body.challenge) as never, body.signature, body.inboxPublicKey, origin, chainId, rpcUrl, { rotateInboxKey: body.rotateInboxKey === true }); } catch (error) { return errorReply(reply, error); } });
+  app.post("/v1/wallet/link", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(walletLinkSchema, request.body), origin = requireWalletOrigin(d.config, request.headers.origin); const chainId = requestChainId(d.config, request); const rpcUrl = rpcUrlForChainId(d.config, chainId); return await consumeWalletChallenge(d.db, d.config, auth.userId, JSON.parse(body.challenge) as never, body.signature, body.inboxPublicKey, origin, chainId, rpcUrl, { rotateInboxKey: body.rotateInboxKey === true, ...(body.inboxKeyScheme ? { inboxKeyScheme: body.inboxKeyScheme } : {}) }); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/wallet/private-identity", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(privateIdentityBindingSchema, request.body); return await bindPrivateIdentity(d.db, d.config, auth.userId, body.identityAddress); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/wallet/unlink", async (request, reply) => {
     const auth = await requireAuth(d.db, request);
     if (!auth) return errorReply(reply, new Error("unauthorized"));
     try {
       const chainId = requestChainId(d.config, request);
+      const binding = await activeWalletBindingForProfile(d.db, auth.userId, chainId, { dedupe: true });
+      if (binding) {
+        await assertNoLiveClaimsBeforeKeyChange(
+          d.db,
+          binding,
+          "wallet_unlink_blocked_active_claims",
+        );
+      }
       const { data, error } = await d.db
         .from("wallet_bindings")
         .update({ revoked_at: new Date().toISOString() })

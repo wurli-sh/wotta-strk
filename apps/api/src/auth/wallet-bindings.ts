@@ -8,6 +8,7 @@ export type ActiveWalletBinding = {
   chain_id: string;
   inbox_pubkey: string;
   key_version?: number;
+  inbox_key_scheme?: "legacy_random" | "ready_derived_v1";
   private_identity_address?: string | null;
   privacy_pool_address?: string | null;
   private_identity_verified_at?: string | null;
@@ -21,7 +22,7 @@ export async function listActiveWalletBindingsForProfile(
 ): Promise<ActiveWalletBinding[]> {
   const { data, error } = await db
     .from("wallet_bindings")
-    .select("id, profile_id, address, chain_id, inbox_pubkey, key_version, private_identity_address, privacy_pool_address, private_identity_verified_at, created_at")
+    .select("id, profile_id, address, chain_id, inbox_pubkey, key_version, inbox_key_scheme, private_identity_address, privacy_pool_address, private_identity_verified_at, created_at")
     .eq("profile_id", profileId)
     .eq("chain_id", chainId)
     .is("revoked_at", null)
@@ -62,7 +63,7 @@ export async function findActiveWalletBindingByAddress(
   const normalized = normalizeWalletAddress(address);
   const { data, error } = await db
     .from("wallet_bindings")
-    .select("id, profile_id, address, chain_id, inbox_pubkey, key_version, private_identity_address, privacy_pool_address, private_identity_verified_at, created_at")
+    .select("id, profile_id, address, chain_id, inbox_pubkey, key_version, inbox_key_scheme, private_identity_address, privacy_pool_address, private_identity_verified_at, created_at")
     .eq("chain_id", chainId)
     .is("revoked_at", null);
   if (error) throw error;

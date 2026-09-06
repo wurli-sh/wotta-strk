@@ -57,7 +57,8 @@ export async function assertNoLiveClaimsBeforeKeyChange(
   db: Db,
   binding: ActiveWalletBinding,
   errorCode:
-    | "wallet_reclaim_blocked_active_claims" = "wallet_reclaim_blocked_active_claims",
+    | "wallet_reclaim_blocked_active_claims"
+    | "wallet_unlink_blocked_active_claims" = "wallet_reclaim_blocked_active_claims",
 ): Promise<void> {
   const { data, error } = await db
     .from("encrypted_notes")
@@ -76,6 +77,7 @@ export async function reconnectExistingWalletBinding(
   address: string,
   inboxPublicKey: string,
   rotateInboxKey: boolean,
+  inboxKeyScheme?: "legacy_random" | "ready_derived_v1",
 ) {
   if (!existing || !sameWalletAddress(existing.address, address)) return null;
   if (existing.inbox_pubkey !== inboxPublicKey) {
@@ -88,6 +90,7 @@ export async function reconnectExistingWalletBinding(
         address,
         inbox_pubkey: inboxPublicKey,
         key_version: (existing.key_version ?? 1) + 1,
+        inbox_key_scheme: inboxKeyScheme ?? "legacy_random",
         challenge_verified_at: new Date().toISOString(),
       })
       .eq("id", existing.id);
@@ -95,9 +98,14 @@ export async function reconnectExistingWalletBinding(
     return { address, inboxPublicKey, reconnected: true as const, keyRotated: true as const };
   }
 
+  const refresh: Record<string, unknown> = {
+    address,
+    challenge_verified_at: new Date().toISOString(),
+  };
+  if (inboxKeyScheme) refresh.inbox_key_scheme = inboxKeyScheme;
   const { error } = await db
     .from("wallet_bindings")
-    .update({ address, challenge_verified_at: new Date().toISOString() })
+    .update(refresh)
     .eq("id", existing.id);
   if (error) throw error;
   return { address, inboxPublicKey, reconnected: true as const };
@@ -158,7 +166,7 @@ export async function createWalletChallenge(db: Db, config: Config, profileId: s
   const { error } = await db.from("wallet_challenges").insert({ profile_id: profileId, chain_id: chainId, nonce_hash: sha256(nonce), challenge_hash: challengeHash(typedData), address: normalizedAddress, purpose: "wallet_link", origin, expires_at: expiresAt.toISOString() });
   if (error) throw error; return { typedData, expiresAt: expiresAt.toISOString() };
 }
-export async function consumeWalletChallenge(db: Db, config: Config, profileId: string, challenge: TypedData, signature: Signature, inboxPublicKey: string, origin: string, chainId: string, rpcUrl: string, options: { rotateInboxKey?: boolean } = {}) {
+export async function consumeWalletChallenge(db: Db, config: Config, profileId: string, challenge: TypedData, signature: Signature, inboxPublicKey: string, origin: string, chainId: string, rpcUrl: string, options: { rotateInboxKey?: boolean; inboxKeyScheme?: "legacy_random" | "ready_derived_v1" } = {}) {
   const message = challenge.message as { nonce?: string; address?: string; profile_hash?: string; origin_hash?: string; expires_at?: number };
   const nonce = message.nonce, address = message.address ? normalizeWalletAddress(message.address) : undefined;
   if (!nonce || !address || message.profile_hash !== feltHash(profileId) || message.origin_hash !== feltHash(origin) || !message.expires_at || message.expires_at * 1000 < Date.now()) throw new Error("challenge_invalid");
@@ -203,6 +211,7 @@ export async function consumeWalletChallenge(db: Db, config: Config, profileId: 
     address,
     inboxPublicKey,
     options.rotateInboxKey === true,
+    options.inboxKeyScheme,
   );
   if (reconnected) return reconnected;
 
@@ -223,7 +232,7 @@ export async function consumeWalletChallenge(db: Db, config: Config, profileId: 
   }
 
   const { error: revokeError } = await db.from("wallet_bindings").update({ revoked_at: new Date().toISOString() }).eq("profile_id", profileId).eq("chain_id", chainId).is("revoked_at", null); if (revokeError) throw revokeError;
-  const { error: linkError } = await db.from("wallet_bindings").insert({ profile_id: profileId, address, chain_id: chainId, inbox_pubkey: inboxPublicKey, challenge_verified_at: new Date().toISOString() });
+  const { error: linkError } = await db.from("wallet_bindings").insert({ profile_id: profileId, address, chain_id: chainId, inbox_pubkey: inboxPublicKey, inbox_key_scheme: options.inboxKeyScheme ?? "legacy_random", challenge_verified_at: new Date().toISOString() });
   if (linkError) {
     if (
       linkError.message.includes("wallet_bindings_active_address")
