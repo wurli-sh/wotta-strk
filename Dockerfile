@@ -8,7 +8,7 @@ RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .pnpmfile.cjs ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc pnpmfile.cjs ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/crypto/package.json packages/crypto/package.json
 COPY packages/adapters/package.json packages/adapters/package.json
