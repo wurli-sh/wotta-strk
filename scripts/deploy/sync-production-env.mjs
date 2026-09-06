@@ -156,7 +156,11 @@ function printPlan() {
 function syncVercel() {
   run("vercel", ["link", "--yes", "--scope", scope, "--project", project]);
   for (const [key, value] of Object.entries(web)) {
-    run("vercel", ["env", "add", key, "production", "--force", "--yes"], { input: value });
+    // Agent/non-interactive mode ignores stdin for `vercel env add`; --value is required.
+    // NEXT_PUBLIC_* must not be sensitive or `vercel env pull` / builds can see empty strings.
+    const args = ["env", "add", key, "production", "--force", "--yes", "--value", value];
+    if (key.startsWith("NEXT_PUBLIC_")) args.push("--no-sensitive");
+    run("vercel", args);
   }
   console.log(`Vercel: synced ${Object.keys(web).length} production variables to ${scope}/${project}`);
 }
