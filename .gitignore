@@ -35,4 +35,7 @@ limen/
 superpowers/
 .superstack/
 
+# Local research notes (not versioned)
+docs/research/
+
 improv-plan.md

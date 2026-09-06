@@ -10,13 +10,18 @@ import { HandlesPanel } from "@/components/account/HandlesPanel";
 import { WalletAndBalancePanel } from "@/components/account/WalletAndBalancePanel";
 import { EarnPanel } from "@/components/account/EarnPanel";
 import type { MeResponse } from "@/lib/api/client";
-import { fetchMe, mergeMeResponse, notifySessionChanged, refreshSupabaseSession, syncWottaSession } from "@/lib/auth";
+import {
+  fetchMe,
+  mergeMeResponse,
+  notifySessionChanged,
+  refreshSupabaseSession,
+  syncWottaSession,
+} from "@/lib/auth";
 import { chainIdForMode } from "@/lib/network-mode";
 import { userFacingError } from "@/lib/errors";
 import { withMinSkeleton } from "@/lib/skeleton-hold";
 import { createClient } from "@/lib/supabase/client";
 import {
-  AccountSkeleton,
   HandlesPanelSkeleton,
   WalletPanelSkeleton,
 } from "@/components/ui/Skeleton";
@@ -49,65 +54,71 @@ function AccountContent() {
   const [loading, setLoading] = useState(true);
   const [autoOpenWallet, setAutoOpenWallet] = useState(false);
 
-  const refreshAccount = useCallback(async (opts?: { hold?: boolean; preserveWallet?: boolean }) => {
-    try {
-      const work = async () => {
-        await refreshSupabaseSession();
-        const { data } = await createClient().auth.getSession();
-        setSession(data.session);
-        if (!data.session?.access_token) {
-          setMe(null);
-          return;
-        }
-        await syncWottaSession({ notify: false });
-        const res = await fetchMe(data.session.access_token, mode);
-        if (res.ok) {
-          setMe((prev) => {
-            const merged = mergeMeResponse(prev, res.data, mode);
-            if (
-              opts?.preserveWallet
-              && prev?.wallet
-              && !res.data.wallet
-              && prev.wallet.chain_id === chainIdForMode(mode)
-            ) {
-              return { ...merged, wallet: prev.wallet };
-            }
-            return merged;
-          });
-          notifySessionChanged();
-        } else {
-          toast.error(userFacingError(res.error, TOAST.accountRefreshFailed));
-        }
-      };
-      if (opts?.hold) await withMinSkeleton(work);
-      else await work();
-    } catch (error) {
-      toast.error(userFacingError(error, TOAST.accountRefreshFailed));
-    }
-  }, [mode]);
-
-  const loadAccount = useCallback(async (opts?: { hold?: boolean }) => {
-    setLoading(true);
-    try {
-      const work = async () => {
-        await refreshSupabaseSession();
-        const { data } = await createClient().auth.getSession();
-        setSession(data.session);
-        if (data.session?.access_token) {
+  const refreshAccount = useCallback(
+    async (opts?: { hold?: boolean; preserveWallet?: boolean }) => {
+      try {
+        const work = async () => {
+          await refreshSupabaseSession();
+          const { data } = await createClient().auth.getSession();
+          setSession(data.session);
+          if (!data.session?.access_token) {
+            setMe(null);
+            return;
+          }
           await syncWottaSession({ notify: false });
           const res = await fetchMe(data.session.access_token, mode);
-          if (res.ok) setMe((prev) => mergeMeResponse(prev, res.data, mode));
-          else setMe(null);
-        } else {
-          setMe(null);
-        }
-      };
-      if (opts?.hold) await withMinSkeleton(work);
-      else await work();
-    } finally {
-      setLoading(false);
-    }
-  }, [mode]);
+          if (res.ok) {
+            setMe((prev) => {
+              const merged = mergeMeResponse(prev, res.data, mode);
+              if (
+                opts?.preserveWallet &&
+                prev?.wallet &&
+                !res.data.wallet &&
+                prev.wallet.chain_id === chainIdForMode(mode)
+              ) {
+                return { ...merged, wallet: prev.wallet };
+              }
+              return merged;
+            });
+            notifySessionChanged();
+          } else {
+            toast.error(userFacingError(res.error, TOAST.accountRefreshFailed));
+          }
+        };
+        if (opts?.hold) await withMinSkeleton(work);
+        else await work();
+      } catch (error) {
+        toast.error(userFacingError(error, TOAST.accountRefreshFailed));
+      }
+    },
+    [mode],
+  );
+
+  const loadAccount = useCallback(
+    async (opts?: { hold?: boolean }) => {
+      setLoading(true);
+      try {
+        const work = async () => {
+          await refreshSupabaseSession();
+          const { data } = await createClient().auth.getSession();
+          setSession(data.session);
+          if (data.session?.access_token) {
+            await syncWottaSession({ notify: false });
+            const res = await fetchMe(data.session.access_token, mode);
+            if (res.ok) setMe((prev) => mergeMeResponse(prev, res.data, mode));
+            else setMe(null);
+          } else {
+            setMe(null);
+          }
+        };
+        if (opts?.hold) await withMinSkeleton(work);
+        else await work();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mode],
+  );
 
   useEffect(() => {
     void loadAccount();
@@ -157,16 +168,8 @@ function AccountContent() {
   }
 
   return (
-    <PageShell
-      title="Account"
-      subtitle={
-        session
-          ? PAGE_SUBTITLES.account
-          : "Sign in from the navigation to manage your handles and wallet."
-      }
-      maxWidth="md"
-    >
-      {loading ? (
+    <PageShell title="Account" subtitle={PAGE_SUBTITLES.account} maxWidth="md">
+      {session ? (
         <>
           <div className="mb-6 flex justify-center">
             <SegmentedTabs
@@ -177,64 +180,65 @@ function AccountContent() {
               items={tabs}
             />
           </div>
-          {tab === "handles" ? <HandlesPanelSkeleton /> : <WalletPanelSkeleton />}
-        </>
-      ) : null}
-
-      {!loading && session ? (
-        <>
-          <div className="mb-6 flex justify-center">
-            <SegmentedTabs
-              layoutId="account-sections"
-              ariaLabel="Account sections"
-              value={tab}
-              onValueChange={changeTab}
-              items={tabs}
-            />
-          </div>
-          {tab === "handles" ? (
-              <HandlesPanel
-                me={me}
-                session={session}
-                onLinked={() => {
-                  void refreshAccount({ hold: true });
-                }}
-              />
-            ) : tab === "wallet" ? (
-              <WalletAndBalancePanel
-                me={me}
-                autoOpenConnect={autoOpenWallet}
-                onLinked={async (linkedMe) => {
-                  const nextMe: MeResponse = {
-                    profile: linkedMe.profile ?? me?.profile ?? null,
-                    identities: linkedMe.identities.length ? linkedMe.identities : me?.identities ?? [],
-                    wallet: linkedMe.wallet
-                      ? {
-                          address: linkedMe.wallet.address,
-                          inbox_pubkey: linkedMe.wallet.inbox_pubkey,
-                          chain_id: me?.wallet?.chain_id ?? (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
-                          key_version: me?.wallet?.key_version ?? 1,
-                          private_identity_address:
-                            linkedMe.wallet.private_identity_address ?? me?.wallet?.private_identity_address,
-                          privacy_pool_address:
-                            linkedMe.wallet.privacy_pool_address ?? me?.wallet?.privacy_pool_address,
-                          private_identity_verified_at:
-                            me?.wallet?.private_identity_verified_at ?? new Date().toISOString(),
-                        }
-                      : null,
-                  };
-                  if (linkedMe.wallet) {
-                    setMe((prev) => mergeMeResponse(prev, nextMe, mode));
-                    notifySessionChanged();
-                    return;
-                  }
-                  setMe((prev) => (prev ? { ...prev, wallet: null } : nextMe));
-                  void refreshAccount({ hold: true });
-                }}
-              />
+          {loading ? (
+            tab === "handles" ? (
+              <HandlesPanelSkeleton />
             ) : (
-              <EarnPanel me={me} />
-            )}
+              <WalletPanelSkeleton />
+            )
+          ) : tab === "handles" ? (
+            <HandlesPanel
+              me={me}
+              session={session}
+              onLinked={() => {
+                void refreshAccount({ hold: true });
+              }}
+            />
+          ) : tab === "wallet" ? (
+            <WalletAndBalancePanel
+              me={me}
+              autoOpenConnect={autoOpenWallet}
+              onLinked={async (linkedMe) => {
+                const nextMe: MeResponse = {
+                  profile: linkedMe.profile ?? me?.profile ?? null,
+                  identities: linkedMe.identities.length
+                    ? linkedMe.identities
+                    : (me?.identities ?? []),
+                  wallet: linkedMe.wallet
+                    ? {
+                        address: linkedMe.wallet.address,
+                        inbox_pubkey: linkedMe.wallet.inbox_pubkey,
+                        chain_id:
+                          me?.wallet?.chain_id ??
+                          (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
+                        key_version:
+                          linkedMe.wallet.key_version ??
+                          me?.wallet?.key_version ??
+                          1,
+                        private_identity_address:
+                          linkedMe.wallet.private_identity_address ??
+                          me?.wallet?.private_identity_address,
+                        privacy_pool_address:
+                          linkedMe.wallet.privacy_pool_address ??
+                          me?.wallet?.privacy_pool_address,
+                        private_identity_verified_at:
+                          me?.wallet?.private_identity_verified_at ??
+                          new Date().toISOString(),
+                      }
+                    : null,
+                };
+                if (linkedMe.wallet) {
+                  setMe((prev) => mergeMeResponse(prev, nextMe, mode));
+                  notifySessionChanged();
+                  return;
+                }
+                setMe((prev) => (prev ? { ...prev, wallet: null } : nextMe));
+                void refreshAccount({ hold: true });
+              }}
+            />
+          ) : (
+            <EarnPanel me={me} />
+          )}
         </>
       ) : null}
     </PageShell>
@@ -243,7 +247,17 @@ function AccountContent() {
 
 export function AccountPage() {
   return (
-    <Suspense fallback={<AccountSkeleton />}>
+    <Suspense
+      fallback={
+        <PageShell
+          title="Account"
+          subtitle={PAGE_SUBTITLES.account}
+          maxWidth="md"
+        >
+          {null}
+        </PageShell>
+      }
+    >
       <AccountContent />
     </Suspense>
   );

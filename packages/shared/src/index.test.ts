@@ -8,6 +8,7 @@ import {
   deploymentManifestSchema,
   hashDeploymentManifest,
   identifierSchema,
+  walletLinkSchema,
 } from "./index.ts";
 
 test("workspace scaffold exports version", () => {
@@ -21,6 +22,22 @@ test("starknet.js pin is recorded", () => {
 test("recipient identifiers accept canonical email and X namespaces", () => {
   assert.equal(identifierSchema.parse({ provider: "email", identifier: "user@example.com" }).provider, "email");
   assert.equal(identifierSchema.parse({ provider: "x", identifier: "@user" }).provider, "x");
+});
+
+test("wallet link requires an explicit boolean to rotate an inbox key", () => {
+  const input = {
+    challenge: "{}",
+    signature: ["0x1"],
+    inboxPublicKey: "A".repeat(43),
+  };
+  assert.equal(walletLinkSchema.parse(input).rotateInboxKey, undefined);
+  assert.equal(
+    walletLinkSchema.parse({ ...input, rotateInboxKey: true }).rotateInboxKey,
+    true,
+  );
+  assert.throws(() =>
+    walletLinkSchema.parse({ ...input, rotateInboxKey: "true" }),
+  );
 });
 
 test("deployment manifest schema accepts pool placeholders", () => {

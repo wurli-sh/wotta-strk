@@ -121,50 +121,64 @@ export function HowItWorks() {
       setActive(3);
       return;
     }
-    const amountThenPay = (t: number, continueToEarn = true) => {
-      at(t, () => setActive(1));
+
+    // Equal dwell on every step so 01→02, 02→03, and 03→04 feel the same.
+    const stepHold = 2000;
+
+    const showStep0 = (t: number) => {
+      at(t, () => {
+        setChars(0);
+        setChainOn(false);
+        setPressed(false);
+        setCardIn(false);
+        setEarnIn(false);
+        setActive(0);
+      });
+      for (let i = 1; i <= HANDLE.length; i++) {
+        at(t + 300 + i * 120, () => setChars(i));
+      }
+    };
+
+    const showStep1 = (t: number) => {
+      at(t, () => {
+        setChars(HANDLE.length);
+        setChainOn(false);
+        setPressed(false);
+        setCardIn(false);
+        setEarnIn(false);
+        setActive(1);
+      });
       at(t + 300, () => setChainOn(true));
       at(t + 1100, () => setPressed(true));
       at(t + 1350, () => setPressed(false));
-      at(t + 1900, () => {
-        setActive(2);
-        setCardIn(true);
-      });
-      if (continueToEarn) {
-        at(t + 3100, () => {
-          setActive(3);
-          setEarnIn(true);
-        });
-      }
     };
-    setPressed(false);
-    setEarnIn(false);
-    if (from === 0) {
-      setChars(0);
-      setChainOn(false);
-      setCardIn(false);
-      setActive(0);
-      for (let i = 1; i <= HANDLE.length; i++) {
-        at(400 + i * 130, () => setChars(i));
-      }
-      amountThenPay(400 + HANDLE.length * 130 + 500);
-    } else if (from === 1) {
-      setChars(HANDLE.length);
-      setChainOn(false);
-      setCardIn(false);
-      amountThenPay(200);
-    } else if (from === 2) {
-      setChars(HANDLE.length);
-      setChainOn(true);
-      setCardIn(false);
-      setActive(2);
-      at(150, () => setCardIn(true));
-    } else {
-      setChars(HANDLE.length);
-      setChainOn(true);
-      setCardIn(true);
-      setActive(3);
-      at(100, () => setEarnIn(true));
+
+    const showStep2 = (t: number) => {
+      at(t, () => {
+        setChars(HANDLE.length);
+        setChainOn(true);
+        setPressed(false);
+        setCardIn(false);
+        setEarnIn(false);
+        setActive(2);
+      });
+      at(t + 150, () => setCardIn(true));
+    };
+
+    const showStep3 = (t: number) => {
+      at(t, () => {
+        setChars(HANDLE.length);
+        setChainOn(true);
+        setPressed(false);
+        setCardIn(true);
+        setActive(3);
+      });
+      at(t + 150, () => setEarnIn(true));
+    };
+
+    const sequence = [showStep0, showStep1, showStep2, showStep3] as const;
+    for (let step = from; step <= 3; step++) {
+      sequence[step]((step - from) * stepHold);
     }
   };
 

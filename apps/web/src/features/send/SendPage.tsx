@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ExternalLink, Send, Wallet } from "lucide-react";
+import { ExternalLink, LogIn, Send, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   connectEvmSource,
@@ -52,7 +52,8 @@ import {
 } from "@/features/send/sourceExplorer";
 import { useRoutesHealth } from "@/features/send/useRoutesHealth";
 import { apiFetch } from "@/lib/api/client";
-import { fetchMe, getAccessToken } from "@/lib/auth";
+import { AUTH_SESSION_EVENT, fetchMe, getAccessToken } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
 import { MAINNET_DISPLAY_DENS, coerceMainnetDenomination, denominationBaseUnits, isMainnetDenomination, type Dens } from "@/lib/denoms";
 import { userFacingError } from "@/lib/errors";
@@ -212,6 +213,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [delivery, setDelivery] = useState<DeliveryMode | null>(null);
   const [successRecipient, setSuccessRecipient] = useState("");
   const [successTx, setSuccessTx] = useState<string | null>(null);
@@ -246,6 +248,23 @@ function SendForm({ mode }: { mode: NetworkMode }) {
   useEffect(() => {
     const to = new URLSearchParams(window.location.search).get("to");
     if (to) setRecipient(to);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      void createClient().auth.getSession().then(({ data }) => {
+        if (active) setSignedIn(Boolean(data.session?.access_token));
+      });
+    };
+    refresh();
+    window.addEventListener(AUTH_SESSION_EVENT, refresh);
+    const { data: { subscription } } = createClient().auth.onAuthStateChange(() => refresh());
+    return () => {
+      active = false;
+      window.removeEventListener(AUTH_SESSION_EVENT, refresh);
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -812,13 +831,23 @@ function SendForm({ mode }: { mode: NetworkMode }) {
             </p>
           ) : null}
           {stage !== "complete" ? (
-            walletConnected ? (
+            signedIn === false ? (
+              <MotionPillButton
+                data-testid="send-sign-in"
+                className="w-full min-h-12 text-base"
+                onClick={() => setAuthOpen(true)}
+              >
+                <LogIn className="size-4" aria-hidden />
+                Sign in to send
+              </MotionPillButton>
+            ) : walletConnected ? (
               <div>
                 <MotionPillButton
                   data-testid="send-submit"
                   className="w-full min-h-12 text-base"
                   disabled={
                     busy
+                    || signedIn !== true
                     || !routesReady
                     || !privateReady
                     || !sourceReady
@@ -878,6 +907,7 @@ function SendForm({ mode }: { mode: NetworkMode }) {
                 disabled={
                   connecting
                   || busy
+                  || signedIn !== true
                   || !routesReady
                   || !privateReady
                   || !sourceReady
@@ -895,7 +925,14 @@ function SendForm({ mode }: { mode: NetworkMode }) {
           ) : null}
         </div>
       </div>
-      <SignInModal open={authOpen} onClose={() => setAuthOpen(false)} />
+      <SignInModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onSignedIn={() => {
+          setSignedIn(true);
+          setAuthOpen(false);
+        }}
+      />
     </div>
   );
 }

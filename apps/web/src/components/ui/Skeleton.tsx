@@ -328,12 +328,16 @@ export function InboxMobileRowsSkeleton({ rows = 2 }: { rows?: number }) {
   return (
     <>
       {Array.from({ length: rows }).map((_, i) => (
-        <li key={i} className="space-y-3 p-4">
+        <li key={i} className="list-none space-y-3 p-4">
           <div className="flex items-center justify-between gap-3">
-            <Skeleton className="h-5 w-24" />
-            <Skeleton className="radius-control h-6 w-20" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="size-5 shrink-0 rounded-full" />
+              <Skeleton className="h-5 w-16" />
+            </div>
+            <Skeleton className="radius-control h-6 w-[4.5rem]" />
           </div>
-          <Skeleton className="h-4 w-2/3 max-w-[12rem]" />
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-3 w-36" />
           <Skeleton className="radius-control h-10 w-full" />
         </li>
       ))}
@@ -361,26 +365,21 @@ export function InboxSkeleton() {
         <Skeleton className="radius-control absolute right-0 top-1/2 hidden h-8 w-20 -translate-y-1/2 sm:block" />
       </div>
       <div className="radius-surface overflow-hidden border border-border/80 bg-card shadow-card">
-        <div className="hidden sm:block">
-          <div className="flex gap-4 border-b border-border/60 bg-muted/80 px-5 py-3">
+        <div className="hidden md:block">
+          <div className="flex gap-4 border-b border-border/60 bg-brand-mist/50 px-4 py-2.5">
             <Skeleton className="h-3 w-16" />
             <Skeleton className="h-3 w-16" />
             <Skeleton className="h-3 w-14" />
             <Skeleton className="h-3 w-12" />
+            <Skeleton className="ml-auto h-3 w-10" />
           </div>
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="flex items-center gap-4 border-b border-border/40 px-5 py-3.5 last:border-0"
-            >
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="radius-control h-6 w-16" />
-              <Skeleton className="radius-control ml-auto h-8 w-16" />
-            </div>
-          ))}
+          <table className="w-full table-fixed text-left text-sm">
+            <tbody className="divide-y divide-border/50">
+              <InboxTableRowsSkeleton columns={5} rows={3} />
+            </tbody>
+          </table>
         </div>
-        <ul className="divide-y divide-border/50 sm:hidden">
+        <ul className="divide-y divide-border/50 md:hidden">
           <InboxMobileRowsSkeleton rows={2} />
         </ul>
       </div>

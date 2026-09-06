@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { hash as starknetHash, num, RpcProvider, type Signature, type TypedData, verifyMessageInStarknet } from "starknet";
 import type { Config } from "../config.ts";
 import type { Db } from "../db/client.ts";
-import { activeWalletBindingForProfile, findActiveWalletBindingByAddress } from "./wallet-bindings.ts";
+import { activeWalletBindingForProfile, findActiveWalletBindingByAddress, type ActiveWalletBinding } from "./wallet-bindings.ts";
 
 const ttlMs = 5 * 60_000;
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -23,6 +23,37 @@ export function sameWalletAddress(left: string, right: string): boolean {
   } catch {
     return false;
   }
+}
+
+export async function reconnectExistingWalletBinding(
+  db: Db,
+  existing: ActiveWalletBinding | null,
+  address: string,
+  inboxPublicKey: string,
+  rotateInboxKey: boolean,
+) {
+  if (!existing || !sameWalletAddress(existing.address, address)) return null;
+  if (existing.inbox_pubkey !== inboxPublicKey) {
+    if (!rotateInboxKey) throw new Error("wallet_inbox_key_mismatch");
+    const { error } = await db
+      .from("wallet_bindings")
+      .update({
+        address,
+        inbox_pubkey: inboxPublicKey,
+        key_version: (existing.key_version ?? 1) + 1,
+        challenge_verified_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+    if (error) throw error;
+    return { address, inboxPublicKey, reconnected: true as const, keyRotated: true as const };
+  }
+
+  const { error } = await db
+    .from("wallet_bindings")
+    .update({ address, challenge_verified_at: new Date().toISOString() })
+    .eq("id", existing.id);
+  if (error) throw error;
+  return { address, inboxPublicKey, reconnected: true as const };
 }
 
 export function walletBindingTypedData(input: {
@@ -80,7 +111,7 @@ export async function createWalletChallenge(db: Db, config: Config, profileId: s
   const { error } = await db.from("wallet_challenges").insert({ profile_id: profileId, chain_id: chainId, nonce_hash: sha256(nonce), challenge_hash: challengeHash(typedData), address: normalizedAddress, purpose: "wallet_link", origin, expires_at: expiresAt.toISOString() });
   if (error) throw error; return { typedData, expiresAt: expiresAt.toISOString() };
 }
-export async function consumeWalletChallenge(db: Db, config: Config, profileId: string, challenge: TypedData, signature: Signature, inboxPublicKey: string, origin: string, chainId: string, rpcUrl: string) {
+export async function consumeWalletChallenge(db: Db, config: Config, profileId: string, challenge: TypedData, signature: Signature, inboxPublicKey: string, origin: string, chainId: string, rpcUrl: string, options: { rotateInboxKey?: boolean } = {}) {
   const message = challenge.message as { nonce?: string; address?: string; profile_hash?: string; origin_hash?: string; expires_at?: number };
   const nonce = message.nonce, address = message.address ? normalizeWalletAddress(message.address) : undefined;
   if (!nonce || !address || message.profile_hash !== feltHash(profileId) || message.origin_hash !== feltHash(origin) || !message.expires_at || message.expires_at * 1000 < Date.now()) throw new Error("challenge_invalid");
@@ -119,24 +150,14 @@ export async function consumeWalletChallenge(db: Db, config: Config, profileId: 
   if (!row) throw new Error("challenge_replayed_or_expired");
 
   const existingByProfile = await activeWalletBindingForProfile(db, profileId, chainId, { dedupe: true });
-
-  if (existingByProfile && sameWalletAddress(existingByProfile.address, address)) {
-    if (existingByProfile.inbox_pubkey !== inboxPublicKey) throw new Error("wallet_inbox_key_mismatch");
-    if (existingByProfile.address !== address) {
-      const { error: normalizeError } = await db
-        .from("wallet_bindings")
-        .update({ address, challenge_verified_at: new Date().toISOString() })
-        .eq("id", existingByProfile.id);
-      if (normalizeError) throw normalizeError;
-    } else {
-      const { error: touchError } = await db
-        .from("wallet_bindings")
-        .update({ challenge_verified_at: new Date().toISOString() })
-        .eq("id", existingByProfile.id);
-      if (touchError) throw touchError;
-    }
-    return { address, inboxPublicKey, reconnected: true as const };
-  }
+  const reconnected = await reconnectExistingWalletBinding(
+    db,
+    existingByProfile,
+    address,
+    inboxPublicKey,
+    options.rotateInboxKey === true,
+  );
+  if (reconnected) return reconnected;
 
   const existingByAddress = await findActiveWalletBindingByAddress(db, chainId, address);
 

@@ -22,7 +22,8 @@ import type { NetworkMode } from "@/lib/network-mode";
  * - Never on app network toggle alone — Mainnet and Sepolia caches stay isolated
  */
 
-const SEPOLIA_STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
+const SEPOLIA_STRK =
+  "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
 
 export type ConnectedReady = {
   account: WalletAccountV6;
@@ -32,6 +33,7 @@ export type ConnectedReady = {
 };
 
 type ReadyRuntime = {
+  version: number;
   connections: Partial<Record<NetworkMode, ConnectedReady>>;
   inFlight: Partial<Record<NetworkMode, Promise<ConnectedReady>>>;
   generation: number;
@@ -43,9 +45,17 @@ declare global {
 }
 
 const READY_CONNECT_TIMEOUT_MS = 30_000;
+const READY_RUNTIME_VERSION = 2;
 
 function readyRuntime(): ReadyRuntime {
-  return globalThis.__wottaReadyRuntime ??= { connections: {}, inFlight: {}, generation: 0 };
+  const existing = globalThis.__wottaReadyRuntime;
+  if (existing?.version === READY_RUNTIME_VERSION) return existing;
+  return (globalThis.__wottaReadyRuntime = {
+    version: READY_RUNTIME_VERSION,
+    connections: {},
+    inFlight: {},
+    generation: 0,
+  });
 }
 
 export function clearReadyConnections(): void {
@@ -56,7 +66,9 @@ export function clearReadyConnections(): void {
 }
 
 /** Read an existing session without connecting Ready or triggering a chain switch. */
-export function peekReadyConnection(mode: NetworkMode): ConnectedReady | undefined {
+export function peekReadyConnection(
+  mode: NetworkMode,
+): ConnectedReady | undefined {
   return readyRuntime().connections[mode];
 }
 
@@ -81,7 +93,9 @@ export function activationFeeToken(mode: NetworkMode): string {
 }
 
 function findReadyWallet() {
-  return createStore().getWallets().find((candidate) => /ready/i.test(candidate.name));
+  return createStore()
+    .getWallets()
+    .find((candidate) => /ready/i.test(candidate.name));
 }
 
 async function withReadyConnectTimeout<T>(request: Promise<T>): Promise<T> {
@@ -90,7 +104,10 @@ async function withReadyConnectTimeout<T>(request: Promise<T>): Promise<T> {
     return await Promise.race([
       request,
       new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error("ready_connection_unresponsive")), READY_CONNECT_TIMEOUT_MS);
+        timeout = setTimeout(
+          () => reject(new Error("ready_connection_unresponsive")),
+          READY_CONNECT_TIMEOUT_MS,
+        );
       }),
     ]);
   } finally {
@@ -106,37 +123,47 @@ async function readWalletChainId(wallet: unknown): Promise<string | undefined> {
   }
 }
 
-async function currentWalletChain(
-  account: WalletAccountV6,
-  wallet: unknown | undefined,
-): Promise<string> {
-  if (wallet) {
-    const fromWallet = await readWalletChainId(wallet);
-    if (fromWallet) return fromWallet;
+async function ensureReadyWalletChain(
+  wallet: unknown,
+  mode: NetworkMode,
+): Promise<void> {
+  const expected = expectedChainId(mode);
+  const current = await readWalletChainId(wallet);
+  if (!current || current === expected) return;
+
+  const switched = await walletV6.switchStarknetChain(
+    wallet as never,
+    expected,
+  );
+  if (!switched || (await readWalletChainId(wallet)) !== expected) {
+    throw new Error(
+      mode === "mainnet"
+        ? "ready_mainnet_network_mismatch"
+        : "ready_testnet_network_mismatch",
+    );
   }
-  return account.provider.getChainId();
+}
+
+async function ensureReadyProviderChain(
+  account: WalletAccountV6,
+  mode: NetworkMode,
+): Promise<void> {
+  if ((await account.provider.getChainId()) !== expectedChainId(mode)) {
+    throw new Error(
+      mode === "mainnet"
+        ? "ready_mainnet_network_mismatch"
+        : "ready_testnet_network_mismatch",
+    );
+  }
 }
 
 export async function ensureReadyChain(
   account: WalletAccountV6,
   mode: NetworkMode,
 ): Promise<void> {
-  const expected = expectedChainId(mode);
   const wallet = findReadyWallet();
-  if ((await currentWalletChain(account, wallet)) === expected) return;
-
-  if (!wallet) {
-    throw new Error(mode === "mainnet" ? "ready_mainnet_network_mismatch" : "ready_testnet_network_mismatch");
-  }
-
-  const switched = await walletV6.switchStarknetChain(wallet as never, expected);
-  if (!switched) {
-    throw new Error(mode === "mainnet" ? "ready_mainnet_network_mismatch" : "ready_testnet_network_mismatch");
-  }
-
-  if ((await currentWalletChain(account, wallet)) !== expected) {
-    throw new Error(mode === "mainnet" ? "ready_mainnet_network_mismatch" : "ready_testnet_network_mismatch");
-  }
+  if (wallet) await ensureReadyWalletChain(wallet, mode);
+  await ensureReadyProviderChain(account, mode);
 }
 
 function isUndeployedAccountError(error: unknown): boolean {
@@ -145,7 +172,11 @@ function isUndeployedAccountError(error: unknown): boolean {
 }
 
 function undeployedAccountError(mode: NetworkMode): Error {
-  return new Error(mode === "mainnet" ? "mainnet_wallet_not_deployed" : "testnet_wallet_not_deployed");
+  return new Error(
+    mode === "mainnet"
+      ? "mainnet_wallet_not_deployed"
+      : "testnet_wallet_not_deployed",
+  );
 }
 
 function isAccountAlreadyDeployedError(error: unknown): boolean {
@@ -209,12 +240,20 @@ export async function connectReady(
   mode: NetworkMode = "testnet",
   options?: { forceReconnect?: boolean },
 ): Promise<ConnectedReady> {
-  const rpcUrl = mode === "mainnet"
-    ? process.env.NEXT_PUBLIC_STARKNET_MAINNET_RPC_URL
-    : process.env.NEXT_PUBLIC_STARKNET_TESTNET_RPC_URL ?? process.env.NEXT_PUBLIC_STARKNET_RPC_URL;
-  if (!rpcUrl) throw new Error(`${mode === "mainnet" ? "Mainnet" : "Sepolia"} Starknet RPC is not configured`);
+  const rpcUrl =
+    mode === "mainnet"
+      ? process.env.NEXT_PUBLIC_STARKNET_MAINNET_RPC_URL
+      : (process.env.NEXT_PUBLIC_STARKNET_TESTNET_RPC_URL ??
+        process.env.NEXT_PUBLIC_STARKNET_RPC_URL);
+  if (!rpcUrl)
+    throw new Error(
+      `${mode === "mainnet" ? "Mainnet" : "Sepolia"} Starknet RPC is not configured`,
+    );
   const wallet = findReadyWallet();
-  if (!wallet) throw new Error("Ready wallet was not found. Install or unlock Ready and retry");
+  if (!wallet)
+    throw new Error(
+      "Ready wallet was not found. Install or unlock Ready and retry",
+    );
   const runtime = readyRuntime();
   if (options?.forceReconnect) {
     runtime.generation += 1;
@@ -232,18 +271,32 @@ export async function connectReady(
 
   const generation = runtime.generation;
   const connecting = (async () => {
+    // Ready accounts can be network-specific. Switch first so connect() reads
+    // the address for the requested chain instead of retaining the old chain's
+    // account address inside the new WalletAccountV6 instance.
+    await ensureReadyWalletChain(wallet, mode);
     const account = await withReadyConnectTimeout(
       WalletAccountV6.connect({ nodeUrl: rpcUrl }, wallet as never),
     );
-    await ensureReadyChain(account, mode);
-    const supportedWalletApi = (await walletV6.supportedWalletApi(wallet as never)).map(String);
+    await ensureReadyProviderChain(account, mode);
+    const supportedWalletApi = (
+      await walletV6.supportedWalletApi(wallet as never)
+    ).map(String);
     if (mode === "mainnet" && !supportedWalletApi.includes("0.10.3")) {
-      throw new Error("Ready Wallet API 0.10.3 is required for mainnet privacy");
+      throw new Error(
+        "Ready Wallet API 0.10.3 is required for mainnet privacy",
+      );
     }
-    const connected = { account, address: account.address, walletName: wallet.name, supportedWalletApi };
+    const connected = {
+      account,
+      address: account.address,
+      walletName: wallet.name,
+      supportedWalletApi,
+    };
     // An unlink/sign-out or forced reconnect may have invalidated this request
     // while the wallet UI was open. Never let that stale result repopulate cache.
-    if (runtime.generation === generation) runtime.connections[mode] = connected;
+    if (runtime.generation === generation)
+      runtime.connections[mode] = connected;
     return connected;
   })();
   runtime.inFlight[mode] = connecting;

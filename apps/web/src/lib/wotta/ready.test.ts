@@ -28,7 +28,11 @@ vi.mock("starknet", async (importOriginal) => {
   };
 });
 
-import { activationFeeToken, clearReadyConnections, connectReady } from "./ready";
+import {
+  activationFeeToken,
+  clearReadyConnections,
+  connectReady,
+} from "./ready";
 
 function account(chainId: string, address = "0x123") {
   return {
@@ -40,9 +44,16 @@ function account(chainId: string, address = "0x123") {
 beforeEach(() => {
   clearReadyConnections();
   vi.clearAllMocks();
-  vi.stubEnv("NEXT_PUBLIC_STARKNET_MAINNET_RPC_URL", "https://mainnet.rpc.example");
-  vi.stubEnv("NEXT_PUBLIC_STARKNET_TESTNET_RPC_URL", "https://sepolia.rpc.example");
+  vi.stubEnv(
+    "NEXT_PUBLIC_STARKNET_MAINNET_RPC_URL",
+    "https://mainnet.rpc.example",
+  );
+  vi.stubEnv(
+    "NEXT_PUBLIC_STARKNET_TESTNET_RPC_URL",
+    "https://sepolia.rpc.example",
+  );
   mocks.requestChainId.mockResolvedValue(constants.StarknetChainId.SN_MAIN);
+  mocks.switchStarknetChain.mockResolvedValue(true);
   mocks.supportedWalletApi.mockResolvedValue(["0.10.3"]);
   mocks.connect.mockResolvedValue(account(constants.StarknetChainId.SN_MAIN));
 });
@@ -54,7 +65,9 @@ afterEach(() => {
 
 describe("Ready account activation", () => {
   it("selects the token configured for the active Starknet network", () => {
-    expect(activationFeeToken("mainnet")).toBe(mainnetDeployment.walletManagedPrivacy.feeToken);
+    expect(activationFeeToken("mainnet")).toBe(
+      mainnetDeployment.walletManagedPrivacy.feeToken,
+    );
     expect(activationFeeToken("testnet")).toMatch(/^0x[0-9a-f]+$/i);
   });
 });
@@ -70,9 +83,11 @@ describe("Ready connection lifecycle", () => {
 
   it("coalesces concurrent unlock and claim connection requests", async () => {
     let resolveConnect!: (value: ReturnType<typeof account>) => void;
-    mocks.connect.mockReturnValue(new Promise((resolve) => {
-      resolveConnect = resolve;
-    }));
+    mocks.connect.mockReturnValue(
+      new Promise((resolve) => {
+        resolveConnect = resolve;
+      }),
+    );
 
     const unlock = connectReady("mainnet");
     const claim = connectReady("mainnet");
@@ -89,8 +104,12 @@ describe("Ready connection lifecycle", () => {
       .mockResolvedValueOnce(constants.StarknetChainId.SN_SEPOLIA)
       .mockResolvedValueOnce(constants.StarknetChainId.SN_MAIN);
     mocks.connect
-      .mockResolvedValueOnce(account(constants.StarknetChainId.SN_MAIN, "0x123"))
-      .mockResolvedValueOnce(account(constants.StarknetChainId.SN_SEPOLIA, "0x456"));
+      .mockResolvedValueOnce(
+        account(constants.StarknetChainId.SN_MAIN, "0x123"),
+      )
+      .mockResolvedValueOnce(
+        account(constants.StarknetChainId.SN_SEPOLIA, "0x456"),
+      );
 
     const mainnet = await connectReady("mainnet");
     const testnet = await connectReady("testnet");
@@ -101,10 +120,37 @@ describe("Ready connection lifecycle", () => {
     expect(mocks.connect).toHaveBeenCalledTimes(2);
   });
 
+  it("switches Ready before reading the account for a new network", async () => {
+    let switched = false;
+    mocks.requestChainId
+      .mockResolvedValueOnce(constants.StarknetChainId.SN_SEPOLIA)
+      .mockResolvedValueOnce(constants.StarknetChainId.SN_MAIN);
+    mocks.switchStarknetChain.mockImplementation(async () => {
+      switched = true;
+      return true;
+    });
+    mocks.connect.mockImplementation(async () => {
+      expect(switched).toBe(true);
+      return account(constants.StarknetChainId.SN_MAIN, "0x999");
+    });
+
+    const connected = await connectReady("mainnet");
+
+    expect(connected.address).toBe("0x999");
+    expect(mocks.switchStarknetChain).toHaveBeenCalledWith(
+      mocks.wallet,
+      constants.StarknetChainId.SN_MAIN,
+    );
+  });
+
   it("creates a fresh connection only when explicitly forced", async () => {
     mocks.connect
-      .mockResolvedValueOnce(account(constants.StarknetChainId.SN_MAIN, "0x123"))
-      .mockResolvedValueOnce(account(constants.StarknetChainId.SN_MAIN, "0x123"));
+      .mockResolvedValueOnce(
+        account(constants.StarknetChainId.SN_MAIN, "0x123"),
+      )
+      .mockResolvedValueOnce(
+        account(constants.StarknetChainId.SN_MAIN, "0x123"),
+      );
 
     const first = await connectReady("mainnet");
     const second = await connectReady("mainnet", { forceReconnect: true });

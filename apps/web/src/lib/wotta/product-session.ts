@@ -1,4 +1,8 @@
-import { createClient as createSupabaseJsClient, type SupabaseClient, type UserIdentity } from "@supabase/supabase-js";
+import {
+  createClient as createSupabaseJsClient,
+  type SupabaseClient,
+  type UserIdentity,
+} from "@supabase/supabase-js";
 import { createClient as createAppSupabaseClient } from "../supabase/client";
 import {
   connectEvmSource,
@@ -11,11 +15,20 @@ import {
   type NonEvmCctpBurnPlan,
   type WottaSourceRoute,
 } from "@wotta/adapters";
-import { decryptEnvelope, encryptEnvelope, generateInboxKeyPair, publicKeyFromSecret } from "@wotta/crypto";
+import {
+  decryptEnvelope,
+  encryptEnvelope,
+  generateInboxKeyPair,
+  publicKeyFromSecret,
+} from "@wotta/crypto";
 import { computeClaimHash, type Denomination } from "@wotta/shared";
 import { stark, type TypedData, type WalletAccountV6 } from "starknet";
 import { connectReady, ensureReadyChain } from "./ready.ts";
-import { executeStarknetPublicDeposit, isStarknetPublicDepositPlan, type StarknetPublicDepositPlan } from "./public-deposit.ts";
+import {
+  executeStarknetPublicDeposit,
+  isStarknetPublicDepositPlan,
+  type StarknetPublicDepositPlan,
+} from "./public-deposit.ts";
 import { oauthCallbackUrl, stashAuthNext } from "../app-origin.ts";
 import { requireSourceWallet } from "../wallet-install.ts";
 import { toSupabaseProvider } from "../supabase/providers.ts";
@@ -50,16 +63,30 @@ export function consumeOAuthCallbackFailure(): Error | undefined {
   const failure = parseOAuthCallbackFailure(window.location.href);
   if (!failure) return undefined;
   const pending = window.sessionStorage.getItem(pendingProviderKey);
-  const provider = pending === "google" || pending === "x" ? pending : undefined;
+  const provider =
+    pending === "google" || pending === "x" ? pending : undefined;
   window.sessionStorage.removeItem(pendingProviderKey);
-  window.history.replaceState(window.history.state, "", cleanOAuthCallbackUrl(window.location.href));
+  window.history.replaceState(
+    window.history.state,
+    "",
+    cleanOAuthCallbackUrl(window.location.href),
+  );
   return describeOAuthCallbackFailure(failure, provider);
 }
 
 export function createProductSession(config: ProductApiConfig): ProductSession {
-  const supabase = createSupabaseJsClient(config.supabaseUrl, config.supabasePublishableKey, {
-    auth: { flowType: "pkce", persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
-  });
+  const supabase = createSupabaseJsClient(
+    config.supabaseUrl,
+    config.supabasePublishableKey,
+    {
+      auth: {
+        flowType: "pkce",
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+      },
+    },
+  );
   return new WottaProductSession(supabase, config);
 }
 
@@ -77,7 +104,8 @@ const SOLANA_PUBLIC_MAINNET_HOSTS = new Set([
  */
 export function browserSolanaMainnetRpcUrl(origin: string): string {
   const proxyUrl = new URL("/api/solana-mainnet-rpc", origin).toString();
-  const configured = process.env.NEXT_PUBLIC_SOLANA_MAINNET_RPC_URL?.trim() ?? "";
+  const configured =
+    process.env.NEXT_PUBLIC_SOLANA_MAINNET_RPC_URL?.trim() ?? "";
   if (configured) {
     try {
       const configuredUrl = new URL(configured, origin);
@@ -113,23 +141,42 @@ export function createBrowserProductSession(): ProductSession {
     network,
     supabaseUrl,
     supabasePublishableKey,
-    solanaRpcUrl: network === "mainnet"
-      ? browserSolanaMainnetRpcUrl(window.location.origin)
-      : (process.env.NEXT_PUBLIC_SOLANA_TESTNET_RPC_URL ?? process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com"),
-    stellarRpcUrl: process.env.NEXT_PUBLIC_STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org",
+    solanaRpcUrl:
+      network === "mainnet"
+        ? browserSolanaMainnetRpcUrl(window.location.origin)
+        : (process.env.NEXT_PUBLIC_SOLANA_TESTNET_RPC_URL ??
+          process.env.NEXT_PUBLIC_SOLANA_RPC_URL ??
+          "https://api.devnet.solana.com"),
+    stellarRpcUrl:
+      process.env.NEXT_PUBLIC_STELLAR_RPC_URL ??
+      "https://soroban-testnet.stellar.org",
   });
   browserProductSessions[network] = session;
   return session;
 }
 
-export type FundingStage = "resolving" | "quoting" | "delivering" | "connecting_source" | "approving" | "depositing" | "burning" | "confirming" | "attesting" | "settling";
+export type FundingStage =
+  | "resolving"
+  | "quoting"
+  | "delivering"
+  | "connecting_source"
+  | "approving"
+  | "depositing"
+  | "burning"
+  | "confirming"
+  | "attesting"
+  | "settling";
 export type RouteManifest = {
   chainId: "SN_MAIN" | "SN_SEPOLIA";
   routes: Array<{ id: string; enabled: boolean; reason?: string }>;
   manifestHash: string;
   pendingDeliveryPublicKey: string;
   router?: string;
-  escrows: Array<{ denomination: Denomination; address: string; classHash: string }>;
+  escrows: Array<{
+    denomination: Denomination;
+    address: string;
+    classHash: string;
+  }>;
   privacyPool?: string;
 };
 type RecipientDescriptor = {
@@ -137,7 +184,12 @@ type RecipientDescriptor = {
   inboxEncryptionPublicKey?: string;
 };
 type SignedQuote = {
-  quote: { sourcePlan: EvmCctpBurnPlan | NonEvmCctpBurnPlan | StarknetPublicDepositPlan };
+  quote: {
+    sourcePlan:
+      | EvmCctpBurnPlan
+      | NonEvmCctpBurnPlan
+      | StarknetPublicDepositPlan;
+  };
   signature: string;
 };
 type ClaimEnvelope = {
@@ -151,7 +203,10 @@ type ClaimEnvelope = {
 };
 
 export class WottaProductSession {
-  constructor(private readonly supabase: SupabaseClient, private readonly config: ProductApiConfig) {}
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly config: ProductApiConfig,
+  ) {}
 
   private authReturnPath() {
     return `${window.location.pathname}${window.location.search}`;
@@ -159,9 +214,14 @@ export class WottaProductSession {
 
   async connectProvider(provider: AuthProvider) {
     const supabaseProvider = toSupabaseProvider(provider);
-    const { data: { session } } = await this.supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await this.supabase.auth.getSession();
     const alreadyLinked = session?.user.identities?.some((identity) =>
-      provider === "x" ? identity.provider === "x" || identity.provider === "twitter" : identity.provider === provider);
+      provider === "x"
+        ? identity.provider === "x" || identity.provider === "twitter"
+        : identity.provider === provider,
+    );
     if (alreadyLinked) {
       await this.syncSession();
       return { mode: "already_linked" as const };
@@ -193,26 +253,38 @@ export class WottaProductSession {
   }
 
   async unlinkProvider(provider: "google" | "x") {
-    const { data: { user }, error: userError } = await this.supabase.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await this.supabase.auth.getUser();
     if (userError || !user) throw userError ?? new Error("Sign in first");
     const identities = user.identities ?? [];
-    if (identities.length <= 1) throw new Error("Keep at least one sign-in provider linked");
+    if (identities.length <= 1)
+      throw new Error("Keep at least one sign-in provider linked");
     const identity = identities.find((candidate) =>
-      provider === "x" ? candidate.provider === "x" || candidate.provider === "twitter" : candidate.provider === provider) as UserIdentity | undefined;
-    if (!identity) throw new Error(`${provider === "x" ? "X" : "Google"} is not linked`);
+      provider === "x"
+        ? candidate.provider === "x" || candidate.provider === "twitter"
+        : candidate.provider === provider,
+    ) as UserIdentity | undefined;
+    if (!identity)
+      throw new Error(`${provider === "x" ? "X" : "Google"} is not linked`);
     const { error } = await this.supabase.auth.unlinkIdentity(identity);
     if (error) throw error;
     await this.supabase.auth.refreshSession();
     await this.syncSession();
   }
 
-  async authState(): Promise<{ label?: string; providers: Array<"google" | "x"> }> {
+  async authState(): Promise<{
+    label?: string;
+    providers: Array<"google" | "x">;
+  }> {
     const { data } = await this.supabase.auth.getSession();
     const user = data.session?.user;
     const providers = new Set<"google" | "x">();
     for (const identity of user?.identities ?? []) {
       if (identity.provider === "google") providers.add("google");
-      if (identity.provider === "x" || identity.provider === "twitter") providers.add("x");
+      if (identity.provider === "x" || identity.provider === "twitter")
+        providers.add("x");
     }
     return {
       label: user?.email ?? user?.user_metadata.user_name,
@@ -221,16 +293,25 @@ export class WottaProductSession {
   }
 
   async syncSession() {
-    return this.request<{ profileId: string; synced: Array<{ provider: "email" | "google" | "x"; identifier: string }>; revoked: number }>("/v1/session/sync", { method: "POST" });
+    return this.request<{
+      profileId: string;
+      synced: Array<{ provider: "email" | "google" | "x"; identifier: string }>;
+      revoked: number;
+    }>("/v1/session/sync", { method: "POST" });
   }
 
   async me() {
     return this.request<{
       profile: { id: string } | null;
-      identities: Array<{ provider: "email" | "google" | "x"; normalized_identifier: string }>;
+      identities: Array<{
+        provider: "email" | "google" | "x";
+        normalized_identifier: string;
+      }>;
       wallet: {
         address: string;
         inbox_pubkey: string;
+        chain_id?: string;
+        key_version?: number;
         private_identity_address?: string | null;
         privacy_pool_address?: string | null;
       } | null;
@@ -241,7 +322,10 @@ export class WottaProductSession {
     return this.request<RouteManifest>("/v1/routes");
   }
 
-  async resolveRecipient(input: { provider: "email" | "x"; identifier: string }) {
+  async resolveRecipient(input: {
+    provider: "email" | "x";
+    identifier: string;
+  }) {
     return this.request<{ descriptor: RecipientDescriptor }>("/v1/resolve", {
       method: "POST",
       body: JSON.stringify(input),
@@ -265,12 +349,15 @@ export class WottaProductSession {
     account: WalletAccountV6,
     vault: PrivacyVault,
     identityAddress?: string,
-    options?: { reconnect?: boolean },
+    options?: { reconnect?: boolean; rotateInboxKey?: boolean },
   ) {
     await this.syncSession();
-    let me = await this.request<{ wallet: { address: string; inbox_pubkey: string } | null }>("/v1/me");
+    let me = await this.request<{
+      wallet: { address: string; inbox_pubkey: string } | null;
+    }>("/v1/me");
     let inboxSecretKey = vault.state.inboxSecretKey;
     const reconnect = options?.reconnect === true;
+    const rotateInboxKey = options?.rotateInboxKey === true;
 
     if (me.wallet) {
       if (BigInt(me.wallet.address) !== BigInt(account.address)) {
@@ -284,23 +371,36 @@ export class WottaProductSession {
         await this.syncSession();
         return { reconnected: true as const };
       }
-      if (!localMatches) {
+      if (!localMatches && !rotateInboxKey) {
         // Never rotate an inbox key implicitly. Existing payments are encrypted
         // to the published key and become permanently unreadable if it changes.
         throw new Error("wallet_inbox_key_mismatch");
       }
     }
 
-    if (!me.wallet || reconnect) {
+    if (!me.wallet || reconnect || rotateInboxKey) {
       if (!inboxSecretKey) {
         inboxSecretKey = generateInboxKeyPair().secretKey;
         await vault.setInboxSecretKey(inboxSecretKey);
       }
       const inboxPublicKey = publicKeyFromSecret(inboxSecretKey);
       await ensureReadyChain(account, this.config.network);
-      const challenge = await this.request<{ typedData: TypedData }>("/v1/wallet/challenge", { method: "POST", body: JSON.stringify({ address: account.address }) });
-      const signature = stark.formatSignature(await account.signMessage(challenge.typedData));
-      await this.request("/v1/wallet/link", { method: "POST", body: JSON.stringify({ challenge: JSON.stringify(challenge.typedData), signature, inboxPublicKey }) });
+      const challenge = await this.request<{ typedData: TypedData }>(
+        "/v1/wallet/challenge",
+        { method: "POST", body: JSON.stringify({ address: account.address }) },
+      );
+      const signature = stark.formatSignature(
+        await account.signMessage(challenge.typedData),
+      );
+      await this.request("/v1/wallet/link", {
+        method: "POST",
+        body: JSON.stringify({
+          challenge: JSON.stringify(challenge.typedData),
+          signature,
+          inboxPublicKey,
+          rotateInboxKey,
+        }),
+      });
     }
 
     if (identityAddress) await this.publishPrivateIdentity(identityAddress);
@@ -311,18 +411,35 @@ export class WottaProductSession {
   }
 
   async publishPrivateIdentity(identityAddress: string) {
-    return this.request("/v1/wallet/private-identity", { method: "POST", body: JSON.stringify({ identityAddress }) });
+    return this.request("/v1/wallet/private-identity", {
+      method: "POST",
+      body: JSON.stringify({ identityAddress }),
+    });
   }
 
-  async resolvePrivateRecipient(input: string, expectedPool: string): Promise<string> {
+  async resolvePrivateRecipient(
+    input: string,
+    expectedPool: string,
+  ): Promise<string> {
     const provider = input.startsWith("@") ? "x" : "email";
-    const result = await this.request<{ descriptor: { privateReady: boolean; recipientPrivateIdentityAddress?: string; privacyPoolAddress?: string } }>("/v1/resolve", {
+    const result = await this.request<{
+      descriptor: {
+        privateReady: boolean;
+        recipientPrivateIdentityAddress?: string;
+        privacyPoolAddress?: string;
+      };
+    }>("/v1/resolve", {
       method: "POST",
       body: JSON.stringify({ provider, identifier: input }),
     });
     const descriptor = result.descriptor;
-    if (!descriptor.privateReady || !descriptor.recipientPrivateIdentityAddress) throw new Error("Recipient has not registered a private identity");
-    if (!descriptor.privacyPoolAddress || BigInt(descriptor.privacyPoolAddress) !== BigInt(expectedPool)) throw new Error("Recipient private identity uses an incompatible pool");
+    if (!descriptor.privateReady || !descriptor.recipientPrivateIdentityAddress)
+      throw new Error("Recipient has not registered a private identity");
+    if (
+      !descriptor.privacyPoolAddress ||
+      BigInt(descriptor.privacyPoolAddress) !== BigInt(expectedPool)
+    )
+      throw new Error("Recipient private identity uses an incompatible pool");
     return descriptor.recipientPrivateIdentityAddress;
   }
 
@@ -334,26 +451,51 @@ export class WottaProductSession {
     privateDelivery?: boolean;
     onSourceTxHash?: (txHash: string) => void;
     onStage?: (stage: FundingStage) => void;
-    onRecovery?: (recovery: { claimSecret: string; escrow: string; expiresAt: string }) => void;
-  }): Promise<{ intentId: string; sourceTxHash: string; sourceAccount: string; claimSecret: string; escrow: string; expiresAt: string; escrowed: true }> {
+    onRecovery?: (recovery: {
+      claimSecret: string;
+      escrow: string;
+      expiresAt: string;
+    }) => void;
+  }): Promise<{
+    intentId: string;
+    sourceTxHash: string;
+    sourceAccount: string;
+    claimSecret: string;
+    escrow: string;
+    expiresAt: string;
+    escrowed: true;
+  }> {
     const recipient = recipientIdentifier(input.recipient);
     input.onStage?.("resolving");
     const routes = await this.request<RouteManifest>("/v1/routes");
-    const routeId = this.config.network === "mainnet" || input.privateDelivery ? "starknet-private" : "starknet-public";
+    const routeId =
+      this.config.network === "mainnet" || input.privateDelivery
+        ? "starknet-private"
+        : "starknet-public";
     const route = routes.routes.find((candidate) => candidate.id === routeId);
-    if (!route?.enabled) throw new Error(`Starknet escrow route unavailable: ${route?.reason ?? "not configured"}`);
-    const escrow = routes.escrows.find((candidate) => candidate.denomination === input.denomination);
+    if (!route?.enabled)
+      throw new Error(
+        `Starknet escrow route unavailable: ${route?.reason ?? "not configured"}`,
+      );
+    const escrow = routes.escrows.find(
+      (candidate) => candidate.denomination === input.denomination,
+    );
     if (!escrow) throw new Error("Verified denomination escrow is unavailable");
-    const resolved = await this.request<{ descriptor: RecipientDescriptor }>("/v1/resolve", {
-      method: "POST",
-      body: JSON.stringify(recipient),
-    });
+    const resolved = await this.request<{ descriptor: RecipientDescriptor }>(
+      "/v1/resolve",
+      {
+        method: "POST",
+        body: JSON.stringify(recipient),
+      },
+    );
     const recipientKey = resolved.descriptor.registered
       ? resolved.descriptor.inboxEncryptionPublicKey
       : routes.pendingDeliveryPublicKey;
     if (!recipientKey) throw new Error("Recipient inbox key is unavailable");
     if (routeId === "starknet-private" && !resolved.descriptor.registered) {
-      throw new Error("Private escrow delivery requires a registered recipient inbox");
+      throw new Error(
+        "Private escrow delivery requires a registered recipient inbox",
+      );
     }
 
     input.onStage?.("connecting_source");
@@ -364,13 +506,25 @@ export class WottaProductSession {
 
     const intentId = crypto.randomUUID();
     const claimSecret = randomFelt();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString();
-    const destinationChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
-    const claimHash = computeClaimHash({ chainId: destinationChainId, poolAddress: escrow.address, secret: claimSecret });
+    const expiresAt = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1_000,
+    ).toISOString();
+    const destinationChainId =
+      this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+    const claimHash = computeClaimHash({
+      chainId: destinationChainId,
+      poolAddress: escrow.address,
+      secret: claimSecret,
+    });
     const intent = {
       id: intentId,
-      mode: routeId === "starknet-private" ? "private" as const : "standard" as const,
-      deliveryKind: resolved.descriptor.registered ? "registered" as const : "pending" as const,
+      mode:
+        routeId === "starknet-private"
+          ? ("private" as const)
+          : ("standard" as const),
+      deliveryKind: resolved.descriptor.registered
+        ? ("registered" as const)
+        : ("pending" as const),
       denomination: input.denomination,
       routeId,
       claimHash,
@@ -389,15 +543,18 @@ export class WottaProductSession {
     });
 
     input.onStage?.("delivering");
-    const envelope = encryptEnvelope({
-      v: 1,
-      intentId,
-      claimSecret,
-      escrow: escrow.address,
-      denomination: input.denomination,
-      expiresAt,
-      chainId: destinationChainId,
-    } satisfies ClaimEnvelope, recipientKey);
+    const envelope = encryptEnvelope(
+      {
+        v: 1,
+        intentId,
+        claimSecret,
+        escrow: escrow.address,
+        denomination: input.denomination,
+        expiresAt,
+        chainId: destinationChainId,
+      } satisfies ClaimEnvelope,
+      recipientKey,
+    );
     await this.request(`/v1/intents/${intentId}/delivery`, {
       method: "POST",
       headers: { "idempotency-key": crypto.randomUUID() },
@@ -414,8 +571,12 @@ export class WottaProductSession {
     input.onRecovery?.({ claimSecret, escrow: escrow.address, expiresAt });
 
     const sourcePlan = signed.quote.sourcePlan;
-    if (!isStarknetPublicDepositPlan(sourcePlan)) throw new Error("Starknet public deposit plan is unavailable");
-    const onSubmitted = this.sourceSubmissionRecorder(intentId, input.onSourceTxHash);
+    if (!isStarknetPublicDepositPlan(sourcePlan))
+      throw new Error("Starknet public deposit plan is unavailable");
+    const onSubmitted = this.sourceSubmissionRecorder(
+      intentId,
+      input.onSourceTxHash,
+    );
     const deposit = await executeStarknetPublicDeposit({
       account: connected.account,
       plan: sourcePlan,
@@ -444,7 +605,11 @@ export class WottaProductSession {
     publicRefundRecipient: string;
     onStage?: (stage: FundingStage) => void;
     onSourceTxHash?: (txHash: string) => void;
-    onRecovery?: (recovery: { claimSecret: string; escrow: string; expiresAt: string }) => void;
+    onRecovery?: (recovery: {
+      claimSecret: string;
+      escrow: string;
+      expiresAt: string;
+    }) => void;
   }): Promise<{
     intentId: string;
     sourceTxHash: string;
@@ -458,16 +623,31 @@ export class WottaProductSession {
     const recipient = recipientIdentifier(input.recipient);
     input.onStage?.("resolving");
     const routes = await this.request<RouteManifest>("/v1/routes");
-    const route = routes.routes.find((candidate) => candidate.id === input.route);
-    if (!route?.enabled) throw new Error(`Cross-chain route unavailable: ${route?.reason ?? "not configured"}`);
-    const escrow = routes.escrows.find((candidate) => candidate.denomination === input.denomination);
-    if (!routes.router || !escrow) throw new Error("Verified CCTP router or denomination escrow is unavailable");
-    const resolved = await this.request<{ descriptor: RecipientDescriptor }>("/v1/resolve", {
-      method: "POST",
-      body: JSON.stringify(recipient),
-    });
+    const route = routes.routes.find(
+      (candidate) => candidate.id === input.route,
+    );
+    if (!route?.enabled)
+      throw new Error(
+        `Cross-chain route unavailable: ${route?.reason ?? "not configured"}`,
+      );
+    const escrow = routes.escrows.find(
+      (candidate) => candidate.denomination === input.denomination,
+    );
+    if (!routes.router || !escrow)
+      throw new Error(
+        "Verified CCTP router or denomination escrow is unavailable",
+      );
+    const resolved = await this.request<{ descriptor: RecipientDescriptor }>(
+      "/v1/resolve",
+      {
+        method: "POST",
+        body: JSON.stringify(recipient),
+      },
+    );
     if (this.config.network === "mainnet" && !resolved.descriptor.registered) {
-      throw new Error("Private escrow delivery requires a registered recipient inbox");
+      throw new Error(
+        "Private escrow delivery requires a registered recipient inbox",
+      );
     }
     const recipientKey = resolved.descriptor.registered
       ? resolved.descriptor.inboxEncryptionPublicKey
@@ -479,20 +659,30 @@ export class WottaProductSession {
     if (input.route === "solana" && !this.config.solanaRpcUrl) {
       throw new Error("Solana RPC is not configured for this network");
     }
-    const sourceAccount = input.route === "solana"
-      ? await connectSolanaSource()
-      : input.route === "stellar"
-        ? await connectStellarSource()
-        : await connectEvmSource(input.route, this.config.network);
+    const sourceAccount =
+      input.route === "solana"
+        ? await connectSolanaSource()
+        : input.route === "stellar"
+          ? await connectStellarSource()
+          : await connectEvmSource(input.route, this.config.network);
     const intentId = crypto.randomUUID();
     const claimSecret = randomFelt();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000).toISOString();
-    const destinationChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
-    const claimHash = computeClaimHash({ chainId: destinationChainId, poolAddress: escrow.address, secret: claimSecret });
+    const expiresAt = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1_000,
+    ).toISOString();
+    const destinationChainId =
+      this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+    const claimHash = computeClaimHash({
+      chainId: destinationChainId,
+      poolAddress: escrow.address,
+      secret: claimSecret,
+    });
     const intent = {
       id: intentId,
       mode: "standard" as const,
-      deliveryKind: resolved.descriptor.registered ? "registered" as const : "pending" as const,
+      deliveryKind: resolved.descriptor.registered
+        ? ("registered" as const)
+        : ("pending" as const),
       denomination: input.denomination,
       routeId: input.route,
       claimHash,
@@ -513,15 +703,18 @@ export class WottaProductSession {
     // Store the recovery package before asking the source wallet to burn. If a
     // browser closes after submission, the recipient can still recover it.
     input.onStage?.("delivering");
-    const envelope = encryptEnvelope({
-      v: 1,
-      intentId,
-      claimSecret,
-      escrow: escrow.address,
-      denomination: input.denomination,
-      expiresAt,
-      chainId: destinationChainId,
-    } satisfies ClaimEnvelope, recipientKey);
+    const envelope = encryptEnvelope(
+      {
+        v: 1,
+        intentId,
+        claimSecret,
+        escrow: escrow.address,
+        denomination: input.denomination,
+        expiresAt,
+        chainId: destinationChainId,
+      } satisfies ClaimEnvelope,
+      recipientKey,
+    );
     await this.request(`/v1/intents/${intentId}/delivery`, {
       method: "POST",
       headers: { "idempotency-key": crypto.randomUUID() },
@@ -538,34 +731,54 @@ export class WottaProductSession {
     input.onRecovery?.({ claimSecret, escrow: escrow.address, expiresAt });
 
     const sourcePlan = signed.quote.sourcePlan;
-    const onEvmStage = (stage: "connecting" | "approving" | "burning" | "confirming") => {
+    const onEvmStage = (
+      stage: "connecting" | "approving" | "burning" | "confirming",
+    ) => {
       input.onStage?.(stage === "connecting" ? "connecting_source" : stage);
     };
-    const onSubmitted = this.sourceSubmissionRecorder(intentId, input.onSourceTxHash);
-    const result = input.route === "solana"
-      ? await executeSolanaCctpBurn({
-          plan: sourcePlan as NonEvmCctpBurnPlan,
-          rpcUrl: this.config.solanaRpcUrl,
-          onSubmitted,
-          expectedSourceAccount: sourceAccount,
-          onStage: (stage) => input.onStage?.(stage === "confirming" ? "confirming" : "burning"),
-        })
-      : input.route === "stellar"
-        ? await executeStellarCctpBurn({
+    const onSubmitted = this.sourceSubmissionRecorder(
+      intentId,
+      input.onSourceTxHash,
+    );
+    const result =
+      input.route === "solana"
+        ? await executeSolanaCctpBurn({
             plan: sourcePlan as NonEvmCctpBurnPlan,
-            rpcUrl: this.config.stellarRpcUrl,
-            expectedSourceAccount: sourceAccount,
-            onStage: (stage) => input.onStage?.(stage === "confirming" ? "confirming" : stage === "approving" ? "approving" : "burning"),
-          })
-        : await executeEvmCctpBurn({
-            plan: sourcePlan as EvmCctpBurnPlan,
-            expectedSourceAccount: sourceAccount,
-            onStage: onEvmStage,
+            rpcUrl: this.config.solanaRpcUrl,
             onSubmitted,
-          });
+            expectedSourceAccount: sourceAccount,
+            onStage: (stage) =>
+              input.onStage?.(
+                stage === "confirming" ? "confirming" : "burning",
+              ),
+          })
+        : input.route === "stellar"
+          ? await executeStellarCctpBurn({
+              plan: sourcePlan as NonEvmCctpBurnPlan,
+              rpcUrl: this.config.stellarRpcUrl,
+              expectedSourceAccount: sourceAccount,
+              onStage: (stage) =>
+                input.onStage?.(
+                  stage === "confirming"
+                    ? "confirming"
+                    : stage === "approving"
+                      ? "approving"
+                      : "burning",
+                ),
+            })
+          : await executeEvmCctpBurn({
+              plan: sourcePlan as EvmCctpBurnPlan,
+              expectedSourceAccount: sourceAccount,
+              onStage: onEvmStage,
+              onSubmitted,
+            });
     await onSubmitted(result.txHash);
     input.onStage?.("attesting");
-    const settled = await this.waitForEscrow(intentId, undefined, input.onStage);
+    const settled = await this.waitForEscrow(
+      intentId,
+      undefined,
+      input.onStage,
+    );
     return {
       intentId,
       sourceTxHash: result.txHash,
@@ -579,7 +792,10 @@ export class WottaProductSession {
   }
 
   /** Register a broadcast before waiting on the source RPC; a timeout must not orphan a burn. */
-  private sourceSubmissionRecorder(intentId: string, onSourceTxHash?: (txHash: string) => void) {
+  private sourceSubmissionRecorder(
+    intentId: string,
+    onSourceTxHash?: (txHash: string) => void,
+  ) {
     const key = crypto.randomUUID();
     let recorded = false;
     return async (txHash: string) => {
@@ -597,7 +813,10 @@ export class WottaProductSession {
           return;
         } catch (cause) {
           if (attempt === 2) {
-            throw new Error(`Source transaction ${txHash} was submitted, but Wotta could not record it for intent ${intentId}. Keep this hash for recovery; do not send again.`, { cause });
+            throw new Error(
+              `Source transaction ${txHash} was submitted, but Wotta could not record it for intent ${intentId}. Keep this hash for recovery; do not send again.`,
+              { cause },
+            );
           }
           await new Promise((resolve) => setTimeout(resolve, 1_000));
         }
@@ -615,22 +834,47 @@ export class WottaProductSession {
     }>(`/v1/intents/${encodeURIComponent(intentId)}`);
   }
 
-  async waitForEscrow(intentId: string, timeoutMs = 15 * 60 * 1_000, onStage?: (stage: FundingStage) => void) {
+  async waitForEscrow(
+    intentId: string,
+    timeoutMs = 15 * 60 * 1_000,
+    onStage?: (stage: FundingStage) => void,
+  ) {
     const deadline = Date.now() + timeoutMs;
     let consecutiveNetworkErrors = 0;
     while (Date.now() < deadline) {
       try {
         const intent = await this.intent(intentId);
         consecutiveNetworkErrors = 0;
-        if (intent.onchain_state === "claimed" || intent.state === "claimed") return intent;
-        if (intent.onchain_state === "funded" || intent.state === "funded" || intent.state === "delivered" || intent.state === "claimable" || intent.state === "completed") return intent;
-        if (intent.onchain_state === "refunded" || intent.state === "failed_terminal" || intent.state === "failed_recoverable" || intent.state === "refunded") {
+        if (intent.onchain_state === "claimed" || intent.state === "claimed")
+          return intent;
+        if (
+          intent.onchain_state === "funded" ||
+          intent.state === "funded" ||
+          intent.state === "delivered" ||
+          intent.state === "claimable" ||
+          intent.state === "completed"
+        )
+          return intent;
+        if (
+          intent.onchain_state === "refunded" ||
+          intent.state === "failed_terminal" ||
+          intent.state === "failed_recoverable" ||
+          intent.state === "refunded"
+        ) {
           if (intent.state === "failed_recoverable") {
-            throw new Error("Starknet settlement needs recovery. Keep the source transaction hash and check payment status before sending again.");
+            throw new Error(
+              "Starknet settlement needs recovery. Keep the source transaction hash and check payment status before sending again.",
+            );
           }
-          throw new Error(`Cross-chain payment ended in ${intent.onchain_state ?? intent.state}`);
+          throw new Error(
+            `Cross-chain payment ended in ${intent.onchain_state ?? intent.state}`,
+          );
         }
-        if (intent.state === "destination_submitted" || intent.state === "attestation_ready") onStage?.("settling");
+        if (
+          intent.state === "destination_submitted" ||
+          intent.state === "attestation_ready"
+        )
+          onStage?.("settling");
         else onStage?.("attesting");
       } catch (error) {
         if (!isTransientNetworkError(error)) throw error;
@@ -638,12 +882,16 @@ export class WottaProductSession {
         onStage?.("attesting");
         // Brief API restarts during `pnpm dev` should not abort a completed source burn.
         if (consecutiveNetworkErrors >= 20) {
-          throw new Error("Source burn succeeded, but the API was unreachable while waiting for Starknet settlement. Settlement continues in the background — check Inbox shortly.");
+          throw new Error(
+            "Source burn succeeded, but the API was unreachable while waiting for Starknet settlement. Settlement continues in the background — check Inbox shortly.",
+          );
         }
       }
       await new Promise((resolve) => window.setTimeout(resolve, 3_000));
     }
-    throw new Error("Source burn succeeded, but Starknet settlement confirmation is still pending. It will continue in the background.");
+    throw new Error(
+      "Source burn succeeded, but Starknet settlement confirmation is still pending. It will continue in the background.",
+    );
   }
 
   async loadLatestClaim(vault: PrivacyVault) {
@@ -656,18 +904,29 @@ export class WottaProductSession {
     await this.request("/v1/session/sync", { method: "POST" });
     const [routes, inbox] = await Promise.all([
       this.request<RouteManifest>("/v1/routes"),
-      this.request<{ chainId: string; notes: Array<{
-        id: string;
-        intent_id: string;
-        ciphertext: string;
-        nonce: string;
-        sender_public_key: string;
-        algorithm: "x25519-xsalsa20-poly1305";
-        intent?: { state?: string; onchain_state?: string; denomination?: string };
-      }> }>("/v1/notes"),
+      this.request<{
+        chainId: string;
+        notes: Array<{
+          id: string;
+          intent_id: string;
+          ciphertext: string;
+          nonce: string;
+          sender_public_key: string;
+          algorithm: "x25519-xsalsa20-poly1305";
+          intent?: {
+            state?: string;
+            onchain_state?: string;
+            denomination?: string;
+          };
+        }>;
+      }>("/v1/notes"),
     ]);
-    const expectedChainId = this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
-    if (inbox.chainId !== expectedChainId || routes.chainId !== expectedChainId) {
+    const expectedChainId =
+      this.config.network === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA";
+    if (
+      inbox.chainId !== expectedChainId ||
+      routes.chainId !== expectedChainId
+    ) {
       throw new Error("inbox_network_scope_mismatch");
     }
     let targetSeen = false;
@@ -677,18 +936,25 @@ export class WottaProductSession {
       if (noteId && note.id !== noteId) continue;
       if (noteId) targetSeen = true;
       const onchain = note.intent?.onchain_state ?? note.intent?.state ?? "";
-      if (note.intent && !["funded", "delivered", "claimable"].includes(onchain)) {
-        if (noteId) targetFailure = `This payment isn’t claimable yet (status: ${onchain || "unknown"}).`;
+      if (
+        note.intent &&
+        !["funded", "delivered", "claimable"].includes(onchain)
+      ) {
+        if (noteId)
+          targetFailure = `This payment isn’t claimable yet (status: ${onchain || "unknown"}).`;
         continue;
       }
       let payload: ClaimEnvelope;
       try {
-        payload = decryptEnvelope<ClaimEnvelope>({
-          algorithm: note.algorithm,
-          ciphertext: note.ciphertext,
-          nonce: note.nonce,
-          ephemeralPublicKey: note.sender_public_key,
-        }, inboxSecretKey);
+        payload = decryptEnvelope<ClaimEnvelope>(
+          {
+            algorithm: note.algorithm,
+            ciphertext: note.ciphertext,
+            nonce: note.nonce,
+            ephemeralPublicKey: note.sender_public_key,
+          },
+          inboxSecretKey,
+        );
       } catch {
         if (noteId) {
           targetFailure =
@@ -702,9 +968,10 @@ export class WottaProductSession {
       }
       if (payload.chainId !== expectedChainId) {
         if (noteId) {
-          targetFailure = payload.chainId === "SN_MAIN"
-            ? "This payment is on Mainnet — switch Wotta to Mainnet, then claim again."
-            : "This payment is on Testnet — switch Wotta to Testnet, then claim again.";
+          targetFailure =
+            payload.chainId === "SN_MAIN"
+              ? "This payment is on Mainnet — switch Wotta to Mainnet, then claim again."
+              : "This payment is on Testnet — switch Wotta to Testnet, then claim again.";
         }
         continue;
       }
@@ -712,9 +979,11 @@ export class WottaProductSession {
         if (noteId) targetFailure = "This payment’s claim window expired.";
         continue;
       }
-      const escrow = routes.escrows.find((candidate) =>
-        String(candidate.denomination) === String(payload.denomination)
-        && sameFelt(candidate.address, payload.escrow));
+      const escrow = routes.escrows.find(
+        (candidate) =>
+          String(candidate.denomination) === String(payload.denomination) &&
+          sameFelt(candidate.address, payload.escrow),
+      );
       if (!escrow) {
         if (noteId) {
           targetFailure =
@@ -726,19 +995,30 @@ export class WottaProductSession {
       return {
         noteId: note.id,
         claimSecret: payload.claimSecret,
-        escrow: { address: escrow.address, classHash: escrow.classHash, denomination: BigInt(escrow.denomination) },
+        escrow: {
+          address: escrow.address,
+          classHash: escrow.classHash,
+          denomination: BigInt(escrow.denomination),
+        },
         intentId: payload.intentId,
       };
     }
 
     if (noteId && !targetSeen) {
-      throw new Error("That payment isn’t in this inbox — refresh Inbox or confirm you’re on the right network.");
+      throw new Error(
+        "That payment isn’t in this inbox — refresh Inbox or confirm you’re on the right network.",
+      );
     }
     if (targetFailure) throw new Error(targetFailure);
-    throw new Error("No unexpired claim for a verified Wotta private escrow was found");
+    throw new Error(
+      "No unexpired claim for a verified Wotta private escrow was found",
+    );
   }
 
-  private async request<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
+  private async request<T = unknown>(
+    path: string,
+    init: RequestInit = {},
+  ): Promise<T> {
     const { data } = await this.supabase.auth.getSession();
     if (!data.session) throw new Error("Sign in with Google or X first");
     const headers = new Headers(init.headers);
@@ -748,10 +1028,16 @@ export class WottaProductSession {
     // Fastify rejects content-type: application/json with an empty body
     // (FST_ERR_CTP_EMPTY_JSON_BODY). Only advertise JSON when we send a body.
     if (requestBody != null && requestBody !== "") {
-      if (typeof requestBody === "object" && !(requestBody instanceof Blob) && !(requestBody instanceof FormData) && !(requestBody instanceof URLSearchParams)) {
+      if (
+        typeof requestBody === "object" &&
+        !(requestBody instanceof Blob) &&
+        !(requestBody instanceof FormData) &&
+        !(requestBody instanceof URLSearchParams)
+      ) {
         requestBody = JSON.stringify(requestBody);
       }
-      if (!headers.has("content-type")) headers.set("content-type", "application/json");
+      if (!headers.has("content-type"))
+        headers.set("content-type", "application/json");
     } else {
       requestBody = undefined;
     }
@@ -761,27 +1047,44 @@ export class WottaProductSession {
       credentials: "omit",
       headers,
     });
-    const body = await response.json().catch(() => undefined) as (T & {
-      error?: string | { message?: string; code?: string };
-      message?: string;
-      msg?: string;
-      code?: string;
-    }) | undefined;
+    const body = (await response.json().catch(() => undefined)) as
+      | (T & {
+          error?: string | { message?: string; code?: string };
+          message?: string;
+          msg?: string;
+          code?: string;
+        })
+      | undefined;
     if (!response.ok) {
-      const nestedMessage = typeof body?.error === "object" ? body.error.message : undefined;
-      const nestedCode = typeof body?.error === "object" ? body.error.code : undefined;
-      const message = nestedMessage ?? (typeof body?.error === "string" ? body.error : undefined) ?? body?.message ?? body?.msg;
+      const nestedMessage =
+        typeof body?.error === "object" ? body.error.message : undefined;
+      const nestedCode =
+        typeof body?.error === "object" ? body.error.code : undefined;
+      const message =
+        nestedMessage ??
+        (typeof body?.error === "string" ? body.error : undefined) ??
+        body?.message ??
+        body?.msg;
       const code = nestedCode ?? body?.code;
-      throw new Error(message ?? (code ? `${code} (${response.status}) at ${path}` : `Wotta API ${response.status} at ${path}`));
+      throw new Error(
+        message ??
+          (code
+            ? `${code} (${response.status}) at ${path}`
+            : `Wotta API ${response.status} at ${path}`),
+      );
     }
     return body as T;
   }
 }
 
-function recipientIdentifier(input: string): { provider: "email" | "x"; identifier: string } {
+function recipientIdentifier(input: string): {
+  provider: "email" | "x";
+  identifier: string;
+} {
   const value = input.trim();
   if (value.startsWith("@")) return { provider: "x", identifier: value };
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { provider: "email", identifier: value };
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+    return { provider: "email", identifier: value };
   throw new Error("Cross-chain recipient must be an email or @handle");
 }
 
@@ -789,14 +1092,14 @@ function isTransientNetworkError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const normalized = message.toLowerCase();
   return (
-    normalized.includes("failed to fetch")
-    || normalized.includes("networkerror")
-    || normalized.includes("network request failed")
-    || normalized.includes("load failed")
-    || normalized.includes("fetch failed")
-    || normalized.includes("econnrefused")
-    || normalized.includes("econnreset")
-    || /wotta api (502|503|504)\b/.test(normalized)
+    normalized.includes("failed to fetch") ||
+    normalized.includes("networkerror") ||
+    normalized.includes("network request failed") ||
+    normalized.includes("load failed") ||
+    normalized.includes("fetch failed") ||
+    normalized.includes("econnrefused") ||
+    normalized.includes("econnreset") ||
+    /wotta api (502|503|504)\b/.test(normalized)
   );
 }
 
@@ -806,5 +1109,9 @@ function randomFelt(): string {
 }
 
 function sameFelt(left: string, right: string): boolean {
-  try { return BigInt(left) === BigInt(right); } catch { return false; }
+  try {
+    return BigInt(left) === BigInt(right);
+  } catch {
+    return false;
+  }
 }

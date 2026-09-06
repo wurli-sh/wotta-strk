@@ -379,12 +379,11 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
   }
 
   if (signedIn === false) {
-    const signedOut = (
-      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card px-5 py-14 text-center text-sm text-muted-foreground shadow-card">
-        Sign in from Account, then return here.
-      </div>
+    return embedded ? null : (
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
+        {null}
+      </PageShell>
     );
-    return embedded ? signedOut : <PageShell title="Inbox" subtitle="Sign in to see what's waiting." maxWidth="lg">{signedOut}</PageShell>;
   }
 
   if (signedIn === null || !sessionReady) {
@@ -594,10 +593,42 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { routes, routesReady } = useRoutesHealth(mode, mode === "mainnet");
   const privateRoute = routes.find((route) => route.key === "starknet-private");
   const mainnetEscrowReady = privateRoute?.selectable === true;
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void createClient().auth.getSession().then(({ data }) => {
+      if (active) setSignedIn(Boolean(data.session?.access_token));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (signedIn !== true) {
+    return embedded ? null : (
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
+        {null}
+      </PageShell>
+    );
+  }
+
   if (mode === "mainnet" && !routesReady) {
-    const loading = <InboxMobileRowsSkeleton rows={2} />;
+    const loading = (
+      <TableShell
+        columns={["Amount", "Received", "Expires at", "Status", ""]}
+        loading
+        empty={false}
+        emptyMessage=""
+        mobile={<InboxMobileRowsSkeleton rows={2} />}
+      >
+        {null}
+      </TableShell>
+    );
     return embedded ? loading : (
-      <PageShell title="Inbox" subtitle={CHECKING_PRIVATE_CLAIM_ROUTE} maxWidth="lg">{loading}</PageShell>
+      <PageShell title="Inbox" subtitle={CHECKING_PRIVATE_CLAIM_ROUTE} maxWidth="lg">
+        {loading}
+      </PageShell>
     );
   }
   if (mode === "mainnet" && routesReady && !mainnetEscrowReady) {

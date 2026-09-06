@@ -27,7 +27,8 @@ function isValidViewingKey(viewingKey: string): boolean {
 export function materializePrivacyState(
   rawState: PrivacyState | LegacyPrivacyState | null,
 ): PrivacyState {
-  if (rawState?.version === 2 && isValidViewingKey(rawState.viewingKey)) return rawState;
+  if (rawState?.version === 2 && isValidViewingKey(rawState.viewingKey))
+    return rawState;
   if (rawState?.version === 1 && isValidViewingKey(rawState.viewingKey)) {
     return {
       version: 2,
@@ -116,7 +117,11 @@ export async function unlockPrivacyVault(
 ): Promise<PrivacyVault> {
   const mode = config.chainId === "SN_MAIN" ? "mainnet" : "testnet";
   await ensureReadyChain(account, mode);
-  const typedData = unlockTypedData(account.address, config.poolAddress, config.chainId);
+  const typedData = unlockTypedData(
+    account.address,
+    config.poolAddress,
+    config.chainId,
+  );
   const signature = stark.formatSignature(await account.signMessage(typedData));
   persistUnlockSession(account.address, config.poolAddress, signature);
   return vaultFromSignature(account.address, config.poolAddress, signature);
@@ -132,10 +137,16 @@ export async function restorePrivacyVaultFromSession(
   const storageKey = stateStorageKey(wallet, config.poolAddress);
   if (!localStorage.getItem(storageKey)) return null;
   try {
-    const vault = await vaultFromSignature(wallet, config.poolAddress, signature);
+    const vault = await vaultFromSignature(
+      wallet,
+      config.poolAddress,
+      signature,
+    );
     if (
-      config.identityClassHash
-      && isStalePrivacyState(vault.state, { identityClassHash: config.identityClassHash })
+      config.identityClassHash &&
+      isStalePrivacyState(vault.state, {
+        identityClassHash: config.identityClassHash,
+      })
     ) {
       clearPrivacyVaultLocalState(wallet, config.poolAddress);
       return null;
@@ -147,7 +158,10 @@ export async function restorePrivacyVaultFromSession(
   }
 }
 
-export function clearPrivacyVaultLocalState(wallet: string, pool: string): void {
+export function clearPrivacyVaultLocalState(
+  wallet: string,
+  pool: string,
+): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(stateStorageKey(wallet, pool));
   clearUnlockSession(wallet, pool);
@@ -179,7 +193,9 @@ export async function ensureCurrentIdentityClass(
   if (!isStalePrivacyState(vault.state, config)) {
     if (!vault.state.identityAddress) return false;
     try {
-      const onChain = await account.provider.getClassHashAt(vault.state.identityAddress);
+      const onChain = await account.provider.getClassHashAt(
+        vault.state.identityAddress,
+      );
       if (BigInt(onChain) === BigInt(config.identityClassHash)) return false;
     } catch {
       // Fall through to reset when the contract is missing or unreadable.
@@ -198,6 +214,11 @@ export function clearAllUnlockSessions(): void {
     const key = sessionStorage.key(index);
     if (key?.startsWith(UNLOCK_SESSION_PREFIX)) sessionStorage.removeItem(key);
   }
+}
+
+/** Lock private state for sign-out without deleting its encrypted local data. */
+export function lockAllPrivacyVaults(): void {
+  clearAllUnlockSessions();
 }
 
 export function clearUnlockSession(wallet: string, pool: string): void {
@@ -230,9 +251,16 @@ async function vaultFromSignature(
 
 const UNLOCK_SESSION_PREFIX = "wotta:privacy-unlock-session:v1:";
 
-function persistUnlockSession(wallet: string, pool: string, signature: string[]): void {
+function persistUnlockSession(
+  wallet: string,
+  pool: string,
+  signature: string[],
+): void {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(unlockSessionKey(wallet, pool), JSON.stringify(signature));
+  sessionStorage.setItem(
+    unlockSessionKey(wallet, pool),
+    JSON.stringify(signature),
+  );
 }
 
 function readUnlockSession(wallet: string, pool: string): string[] | null {
@@ -255,7 +283,9 @@ export function generateViewingKey(): bigint {
   let value = 0n;
   while (value === 0n) {
     const bytes = crypto.getRandomValues(new Uint8Array(25));
-    value = BigInt(`0x${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")}`);
+    value = BigInt(
+      `0x${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")}`,
+    );
   }
   return value;
 }
@@ -285,7 +315,10 @@ function unlockTypedData(
   };
 }
 
-async function decryptState(raw: string, key: CryptoKey): Promise<PrivacyState | LegacyPrivacyState> {
+async function decryptState(
+  raw: string,
+  key: CryptoKey,
+): Promise<PrivacyState | LegacyPrivacyState> {
   try {
     const record = JSON.parse(raw) as EncryptedState;
     const plaintext = await crypto.subtle.decrypt(
@@ -293,8 +326,13 @@ async function decryptState(raw: string, key: CryptoKey): Promise<PrivacyState |
       key,
       fromBase64(record.ciphertext),
     );
-    const state = JSON.parse(new TextDecoder().decode(plaintext)) as PrivacyState | LegacyPrivacyState;
-    if ((state.version !== 1 && state.version !== 2) || !isValidViewingKey(state.viewingKey)) {
+    const state = JSON.parse(new TextDecoder().decode(plaintext)) as
+      | PrivacyState
+      | LegacyPrivacyState;
+    if (
+      (state.version !== 1 && state.version !== 2) ||
+      !isValidViewingKey(state.viewingKey)
+    ) {
       throw new Error("invalid state payload");
     }
     return state;

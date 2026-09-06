@@ -19,7 +19,9 @@ type Props = {
   loading?: boolean;
   /** Open connect modal on mount (e.g. register redirect). */
   autoOpenConnect?: boolean;
-  onLinked: (patch: Pick<MeResponse, "profile" | "identities" | "wallet">) => void | Promise<void>;
+  onLinked: (
+    patch: Pick<MeResponse, "profile" | "identities" | "wallet">,
+  ) => void | Promise<void>;
 };
 
 export function WalletPanel({
@@ -82,8 +84,8 @@ export function WalletPanel({
           <div>
             <h2 className="text-sm font-semibold text-foreground">Wallets</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Your Ready address receives private claims. Wotta never creates
-              or controls it.
+              Your Ready address receives private claims. Wotta never creates or
+              controls it.
             </p>
           </div>
         </div>
@@ -171,13 +173,17 @@ export function WalletPanel({
                   address: linkedMe.wallet.address,
                   inbox_pubkey: linkedMe.wallet.inbox_pubkey,
                   chain_id: me?.wallet?.chain_id ?? "SN_SEPOLIA",
-                  key_version: me?.wallet?.key_version ?? 1,
+                  key_version:
+                    linkedMe.wallet.key_version ?? me?.wallet?.key_version ?? 1,
                   private_identity_address:
-                    linkedMe.wallet.private_identity_address ?? me?.wallet?.private_identity_address,
+                    linkedMe.wallet.private_identity_address ??
+                    me?.wallet?.private_identity_address,
                   privacy_pool_address:
-                    linkedMe.wallet.privacy_pool_address ?? me?.wallet?.privacy_pool_address,
+                    linkedMe.wallet.privacy_pool_address ??
+                    me?.wallet?.privacy_pool_address,
                   private_identity_verified_at:
-                    me?.wallet?.private_identity_verified_at ?? new Date().toISOString(),
+                    me?.wallet?.private_identity_verified_at ??
+                    new Date().toISOString(),
                 }
               : null,
           });

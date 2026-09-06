@@ -90,7 +90,7 @@ export async function buildServer(d = deps()) {
     return { profile: profile.data, identities: identities.data ?? [], wallet };
   });
   app.post("/v1/wallet/challenge", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(walletChallengeSchema, request.body), origin = requireWalletOrigin(d.config, request.headers.origin); const chainId = requestChainId(d.config, request); return await createWalletChallenge(d.db, d.config, auth.userId, body.address, origin, chainId); } catch (error) { return errorReply(reply, error); } });
-  app.post("/v1/wallet/link", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(walletLinkSchema, request.body), origin = requireWalletOrigin(d.config, request.headers.origin); const chainId = requestChainId(d.config, request); const rpcUrl = rpcUrlForChainId(d.config, chainId); return await consumeWalletChallenge(d.db, d.config, auth.userId, JSON.parse(body.challenge) as never, body.signature, body.inboxPublicKey, origin, chainId, rpcUrl); } catch (error) { return errorReply(reply, error); } });
+  app.post("/v1/wallet/link", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(walletLinkSchema, request.body), origin = requireWalletOrigin(d.config, request.headers.origin); const chainId = requestChainId(d.config, request); const rpcUrl = rpcUrlForChainId(d.config, chainId); return await consumeWalletChallenge(d.db, d.config, auth.userId, JSON.parse(body.challenge) as never, body.signature, body.inboxPublicKey, origin, chainId, rpcUrl, { rotateInboxKey: body.rotateInboxKey === true }); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/wallet/private-identity", async (request, reply) => { const auth = await requireAuth(d.db, request); if (!auth) return errorReply(reply, new Error("unauthorized")); try { const body = parse(privateIdentityBindingSchema, request.body); return await bindPrivateIdentity(d.db, d.config, auth.userId, body.identityAddress); } catch (error) { return errorReply(reply, error); } });
   app.post("/v1/wallet/unlink", async (request, reply) => {
     const auth = await requireAuth(d.db, request);
@@ -124,7 +124,8 @@ export async function buildServer(d = deps()) {
     if (error) return errorReply(reply, error);
     return {
       intents: (data ?? []).map(({ relayer_jobs, ...intent }) => {
-        const job = relayer_jobs[0];
+        // PostgREST returns null (not []) when an intent has no relayer_jobs embed.
+        const job = (Array.isArray(relayer_jobs) ? relayer_jobs : [])[0];
         return {
           ...intent,
           relayer_status: job?.status ?? null,
