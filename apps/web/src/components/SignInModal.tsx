@@ -104,8 +104,8 @@ export function SignInModal({ open, onClose, onSignedIn }: Props) {
                 </button>
               </div>
               <p className="mt-1.5 text-sm text-muted-foreground">
-                Sign in with Google, email, or X. X is only needed when you want
-                a public Wotta @handle.
+                Sign in with Google or X. X is only needed when you want a public
+                Wotta @handle.
               </p>
               <div className="mt-6">
                 <SignInAuthPanel
