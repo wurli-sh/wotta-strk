@@ -309,7 +309,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       : !vault
         ? "Authorize Ready once to decrypt this payment on this device."
         : missingKey
-          ? "This device is missing the inbox key that can open this payment. Unlock with the same Ready account that linked your Wotta profile — or re-link from Account."
+          ? "This device is missing the inbox key that can open this payment. Claim from the original browser, or upgrade the inbox key from Account for new payments (this note stays on the older key)."
           : "Nothing claimable right now — check Incoming on Inbox.");
 
     body = (

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Inbox, RefreshCw } from "lucide-react";
+import { Inbox, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/PageShell";
 import { usePrivacyVault } from "@/components/PrivacyVaultProvider";
@@ -32,7 +32,6 @@ import {
 } from "@/lib/brand-copy";
 import { formatUsdc } from "@/lib/format/amount";
 import { canDecryptInboxNote } from "@/lib/wotta/inbox-note-access";
-import { inboxLinkWarning } from "@/lib/wotta/inbox-binding";
 
 const SELF_SETTLE_MS = 900_000;
 
@@ -64,7 +63,7 @@ type Row = {
   destTxHash?: string | null;
   routeId?: string | null;
   recoveryHint?: string | null;
-  /** Local vault cannot decrypt this still-claimable note (stale inbox key). */
+  /** Local vault cannot decrypt this funded note (missing or stale inbox key). */
   lockedOut?: boolean;
   settled?: boolean;
   claimable?: boolean;
@@ -93,6 +92,7 @@ type ApiNote = {
   nonce: string;
   sender_public_key: string;
   algorithm: "x25519-xsalsa20-poly1305";
+  recipient_key_version?: number | null;
   intent: ApiIntent;
 };
 type ApiIntentWithCreated = ApiIntent & { created_at?: string };
@@ -145,8 +145,10 @@ function normalizedStatus(intent: ApiIntent): string {
 /** Short inbox labels — raw snake_case must not spill into the Links column. */
 function statusLabel(status: string): string {
   switch (status) {
-    case "locked_out":
-      return "Wrong device";
+    case "key_unavailable":
+      return "Older inbox key";
+    case "ready_for_recipient":
+      return "Ready for recipient";
     case "funded":
     case "delivered":
     case "claimable":
@@ -183,6 +185,7 @@ function StatusPill({ status }: { status: string }) {
     "funded",
     "delivered",
     "claimable",
+    "ready_for_recipient",
     "pending",
     "source_submitted",
     "source_confirmed",
@@ -190,7 +193,7 @@ function StatusPill({ status }: { status: string }) {
     "destination_submitted",
   ].includes(status);
   const tone =
-    status === "locked_out"
+    status === "key_unavailable"
       ? "border-border bg-muted text-muted-foreground"
       : inFlight
         ? "border-warning-border bg-warning-surface text-warning"
@@ -268,7 +271,7 @@ function TableShell({
 
 function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode: NetworkMode }) {
   const router = useRouter();
-  const { vault, unlocking, unlock, sessionReady, inboxLinkStatus } = usePrivacyVault();
+  const { vault, unlocking, unlock, sessionReady } = usePrivacyVault();
   const [tab, setTab] = useState<Tab>("incoming");
   const [incoming, setIncoming] = useState<Row[]>([]);
   const [sent, setSent] = useState<Row[]>([]);
@@ -310,14 +313,14 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           const settled = ["claimed", "completed", "refunded"].includes(onchainStatus);
           // Only flag wrong-device for notes that are still claimable on-chain.
           // Already-claimed notes stay in History even if this browser lost the key.
-          const openable = !inboxSecret || canDecryptInboxNote(note, inboxSecret);
-          const lockedOut = Boolean(inboxSecret) && !openable && claimable;
+          const openable = canDecryptInboxNote(note, inboxSecret);
+          const lockedOut = !openable && claimable;
           return {
             itemId: note.id,
             amount: amountUsdc(note.intent.denomination),
             at: Math.floor(Date.parse(noteReceivedAt(note)) / 1_000),
             expiresAt: Math.floor(Date.parse(note.intent.expires_at) / 1_000),
-            status: lockedOut ? "locked_out" : onchainStatus,
+            status: lockedOut ? "key_unavailable" : onchainStatus,
             counterparty: "Encrypted sender",
             sourceTxHash: note.intent.source_tx_hash,
             destTxHash: note.intent.onchain_tx_hash,
@@ -338,7 +341,11 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           amount: amountUsdc(intent.denomination),
           at: Math.floor(Date.parse(intent.created_at ?? intent.expires_at) / 1_000),
           expiresAt: Math.floor(Date.parse(intent.expires_at) / 1_000),
-          status: intent.relayer_status === "failed" ? "failed_recoverable" : normalizedStatus(intent),
+          status: intent.relayer_status === "failed"
+            ? "failed_recoverable"
+            : ["funded", "delivered", "claimable"].includes(normalizedStatus(intent))
+              ? "ready_for_recipient"
+              : normalizedStatus(intent),
           counterparty: intent.route_id,
           sourceTxHash: intent.source_tx_hash,
           destTxHash: intent.onchain_tx_hash,
@@ -380,7 +387,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
 
   if (signedIn === false) {
     return embedded ? null : (
-      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="2xl">
         {null}
       </PageShell>
     );
@@ -399,7 +406,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
       </TableShell>
     );
     return embedded ? waiting : (
-      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="2xl">
         {waiting}
       </PageShell>
     );
@@ -427,7 +434,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
       </div>
     );
     return embedded ? locked : (
-      <PageShell title="Inbox" subtitle="Unlock with Ready to view your payments." maxWidth="lg">
+      <PageShell title="Inbox" subtitle="Unlock with Ready to view your payments." maxWidth="2xl">
         {locked}
       </PageShell>
     );
@@ -504,9 +511,14 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           <p className="text-xs text-muted-foreground">Expires at {formatRowTimeInline(row.expiresAt)}</p>
           {tab === "incoming" ? (
             row.lockedOut ? (
-              <p className="text-xs text-muted-foreground">
-                Encrypted to a previous or different inbox key — use the browser that holds that key.
-              </p>
+              <div className="space-y-2">
+                <Button className="w-full" disabled>
+                  Claim
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  This payment used an older inbox key. Claim it from the browser that still holds that key, or wait for expiry/refund.
+                </p>
+              </div>
             ) : (
               <Button className="w-full" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button>
             )
@@ -536,7 +548,13 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
           ) : (
             <td className="min-w-0 px-2 py-3.5 text-right last:pr-4">
               {row.lockedOut ? (
-                <span className="block truncate text-xs font-medium text-muted-foreground">Unavailable</span>
+                <Button
+                  size="sm"
+                  disabled
+                  title="This payment used an older inbox key"
+                >
+                  Claim
+                </Button>
               ) : (
                 <Button size="sm" onClick={() => router.push(claimHref(row.itemId))}>Claim</Button>
               )}
@@ -549,17 +567,6 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
 
   const content = (
     <>
-      {["key_mismatch", "wrong_wallet", "network_mismatch"].includes(inboxLinkStatus) ? (
-        <section className="mb-4 flex gap-3 rounded-2xl border border-warning-border bg-warning-surface p-4" role="alert">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />
-          <div>
-            <p className="text-sm font-semibold text-foreground">Inbox link needs attention</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {inboxLinkWarning(mode, inboxLinkStatus)} Existing payments stay tied to the key used when they were sent.
-            </p>
-          </div>
-        </section>
-      ) : null}
       <div className="relative mb-6 flex items-center justify-center">
         <SegmentedTabs
           layoutId="inbox-sections"
@@ -584,7 +591,7 @@ function EscrowInboxPage({ embedded = false, mode }: { embedded?: boolean; mode:
   );
 
   return embedded ? content : (
-    <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">{content}</PageShell>
+    <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="2xl">{content}</PageShell>
   );
 }
 
@@ -607,7 +614,7 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   if (signedIn !== true) {
     return embedded ? null : (
-      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="2xl">
         {null}
       </PageShell>
     );
@@ -626,7 +633,7 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
       </TableShell>
     );
     return embedded ? loading : (
-      <PageShell title="Inbox" subtitle={CHECKING_PRIVATE_CLAIM_ROUTE} maxWidth="lg">
+      <PageShell title="Inbox" subtitle={CHECKING_PRIVATE_CLAIM_ROUTE} maxWidth="2xl">
         {loading}
       </PageShell>
     );
@@ -641,7 +648,7 @@ export function InboxPage({ embedded = false }: { embedded?: boolean } = {}) {
       />
     );
     return embedded ? blocked : (
-      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="lg">
+      <PageShell title="Inbox" subtitle={PAGE_SUBTITLES.inbox} maxWidth="2xl">
         {blocked}
       </PageShell>
     );

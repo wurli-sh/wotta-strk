@@ -10,9 +10,9 @@ import {
   type NonEvmCctpBurnPlan,
   type WottaSourceRoute,
 } from "@wotta/adapters";
-import { decryptEnvelope, encryptEnvelope, generateInboxKeyPair, publicKeyFromSecret } from "@wotta/crypto";
+import { decryptEnvelope, encryptEnvelope, publicKeyFromSecret } from "@wotta/crypto";
 import { computeClaimHash, type Denomination } from "@wotta/shared";
-import { stark, type TypedData, type WalletAccountV6 } from "starknet";
+import { constants, stark, type TypedData, type WalletAccountV6 } from "starknet";
 import {
   cleanOAuthCallbackUrl,
   describeOAuthCallbackFailure,
@@ -21,6 +21,7 @@ import {
   type AuthProvider,
 } from "./auth-errors.ts";
 import type { SmokeConfig } from "./config.ts";
+import { deriveInboxKeyPair } from "./inbox-key-derive.ts";
 import type { PrivacyVault } from "./privacy-state.ts";
 
 export type ProductSession = ReturnType<typeof createProductSession>;
@@ -42,7 +43,7 @@ export function createProductSession(config: SmokeConfig) {
   const supabase = createClient(config.productApi.supabaseUrl, config.productApi.supabasePublishableKey, {
     auth: { flowType: "pkce", persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
-  return new WottaProductSession(supabase, config.productApi);
+  return new WottaProductSession(supabase, config.productApi, config.chainId);
 }
 
 type ProductApiConfig = NonNullable<SmokeConfig["productApi"]>;
@@ -74,7 +75,11 @@ type ClaimEnvelope = {
 };
 
 class WottaProductSession {
-  constructor(private readonly supabase: SupabaseClient, private readonly config: ProductApiConfig) {}
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly config: ProductApiConfig,
+    private readonly chainId: SmokeConfig["chainId"],
+  ) {}
 
   private redirectTo() {
     return `${window.location.origin}${window.location.pathname}`;
@@ -148,34 +153,55 @@ class WottaProductSession {
     return (await this.authState()).label;
   }
 
-  async bindReadyAndIdentity(account: WalletAccountV6, vault: PrivacyVault, identityAddress?: string) {
+  async bindReadyAndIdentity(
+    account: WalletAccountV6,
+    vault: PrivacyVault,
+    identityAddress?: string,
+    options?: { reconnect?: boolean; rotateInboxKey?: boolean },
+  ) {
     await this.syncSession();
-    let me = await this.request<{ wallet?: { address: string; inbox_pubkey: string } }>("/v1/me");
-    let inboxSecretKey = vault.state.inboxSecretKey;
+    const me = await this.request<{ wallet?: { address: string; inbox_pubkey: string } }>("/v1/me");
+    const reconnect = options?.reconnect === true;
+    const rotateInboxKey = options?.rotateInboxKey === true;
 
     if (me.wallet) {
       if (BigInt(me.wallet.address) !== BigInt(account.address)) {
         throw new Error("This handle is linked to a different Ready account");
       }
-      const localMatches =
-        inboxSecretKey !== undefined &&
-        publicKeyFromSecret(inboxSecretKey) === me.wallet.inbox_pubkey;
-      if (!localMatches) {
-        await this.request("/v1/wallet/unlink", { method: "POST" });
-        me = {};
-        inboxSecretKey = undefined;
+      const published = me.wallet.inbox_pubkey;
+      let localMatches = false;
+      if (vault.state.inboxSecretKey) {
+        try {
+          localMatches = publicKeyFromSecret(vault.state.inboxSecretKey) === published;
+        } catch {
+          localMatches = false;
+        }
       }
-    }
 
-    if (!me.wallet) {
-      if (!inboxSecretKey) {
-        inboxSecretKey = generateInboxKeyPair().secretKey;
-        await vault.setInboxSecretKey(inboxSecretKey);
+      if (localMatches && !reconnect && !rotateInboxKey) {
+        if (identityAddress) await this.publishPrivateIdentity(identityAddress);
+        await this.syncSession();
+        return { reconnected: true as const };
       }
-      const inboxPublicKey = publicKeyFromSecret(inboxSecretKey);
-      const challenge = await this.request<{ typedData: TypedData }>("/v1/wallet/challenge", { method: "POST", body: JSON.stringify({ address: account.address }) });
-      const signature = stark.formatSignature(await account.signMessage(challenge.typedData));
-      await this.request("/v1/wallet/link", { method: "POST", body: JSON.stringify({ challenge: JSON.stringify(challenge.typedData), signature, inboxPublicKey }) });
+
+      if (rotateInboxKey) {
+        const derived = await deriveInboxKeyPair(account, this.chainId);
+        await this.linkWalletBinding(account, derived.publicKey, true);
+        await vault.setInboxSecretKey(derived.secretKey);
+      } else if (localMatches && reconnect) {
+        await this.linkWalletBinding(account, published, false);
+      } else {
+        const derived = await deriveInboxKeyPair(account, this.chainId);
+        if (derived.publicKey !== published) {
+          throw new Error("wallet_inbox_key_mismatch");
+        }
+        await this.linkWalletBinding(account, derived.publicKey, false);
+        await vault.setInboxSecretKey(derived.secretKey);
+      }
+    } else {
+      const derived = await deriveInboxKeyPair(account, this.chainId);
+      await this.linkWalletBinding(account, derived.publicKey, false);
+      await vault.setInboxSecretKey(derived.secretKey);
     }
 
     if (identityAddress) await this.publishPrivateIdentity(identityAddress);
@@ -183,6 +209,32 @@ class WottaProductSession {
     // Re-sync after wallet/private-identity binding so first-time onboarding
     // receives eligible encrypted claims without requiring a page reload.
     await this.syncSession();
+  }
+
+  private async linkWalletBinding(
+    account: WalletAccountV6,
+    inboxPublicKey: string,
+    rotateInboxKey: boolean,
+  ) {
+    await account.switchStarknetChain(
+      this.chainId === "SN_MAIN"
+        ? constants.StarknetChainId.SN_MAIN
+        : constants.StarknetChainId.SN_SEPOLIA,
+    );
+    const challenge = await this.request<{ typedData: TypedData }>("/v1/wallet/challenge", {
+      method: "POST",
+      body: JSON.stringify({ address: account.address }),
+    });
+    const signature = stark.formatSignature(await account.signMessage(challenge.typedData));
+    await this.request("/v1/wallet/link", {
+      method: "POST",
+      body: JSON.stringify({
+        challenge: JSON.stringify(challenge.typedData),
+        signature,
+        inboxPublicKey,
+        rotateInboxKey,
+      }),
+    });
   }
 
   async publishPrivateIdentity(identityAddress: string) {

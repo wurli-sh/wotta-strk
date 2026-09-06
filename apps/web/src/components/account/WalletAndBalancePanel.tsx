@@ -6,6 +6,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  KeyRound,
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
@@ -30,8 +31,10 @@ import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateBalance } from "@/lib/wotta/privacy-flow";
 import {
   unlockPrivacyVault,
-  clearAllPrivacyVaultLocalState,
+  clearPrivacyVaultLocalState,
 } from "@/lib/wotta/privacy-state";
+import { privacyVaultUnlockConfig } from "@/lib/wotta/privacy-vault-config";
+import { createBrowserProductSession } from "@/lib/wotta/product-session";
 import { clearReadyConnections, connectReady } from "@/lib/wotta/ready";
 import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { readMainnetPrivateBalance } from "@/lib/wotta/mainnet-privacy";
@@ -114,7 +117,10 @@ export function WalletAndBalancePanel({
         signal: operation.signal,
       });
       clearReadyConnections();
-      clearAllPrivacyVaultLocalState();
+      if (wallet) {
+        const { poolAddress } = privacyVaultUnlockConfig(mode);
+        clearPrivacyVaultLocalState(wallet, poolAddress);
+      }
       toast.success(TOAST.readyUnlinked);
       await onLinked({
         profile: me?.profile ?? null,
@@ -123,6 +129,70 @@ export function WalletAndBalancePanel({
       });
     } catch (e) {
       toast.error(userFacingError(e, TOAST.unlinkWalletFailed));
+    } finally {
+      operation.finish();
+      setBusy(false);
+    }
+  }
+
+  async function upgradeInboxKey() {
+    if (!me?.wallet) {
+      toast.error(TOAST.linkReadyToReveal);
+      return;
+    }
+    const confirmed = window.confirm(
+      "Upgrade to a wallet-backed inbox key?\n\nNew payments will use the new key. Existing claimable notes sealed to the old key stay claimable only on browsers that still hold that key (Inbox shows “Older inbox key”).",
+    );
+    if (!confirmed) return;
+    const operation = beginNetworkOperation(mode, {
+      blocksNetworkSwitch: true,
+    });
+    setBusy(true);
+    try {
+      const connected = await connectReady(mode);
+      operation.assertActive();
+      if (BigInt(connected.address) !== BigInt(me.wallet.address)) {
+        throw new Error(
+          "Connect the Ready account linked to this Wotta profile",
+        );
+      }
+      const vault = await unlockPrivacyVault(
+        connected.account,
+        privacyVaultUnlockConfig(mode),
+      );
+      const session = createBrowserProductSession();
+      await session.bindReadyAndIdentity(connected.account, vault, undefined, {
+        rotateInboxKey: true,
+      });
+      const linkedMe = await session.me();
+      toast.success(TOAST.inboxKeyUpgraded);
+      await onLinked({
+        profile: linkedMe.profile ?? me.profile ?? null,
+        identities: linkedMe.identities ?? me.identities ?? [],
+        wallet: linkedMe.wallet
+          ? {
+              address: linkedMe.wallet.address,
+              inbox_pubkey: linkedMe.wallet.inbox_pubkey,
+              chain_id:
+                linkedMe.wallet.chain_id ??
+                me.wallet.chain_id ??
+                (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
+              key_version:
+                linkedMe.wallet.key_version ?? me.wallet.key_version ?? 1,
+              private_identity_address:
+                linkedMe.wallet.private_identity_address ??
+                me.wallet.private_identity_address,
+              privacy_pool_address:
+                linkedMe.wallet.privacy_pool_address ??
+                me.wallet.privacy_pool_address,
+              private_identity_verified_at:
+                me.wallet.private_identity_verified_at ??
+                new Date().toISOString(),
+            }
+          : null,
+      });
+    } catch (e) {
+      toast.error(userFacingError(e, "Couldn’t upgrade inbox key"));
     } finally {
       operation.finish();
       setBusy(false);
@@ -301,6 +371,16 @@ export function WalletAndBalancePanel({
                   onClick={() => setModalOpen(true)}
                 >
                   Reconnect
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  data-testid="upgrade-inbox-key"
+                  onClick={() => void upgradeInboxKey()}
+                >
+                  <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                  {busy ? "Upgrading…" : "Upgrade inbox key"}
                 </Button>
                 <Button
                   variant="outline"

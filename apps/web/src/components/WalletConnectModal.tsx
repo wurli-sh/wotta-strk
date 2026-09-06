@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Check, KeyRound, Loader2, ShieldAlert, Wallet, X } from "lucide-react";
+import { Check, Loader2, ShieldAlert, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import type { WalletAccountV6 } from "starknet";
 import { Button } from "@/components/ui/Button";
@@ -174,7 +174,7 @@ export function WalletConnectModal({
     }
   }
 
-  async function bindAndRegister(options?: { rotateInboxKey?: boolean }) {
+  async function bindAndRegister() {
     if (!account || !vault) return;
     const operation = beginNetworkOperation(mode, {
       blocksNetworkSwitch: true,
@@ -189,7 +189,6 @@ export function WalletConnectModal({
       setPhase("binding");
       await session.bindReadyAndIdentity(account, vault, undefined, {
         reconnect,
-        rotateInboxKey: options?.rotateInboxKey,
       });
       operation.assertActive();
 
@@ -425,42 +424,24 @@ export function WalletConnectModal({
                         />
                         <div>
                           <p className="text-sm font-semibold text-foreground">
-                            Reset this browser&apos;s inbox key?
+                            Inbox key not on this browser
                           </p>
-                          <p className="mt-1 text-xs leading-5 text-warning-foreground">
-                            This restores future payments on this browser. Older
-                            encrypted inbox payments will remain unreadable.
+          <p className="mt-1 text-xs leading-5 text-warning-foreground">
+                            This Ready account&apos;s inbox secret isn&apos;t
+                            available here. Use the original device to claim
+                            older payments, or upgrade the inbox key from
+                            Account (new payments will use the new key; older
+                            ones show as Older inbox key).
                           </p>
                         </div>
                       </div>
-                      <div className="mt-4 flex flex-col gap-2">
-                        <Button
-                          variant="danger"
-                          className="w-full whitespace-nowrap"
-                          disabled={busy}
-                          aria-busy={busy}
-                          onClick={() =>
-                            void bindAndRegister({ rotateInboxKey: true })
-                          }
-                        >
-                          {busy ? (
-                            <Loader2
-                              className="size-4 shrink-0 animate-spin"
-                              aria-hidden
-                            />
-                          ) : (
-                            <KeyRound className="size-4 shrink-0" aria-hidden />
-                          )}
-                          <span>
-                            {busy ? "Resetting…" : "Reset inbox key"}
-                          </span>
-                        </Button>
+                      <div className="mt-4">
                         <Button
                           variant="outline"
                           className="w-full"
                           onClick={dismiss}
                         >
-                          Cancel
+                          Close
                         </Button>
                       </div>
                     </div>

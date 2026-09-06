@@ -11,6 +11,7 @@ const APP_MESSAGES: Record<string, string> = {
   sign_in_required: "Sign in to continue",
   register_required: "Connect Ready from Account first",
   recipient_required: "Enter a handle or email first",
+  recipient_inbox_key_changed: "The recipient’s inbox key changed before delivery — refresh their handle and send again; no funds were moved",
   send_failed: "Couldn’t send",
   claim_failed: "Couldn’t claim",
   withdraw_failed: "Couldn’t withdraw",
@@ -49,7 +50,13 @@ const APP_MESSAGES: Record<string, string> = {
   handle_missing: "Link X for a Wotta handle first",
   route_disabled: "That testnet route is not admitted yet",
   wallet_inbox_key_mismatch:
-    "This browser’s inbox key doesn’t match the linked wallet — use the device that originally linked Ready",
+    "This browser’s inbox key doesn’t match the linked wallet — use the device that originally linked Ready, or upgrade the inbox key from Account (older payments stay on the old key)",
+  inbox_key_rotation_blocked_active_claims:
+    "Inbox-key upgrade could not complete — retry from Account",
+  wallet_unlink_blocked_active_claims:
+    "Unlink could not complete — retry from Account",
+  wallet_reclaim_blocked_active_claims:
+    "This Ready wallet still has live inbox payments on another Wotta account — claim or wait for refund before linking here",
   wallet_already_linked:
     "This Ready wallet is linked to another Wotta account",
   private_route_disabled: "The private Starknet route is not verified",
@@ -72,6 +79,9 @@ const APP_MESSAGES: Record<string, string> = {
   mainnet_pool_class_mismatch: "The configured live private pool failed verification",
   vesu_earn_pending: "Vesu Earn is still being verified — no transaction was requested",
   vesu_runtime_mismatch: "Vesu’s live contracts no longer match Wotta’s verified configuration — earning is paused",
+  vesu_receipt_verification_failed: "The transaction succeeded, but its Vesu privacy route could not be verified — your local Earn balance was not changed",
+  vesu_anonymizer_balance_stranded: "The Vesu route retained tokens unexpectedly — earning is paused for safety",
+  vesu_anonymizer_balance_malformed: "The Vesu route returned an invalid token balance — earning is paused for safety",
   vesu_manifest_mismatch: "Vesu Earn configuration is incomplete or changed — earning is paused",
   vesu_market_unavailable: "Live Vesu market stats are unavailable — try again later",
   unsupported_vesu_deposit_amount: "Enter exactly 0.1 or 1 USDC for the Mainnet beta",

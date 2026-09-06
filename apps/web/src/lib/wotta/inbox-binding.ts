@@ -48,7 +48,7 @@ export function inboxLinkWarning(mode: NetworkMode, status: InboxLinkStatus): st
     case "wrong_wallet":
       return `The connected Ready account does not match your ${network} inbox link.`;
     case "key_mismatch":
-      return `${network} inbox key does not match the active link. Do not receive new payments; use the original browser or deliberately unlink and re-link.`;
+      return `${network} inbox key does not match the active link. Do not receive new payments on this browser until you upgrade from Account (older claimable notes stay sealed to the previous key).`;
     default:
       return null;
   }

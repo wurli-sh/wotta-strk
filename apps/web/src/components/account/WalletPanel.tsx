@@ -1,18 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, ShieldCheck, Unlink } from "lucide-react";
+import { Check, Copy, KeyRound, ShieldCheck, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { WalletPanelSkeleton } from "@/components/ui/Skeleton";
 import { WalletConnectModal } from "@/components/WalletConnectModal";
+import { useNetworkMode } from "@/components/NetworkModeProvider";
 import { apiFetch, type MeResponse } from "@/lib/api/client";
 import { TOAST } from "@/lib/brand-copy";
 import { userFacingError } from "@/lib/errors";
 import { routeLogoPath } from "@/lib/crypto-icons";
 import { createClient } from "@/lib/supabase/client";
-import { clearAllPrivacyVaultLocalState } from "@/lib/wotta/privacy-state";
-import { clearReadyConnections } from "@/lib/wotta/ready";
+import {
+  clearPrivacyVaultLocalState,
+  unlockPrivacyVault,
+} from "@/lib/wotta/privacy-state";
+import { privacyVaultUnlockConfig } from "@/lib/wotta/privacy-vault-config";
+import { createBrowserProductSession } from "@/lib/wotta/product-session";
+import { clearReadyConnections, connectReady } from "@/lib/wotta/ready";
 
 type Props = {
   me: MeResponse | null;
@@ -30,6 +36,7 @@ export function WalletPanel({
   autoOpenConnect = false,
   onLinked,
 }: Props) {
+  const { mode } = useNetworkMode();
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [modalOpen, setModalOpen] = useState(autoOpenConnect);
@@ -56,9 +63,13 @@ export function WalletPanel({
         token,
         method: "POST",
         body: {},
+        network: mode,
       });
       clearReadyConnections();
-      clearAllPrivacyVaultLocalState();
+      if (wallet) {
+        const { poolAddress } = privacyVaultUnlockConfig(mode);
+        clearPrivacyVaultLocalState(wallet, poolAddress);
+      }
       toast.success(TOAST.readyUnlinked);
       await onLinked({
         profile: me?.profile ?? null,
@@ -67,6 +78,65 @@ export function WalletPanel({
       });
     } catch (e) {
       toast.error(userFacingError(e, TOAST.unlinkWalletFailed));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function upgradeInboxKey() {
+    if (!me?.wallet) {
+      toast.error(TOAST.linkReadyToReveal);
+      return;
+    }
+    const confirmed = window.confirm(
+      "Upgrade to a wallet-backed inbox key?\n\nNew payments will use the new key. Existing claimable notes sealed to the old key stay claimable only on browsers that still hold that key (Inbox shows “Older inbox key”).",
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      const connected = await connectReady(mode);
+      if (BigInt(connected.address) !== BigInt(me.wallet.address)) {
+        throw new Error(
+          "Connect the Ready account linked to this Wotta profile",
+        );
+      }
+      const vault = await unlockPrivacyVault(
+        connected.account,
+        privacyVaultUnlockConfig(mode),
+      );
+      const session = createBrowserProductSession();
+      await session.bindReadyAndIdentity(connected.account, vault, undefined, {
+        rotateInboxKey: true,
+      });
+      const linkedMe = await session.me();
+      toast.success(TOAST.inboxKeyUpgraded);
+      await onLinked({
+        profile: linkedMe.profile ?? me.profile ?? null,
+        identities: linkedMe.identities ?? me.identities ?? [],
+        wallet: linkedMe.wallet
+          ? {
+              address: linkedMe.wallet.address,
+              inbox_pubkey: linkedMe.wallet.inbox_pubkey,
+              chain_id:
+                linkedMe.wallet.chain_id ??
+                me.wallet.chain_id ??
+                (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
+              key_version:
+                linkedMe.wallet.key_version ?? me.wallet.key_version ?? 1,
+              private_identity_address:
+                linkedMe.wallet.private_identity_address ??
+                me.wallet.private_identity_address,
+              privacy_pool_address:
+                linkedMe.wallet.privacy_pool_address ??
+                me.wallet.privacy_pool_address,
+              private_identity_verified_at:
+                me.wallet.private_identity_verified_at ??
+                new Date().toISOString(),
+            }
+          : null,
+      });
+    } catch (e) {
+      toast.error(userFacingError(e, "Couldn’t upgrade inbox key"));
     } finally {
       setBusy(false);
     }
@@ -127,6 +197,16 @@ export function WalletPanel({
                   onClick={() => setModalOpen(true)}
                 >
                   Reconnect
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  data-testid="upgrade-inbox-key"
+                  onClick={() => void upgradeInboxKey()}
+                >
+                  <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                  {busy ? "Upgrading…" : "Upgrade inbox key"}
                 </Button>
                 <Button
                   variant="outline"

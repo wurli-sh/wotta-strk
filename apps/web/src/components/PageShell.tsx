@@ -6,13 +6,15 @@ type Props = {
   subtitle?: string;
   children: ReactNode;
   className?: string;
-  maxWidth?: "sm" | "md" | "lg";
+  maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
 };
 
 const MAX: Record<NonNullable<Props["maxWidth"]>, string> = {
   sm: "max-w-md",
   md: "max-w-xl",
   lg: "max-w-2xl",
+  xl: "max-w-4xl",
+  "2xl": "max-w-5xl",
 };
 
 export function PageShell({

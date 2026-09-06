@@ -127,7 +127,8 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const warning = inboxLinkWarning(mode, inboxLinkStatus);
     const toastId = `inbox-link-${mode}`;
-    if (!warning) {
+    // Row-level “Older inbox key” is enough; don’t nag for key mismatch.
+    if (!warning || inboxLinkStatus === "key_mismatch") {
       toast.dismiss(toastId);
       warnedRef.current = null;
       return;
@@ -137,7 +138,7 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
     warnedRef.current = warningKey;
     const options = { id: toastId, duration: 8_000 };
     if (
-      ["key_mismatch", "wrong_wallet", "network_mismatch"].includes(
+      ["wrong_wallet", "network_mismatch"].includes(
         inboxLinkStatus,
       )
     ) {

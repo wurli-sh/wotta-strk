@@ -19,6 +19,7 @@ describe("inbox binding validation", () => {
 
   it("warns with the selected network name", () => {
     expect(inboxLinkWarning("mainnet", "key_mismatch")).toContain("Mainnet");
+    expect(inboxLinkWarning("mainnet", "key_mismatch")).toContain("upgrade");
     expect(inboxLinkWarning("testnet", "unlinked")).toContain("Sepolia");
     expect(inboxLinkWarning("mainnet", "valid")).toBeNull();
   });

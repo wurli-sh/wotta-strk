@@ -18,11 +18,11 @@ import {
 import {
   decryptEnvelope,
   encryptEnvelope,
-  generateInboxKeyPair,
   publicKeyFromSecret,
 } from "@wotta/crypto";
 import { computeClaimHash, type Denomination } from "@wotta/shared";
 import { stark, type TypedData, type WalletAccountV6 } from "starknet";
+import { chainIdForNetwork, deriveInboxKeyPair } from "./inbox-key-derive.ts";
 import { connectReady, ensureReadyChain } from "./ready.ts";
 import {
   executeStarknetPublicDeposit,
@@ -352,55 +352,51 @@ export class WottaProductSession {
     options?: { reconnect?: boolean; rotateInboxKey?: boolean },
   ) {
     await this.syncSession();
-    let me = await this.request<{
+    const me = await this.request<{
       wallet: { address: string; inbox_pubkey: string } | null;
     }>("/v1/me");
-    let inboxSecretKey = vault.state.inboxSecretKey;
     const reconnect = options?.reconnect === true;
     const rotateInboxKey = options?.rotateInboxKey === true;
+    const chainId = chainIdForNetwork(this.config.network);
 
     if (me.wallet) {
       if (BigInt(me.wallet.address) !== BigInt(account.address)) {
         throw new Error("This handle is linked to a different Ready account");
       }
-      const localMatches =
-        inboxSecretKey !== undefined &&
-        publicKeyFromSecret(inboxSecretKey) === me.wallet.inbox_pubkey;
-      if (localMatches && !reconnect) {
+      const published = me.wallet.inbox_pubkey;
+      const localMatches = secretMatchesPublished(
+        vault.state.inboxSecretKey,
+        published,
+      );
+
+      if (localMatches && !reconnect && !rotateInboxKey) {
         if (identityAddress) await this.publishPrivateIdentity(identityAddress);
         await this.syncSession();
         return { reconnected: true as const };
       }
-      if (!localMatches && !rotateInboxKey) {
-        // Never rotate an inbox key implicitly. Existing payments are encrypted
-        // to the published key and become permanently unreadable if it changes.
-        throw new Error("wallet_inbox_key_mismatch");
-      }
-    }
 
-    if (!me.wallet || reconnect || rotateInboxKey) {
-      if (!inboxSecretKey) {
-        inboxSecretKey = generateInboxKeyPair().secretKey;
-        await vault.setInboxSecretKey(inboxSecretKey);
+      if (rotateInboxKey) {
+        const derived = await deriveInboxKeyPair(account, chainId);
+        // Persist only after the server accepts the new pubkey — otherwise a
+        // blocked rotate desyncs this browser from live notes.
+        await this.linkWalletBinding(account, derived.publicKey, true);
+        await vault.setInboxSecretKey(derived.secretKey);
+      } else if (localMatches && reconnect) {
+        // Keep the legacy matching secret; never auto-upgrade to derived.
+        await this.linkWalletBinding(account, published, false);
+      } else {
+        const derived = await deriveInboxKeyPair(account, chainId);
+        if (derived.publicKey !== published) {
+          // Never publish derived over a different published key — that orphans notes.
+          throw new Error("wallet_inbox_key_mismatch");
+        }
+        await this.linkWalletBinding(account, derived.publicKey, false);
+        await vault.setInboxSecretKey(derived.secretKey);
       }
-      const inboxPublicKey = publicKeyFromSecret(inboxSecretKey);
-      await ensureReadyChain(account, this.config.network);
-      const challenge = await this.request<{ typedData: TypedData }>(
-        "/v1/wallet/challenge",
-        { method: "POST", body: JSON.stringify({ address: account.address }) },
-      );
-      const signature = stark.formatSignature(
-        await account.signMessage(challenge.typedData),
-      );
-      await this.request("/v1/wallet/link", {
-        method: "POST",
-        body: JSON.stringify({
-          challenge: JSON.stringify(challenge.typedData),
-          signature,
-          inboxPublicKey,
-          rotateInboxKey,
-        }),
-      });
+    } else {
+      const derived = await deriveInboxKeyPair(account, chainId);
+      await this.linkWalletBinding(account, derived.publicKey, false);
+      await vault.setInboxSecretKey(derived.secretKey);
     }
 
     if (identityAddress) await this.publishPrivateIdentity(identityAddress);
@@ -408,6 +404,30 @@ export class WottaProductSession {
     // Re-sync after wallet/private-identity binding so first-time onboarding
     // receives eligible encrypted claims without requiring a page reload.
     await this.syncSession();
+  }
+
+  private async linkWalletBinding(
+    account: WalletAccountV6,
+    inboxPublicKey: string,
+    rotateInboxKey: boolean,
+  ) {
+    await ensureReadyChain(account, this.config.network);
+    const challenge = await this.request<{ typedData: TypedData }>(
+      "/v1/wallet/challenge",
+      { method: "POST", body: JSON.stringify({ address: account.address }) },
+    );
+    const signature = stark.formatSignature(
+      await account.signMessage(challenge.typedData),
+    );
+    await this.request("/v1/wallet/link", {
+      method: "POST",
+      body: JSON.stringify({
+        challenge: JSON.stringify(challenge.typedData),
+        signature,
+        inboxPublicKey,
+        rotateInboxKey,
+      }),
+    });
   }
 
   async publishPrivateIdentity(identityAddress: string) {
@@ -565,6 +585,7 @@ export class WottaProductSession {
         ciphertext: envelope.ciphertext,
         nonce: envelope.nonce,
         ephemeralPublicKey: envelope.ephemeralPublicKey,
+        recipientInboxPublicKey: recipientKey,
         algorithm: envelope.algorithm,
       }),
     });
@@ -725,6 +746,7 @@ export class WottaProductSession {
         ciphertext: envelope.ciphertext,
         nonce: envelope.nonce,
         ephemeralPublicKey: envelope.ephemeralPublicKey,
+        recipientInboxPublicKey: recipientKey,
         algorithm: envelope.algorithm,
       }),
     });
@@ -1086,6 +1108,18 @@ function recipientIdentifier(input: string): {
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
     return { provider: "email", identifier: value };
   throw new Error("Cross-chain recipient must be an email or @handle");
+}
+
+function secretMatchesPublished(
+  secret: string | undefined,
+  published: string,
+): boolean {
+  if (!secret) return false;
+  try {
+    return publicKeyFromSecret(secret) === published;
+  } catch {
+    return false;
+  }
 }
 
 function isTransientNetworkError(error: unknown): boolean {

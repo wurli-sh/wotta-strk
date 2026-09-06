@@ -1,23 +1,27 @@
 import { publicKeyFromSecret } from "@wotta/crypto";
 import type { WalletAccountV6 } from "starknet";
 import type { NetworkMode } from "@/lib/network-mode";
-import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
-import { mainnetPrivacyConfig } from "@/lib/wotta/mainnet-privacy";
-import {
-  restorePrivacyVaultFromSession,
-  type PrivacyVault,
-} from "@/lib/wotta/privacy-state";
+import { chainIdForNetwork, deriveInboxKeyPair } from "@/lib/wotta/inbox-key-derive";
+import type { PrivacyVault } from "@/lib/wotta/privacy-state";
 import { createBrowserProductSession } from "@/lib/wotta/product-session";
 
-function otherUnlockConfig(mode: NetworkMode) {
-  return mode === "mainnet" ? directPrivacyConfig() : mainnetPrivacyConfig();
+function secretMatchesPublished(
+  secret: string | undefined,
+  published: string,
+): boolean {
+  if (!secret) return false;
+  try {
+    return publicKeyFromSecret(secret) === published;
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Claim needs the X25519 inbox secret that was published at wallet link time.
- * Unlock alone only restores the viewing-key vault. A legacy matching secret
- * may be copied from an already-unlocked tab session, but claim must never
- * switch networks behind the user's back to unlock a different chain's vault.
+ * Unlock alone only restores the viewing-key vault. Prefer re-deriving from Ready
+ * when the published pubkey is wallet-backed; never invent a new key for an
+ * existing binding.
  */
 export async function ensureClaimInboxKey(
   vault: PrivacyVault,
@@ -28,27 +32,19 @@ export async function ensureClaimInboxKey(
   const me = await session.me();
   const expected = me.wallet?.inbox_pubkey;
 
-  const matches = (secret: string | undefined) =>
-    Boolean(secret && (!expected || publicKeyFromSecret(secret) === expected));
-
-  if (matches(vault.state.inboxSecretKey)) {
+  // Unbound profiles must link even if a stale vault secret remains.
+  if (expected && secretMatchesPublished(vault.state.inboxSecretKey, expected)) {
     return { rebound: false };
   }
 
-  const other = otherUnlockConfig(mode);
-  try {
-    const donor = await restorePrivacyVaultFromSession(account.address, other);
-    if (donor?.state.inboxSecretKey && matches(donor.state.inboxSecretKey)) {
-      await vault.setInboxSecretKey(donor.state.inboxSecretKey!);
+  if (expected) {
+    const derived = await deriveInboxKeyPair(account, chainIdForNetwork(mode));
+    if (derived.publicKey === expected) {
+      await vault.setInboxSecretKey(derived.secretKey);
       return { rebound: false };
     }
-  } catch {
-    // Fall through without prompting a cross-network wallet switch.
-  }
-
-  if (me.wallet?.inbox_pubkey) {
     throw new Error(
-      "This browser can’t decrypt your inbox — the Ready link’s secret isn’t on this device. Use the browser that originally linked Ready, or unlink and re-link from Account (older payments won’t open after re-link).",
+      "This browser can’t decrypt your inbox — the Ready link’s secret isn’t available here. Use the browser that originally linked Ready for older payments, or upgrade the inbox key from Account (older notes stay sealed to the previous key).",
     );
   }
 

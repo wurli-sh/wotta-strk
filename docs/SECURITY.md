@@ -24,6 +24,7 @@ Cairo does **not** decode Circle maxFee, executed fee, finality, or burn token. 
 
 - **Circle CCTP / Iris:** message authenticity, attestation, mint amount, and Fast vs Standard finality.
 - **Ready / STRK20:** private-balance cryptography and viewing-key handling on the client.
+- **Inbox encryption keys:** X25519 inbox secrets are derived client-side from a Ready `signMessage` over Wotta TypedData (`inbox-key-v1`), domain-separated by chain via HKDF. Recovery assumes Ready returns a stable signature for the same TypedData. Wotta servers store only the published public key and never the secret. Explicit inbox-key upgrade (or unlink/re-link) is allowed while older notes are still claimable; those notes remain sealed to the previous pubkey and surface as “Older inbox key” in Inbox until claimed on a device that holds that secret or until expiry/refund. Reclaiming a Ready address from another Wotta profile is still blocked while that profile has live notes.
 - **Database / identity:** Supabase auth, encrypted notes, and handle/email uniqueness. On `SN_MAIN`, notes and claims open only when the verified escrow/privacy manifest, indexer, and explicit route-admission gates all pass.
 - **RPC operators:** primary and fallback Starknet RPCs; Base/Solana RPCs when those routes are admitted.
 

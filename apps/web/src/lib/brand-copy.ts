@@ -83,6 +83,7 @@ export const TOAST = {
   connectReadyFailed: "Couldn’t connect Ready",
   privateRegistrationFailed: "Couldn’t finish private registration",
   readyUnlinked: "Ready wallet unlinked",
+  inboxKeyUpgraded: "Inbox key upgraded to wallet-backed recovery",
   unlinkWalletFailed: "Couldn’t unlink wallet — try again",
   linkReadyToReveal: "Link Ready to reveal your private balance",
   signInToManageHandles: "Sign in to manage handles",
