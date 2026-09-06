@@ -17,7 +17,7 @@ export const privateIdentityBindingSchema = z.object({ identityAddress: z.string
 export const intentSchema = z.object({ id: z.string().uuid(), mode: z.enum(["standard", "private"]), deliveryKind: z.enum(["registered", "pending", "direct"]), denomination: z.enum(DENOMINATIONS), routeId: z.string().min(1).max(64), claimHash: z.string().regex(/^0x[0-9a-fA-F]+$/), refundHash: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), publicRefundRecipient: z.string().regex(/^0x[0-9a-fA-F]+$/).optional(), expiresAt: z.string().datetime() });
 export const quoteSchema = intentSchema.extend({ sourceAccount: z.string().min(1).max(256) });
 export const sourceSubmittedSchema = z.object({ txHash: z.string().min(3).max(512) });
-export const deliverySchema = z.object({ ciphertext: z.string().min(1).max(262_144), nonce: z.string().regex(/^[A-Za-z0-9_-]{32}$/), ephemeralPublicKey: z.string().regex(/^[A-Za-z0-9_-]{43}$/), algorithm: z.literal("x25519-xsalsa20-poly1305"), recipient: identifierSchema });
+export const deliverySchema = z.object({ ciphertext: z.string().min(1).max(262_144), nonce: z.string().regex(/^[A-Za-z0-9_-]{32}$/), ephemeralPublicKey: z.string().regex(/^[A-Za-z0-9_-]{43}$/), recipientInboxPublicKey: z.string().regex(/^[A-Za-z0-9_-]{43}$/), algorithm: z.literal("x25519-xsalsa20-poly1305"), recipient: identifierSchema });
 export const idempotencySchema = z.string().uuid();
 
 const feltSchema = z.string().regex(/^0x[0-9a-fA-F]+$/);

@@ -8,6 +8,7 @@ import {
   deploymentManifestSchema,
   hashDeploymentManifest,
   identifierSchema,
+  deliverySchema,
   walletLinkSchema,
 } from "./index.ts";
 
@@ -38,6 +39,19 @@ test("wallet link requires an explicit boolean to rotate an inbox key", () => {
   assert.throws(() =>
     walletLinkSchema.parse({ ...input, rotateInboxKey: "true" }),
   );
+});
+
+test("encrypted delivery is bound to the resolved recipient inbox key", () => {
+  const input = {
+    ciphertext: "ciphertext",
+    nonce: "A".repeat(32),
+    ephemeralPublicKey: "B".repeat(43),
+    recipientInboxPublicKey: "C".repeat(43),
+    algorithm: "x25519-xsalsa20-poly1305",
+    recipient: { provider: "email", identifier: "user@example.com" },
+  };
+  assert.equal(deliverySchema.parse(input).recipientInboxPublicKey, input.recipientInboxPublicKey);
+  assert.throws(() => deliverySchema.parse({ ...input, recipientInboxPublicKey: undefined }));
 });
 
 test("deployment manifest schema accepts pool placeholders", () => {
