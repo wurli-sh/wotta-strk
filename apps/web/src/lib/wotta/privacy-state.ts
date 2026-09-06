@@ -10,6 +10,8 @@ export type PrivacyState = {
   /** Block where the privacy identity was deployed; needed to prove registration safely. */
   identityDeployedBlock?: number;
   inboxSecretKey?: string;
+  /** Older locally-held inbox keys retained so rotation does not orphan live notes. */
+  previousInboxSecretKeys?: string[];
 };
 
 const MAX_VIEWING_KEY = ec.starkCurve.CURVE.n / 2n;
@@ -94,6 +96,18 @@ export class PrivacyVault {
     await this.save();
   }
 
+  async rotateInboxSecretKey(inboxSecretKey: string): Promise<void> {
+    const current = this.state.inboxSecretKey;
+    if (current && current !== inboxSecretKey) {
+      this.state.previousInboxSecretKeys = [
+        current,
+        ...(this.state.previousInboxSecretKeys ?? []),
+      ].filter((secret, index, all) => all.indexOf(secret) === index);
+    }
+    this.state.inboxSecretKey = inboxSecretKey;
+    await this.save();
+  }
+
   async save(): Promise<void> {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const plaintext = new TextEncoder().encode(JSON.stringify(this.state));
@@ -109,6 +123,12 @@ export class PrivacyVault {
     };
     localStorage.setItem(this.storageKey, JSON.stringify(record));
   }
+}
+
+export function inboxSecretKeys(state: Pick<PrivacyState, "inboxSecretKey" | "previousInboxSecretKeys">): string[] {
+  return [state.inboxSecretKey, ...(state.previousInboxSecretKeys ?? [])]
+    .filter((secret): secret is string => Boolean(secret))
+    .filter((secret, index, all) => all.indexOf(secret) === index);
 }
 
 export async function unlockPrivacyVault(

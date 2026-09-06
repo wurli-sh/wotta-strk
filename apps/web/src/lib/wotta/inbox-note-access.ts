@@ -11,20 +11,27 @@ export type EncryptedInboxNote = {
 /** True when this device's inbox secret can open the note ciphertext. */
 export function canDecryptInboxNote(
   note: EncryptedInboxNote,
-  inboxSecretKey: string | undefined,
+  inboxSecretKey: string | string[] | undefined,
 ): boolean {
-  if (!inboxSecretKey) return false;
-  try {
-    decryptEnvelope({
-      algorithm: note.algorithm,
-      ciphertext: note.ciphertext,
-      nonce: note.nonce,
-      ephemeralPublicKey: note.sender_public_key,
-    }, inboxSecretKey);
-    return true;
-  } catch {
-    return false;
+  const secrets = Array.isArray(inboxSecretKey)
+    ? inboxSecretKey
+    : inboxSecretKey
+      ? [inboxSecretKey]
+      : [];
+  for (const secret of secrets) {
+    try {
+      decryptEnvelope({
+        algorithm: note.algorithm,
+        ciphertext: note.ciphertext,
+        nonce: note.nonce,
+        ephemeralPublicKey: note.sender_public_key,
+      }, secret);
+      return true;
+    } catch {
+      // Try the next locally retained key.
+    }
   }
+  return false;
 }
 
 export function isWrongInboxKeyError(message: string | null | undefined): boolean {

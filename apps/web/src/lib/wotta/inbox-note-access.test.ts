@@ -19,6 +19,7 @@ describe("inbox note access", () => {
       algorithm: "x25519-xsalsa20-poly1305" as const,
     };
     expect(canDecryptInboxNote(note, owner.secretKey)).toBe(true);
+    expect(canDecryptInboxNote(note, [other.secretKey, owner.secretKey])).toBe(true);
     expect(canDecryptInboxNote(note, other.secretKey)).toBe(false);
     expect(canDecryptInboxNote(note, undefined)).toBe(false);
   });

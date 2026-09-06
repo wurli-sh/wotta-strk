@@ -152,6 +152,7 @@ describe("Ready inbox binding safety", () => {
     expect(vault.setInboxSecretKey).toHaveBeenCalledWith(derived.secretKey);
     expect(linkBody).toMatchObject({
       inboxPublicKey: derived.publicKey,
+      inboxKeyScheme: "ready_derived_v1",
       rotateInboxKey: false,
     });
   });
@@ -226,11 +227,12 @@ describe("Ready inbox binding safety", () => {
 
     expect(linkBody).toMatchObject({
       inboxPublicKey: derived.publicKey,
+      inboxKeyScheme: "ready_derived_v1",
       rotateInboxKey: false,
     });
   });
 
-  it("keeps a legacy matching secret on reconnect without upgrading", async () => {
+  it("auto-upgrades a legacy matching secret on reconnect", async () => {
     const legacy = generateInboxKeyPair();
     const derived = generateInboxKeyPair();
     deriveInboxKeyPair.mockResolvedValue(derived);
@@ -243,6 +245,92 @@ describe("Ready inbox binding safety", () => {
         if (path === "/v1/me") {
           return Response.json({
             wallet: { address: "0x123", inbox_pubkey: legacy.publicKey },
+          });
+        }
+        if (path === "/v1/wallet/challenge") {
+          return Response.json({
+            typedData: {
+              domain: {},
+              types: {},
+              primaryType: "Test",
+              message: {},
+            },
+          });
+        }
+        if (path === "/v1/wallet/link") {
+          linkBody = JSON.parse(String(init?.body ?? "{}")) as Record<
+            string,
+            unknown
+          >;
+          return Response.json({ reconnected: true, keyRotated: true });
+        }
+        return Response.json({ error: `unexpected ${path}` }, { status: 500 });
+      }),
+    );
+
+    const supabase = {
+      auth: {
+        getSession: vi.fn(async () => ({
+          data: { session: { access_token: "token" } },
+        })),
+      },
+    };
+    const session = new WottaProductSession(supabase as never, {
+      apiUrl: "https://api.example",
+      network: "mainnet",
+      supabaseUrl: "https://supabase.example",
+      supabasePublishableKey: "publishable",
+      solanaRpcUrl: "",
+      stellarRpcUrl: "",
+    });
+    const state = {
+      inboxSecretKey: legacy.secretKey as string | undefined,
+      previousInboxSecretKeys: [] as string[],
+    };
+    const rotateInboxSecretKey = vi.fn(async (secret: string) => {
+      if (state.inboxSecretKey && state.inboxSecretKey !== secret) {
+        state.previousInboxSecretKeys.push(state.inboxSecretKey);
+      }
+      state.inboxSecretKey = secret;
+    });
+    const vault = {
+      state,
+      setInboxSecretKey: vi.fn(),
+      rotateInboxSecretKey,
+    };
+
+    await session.bindReadyAndIdentity(
+      {
+        address: "0x123",
+        signMessage: vi.fn(async () => ["0x1", "0x2"]),
+      } as never,
+      vault,
+      undefined,
+      { reconnect: true },
+    );
+
+    expect(deriveInboxKeyPair).toHaveBeenCalledOnce();
+    expect(rotateInboxSecretKey).toHaveBeenCalledWith(derived.secretKey);
+    expect(state.previousInboxSecretKeys).toContain(legacy.secretKey);
+    expect(linkBody).toMatchObject({
+      inboxPublicKey: derived.publicKey,
+      inboxKeyScheme: "ready_derived_v1",
+      rotateInboxKey: true,
+    });
+  });
+
+  it("does not re-rotate when reconnecting an already Ready-derived matching secret", async () => {
+    const derived = generateInboxKeyPair();
+    deriveInboxKeyPair.mockResolvedValue(derived);
+    let linkBody: Record<string, unknown> | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = new URL(String(input)).pathname;
+        if (path === "/v1/session/sync") return Response.json({ ok: true });
+        if (path === "/v1/me") {
+          return Response.json({
+            wallet: { address: "0x123", inbox_pubkey: derived.publicKey },
           });
         }
         if (path === "/v1/wallet/challenge") {
@@ -281,9 +369,11 @@ describe("Ready inbox binding safety", () => {
       solanaRpcUrl: "",
       stellarRpcUrl: "",
     });
+    const rotateInboxSecretKey = vi.fn();
     const vault = {
-      state: { inboxSecretKey: legacy.secretKey },
+      state: { inboxSecretKey: derived.secretKey },
       setInboxSecretKey: vi.fn(),
+      rotateInboxSecretKey,
     };
 
     await session.bindReadyAndIdentity(
@@ -296,10 +386,11 @@ describe("Ready inbox binding safety", () => {
       { reconnect: true },
     );
 
-    expect(deriveInboxKeyPair).not.toHaveBeenCalled();
+    expect(rotateInboxSecretKey).not.toHaveBeenCalled();
     expect(vault.setInboxSecretKey).not.toHaveBeenCalled();
     expect(linkBody).toMatchObject({
-      inboxPublicKey: legacy.publicKey,
+      inboxPublicKey: derived.publicKey,
+      inboxKeyScheme: "ready_derived_v1",
       rotateInboxKey: false,
     });
   });
@@ -355,12 +446,22 @@ describe("Ready inbox binding safety", () => {
       solanaRpcUrl: "",
       stellarRpcUrl: "",
     });
-    const state = { inboxSecretKey: undefined as string | undefined };
+    const state = {
+      inboxSecretKey: "legacy" as string | undefined,
+      previousInboxSecretKeys: [] as string[],
+    };
+    const rotateInboxSecretKey = vi.fn(async (secret: string) => {
+      if (state.inboxSecretKey && state.inboxSecretKey !== secret) {
+        state.previousInboxSecretKeys.push(state.inboxSecretKey);
+      }
+      state.inboxSecretKey = secret;
+    });
     const vault = {
       state,
       setInboxSecretKey: vi.fn(async (secret: string) => {
         state.inboxSecretKey = secret;
       }),
+      rotateInboxSecretKey,
     };
 
     await session.bindReadyAndIdentity(
@@ -373,9 +474,11 @@ describe("Ready inbox binding safety", () => {
       { reconnect: true, rotateInboxKey: true },
     );
 
-    expect(vault.setInboxSecretKey).toHaveBeenCalledWith(derived.secretKey);
+    expect(rotateInboxSecretKey).toHaveBeenCalledWith(derived.secretKey);
+    expect(state.previousInboxSecretKeys).toContain("legacy");
     expect(linkBody).toMatchObject({
       inboxPublicKey: derived.publicKey,
+      inboxKeyScheme: "ready_derived_v1",
       rotateInboxKey: true,
     });
   });

@@ -26,6 +26,7 @@ import {
 } from "@/lib/network-reconnect";
 import { routeLogoPath } from "@/lib/crypto-icons";
 import { createClient } from "@/lib/supabase/client";
+import { AUTH_SESSION_EVENT } from "@/lib/auth";
 import { createPrivacyClient } from "@/lib/wotta/privacy-account";
 import { directPrivacyConfig } from "@/lib/wotta/privacy-config";
 import { privateBalance } from "@/lib/wotta/privacy-flow";
@@ -165,6 +166,7 @@ export function WalletAndBalancePanel({
         rotateInboxKey: true,
       });
       const linkedMe = await session.me();
+      window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
       toast.success(TOAST.inboxKeyUpgraded);
       await onLinked({
         profile: linkedMe.profile ?? me.profile ?? null,
@@ -179,6 +181,8 @@ export function WalletAndBalancePanel({
                 (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
               key_version:
                 linkedMe.wallet.key_version ?? me.wallet.key_version ?? 1,
+              inbox_key_scheme:
+                linkedMe.wallet.inbox_key_scheme ?? "ready_derived_v1",
               private_identity_address:
                 linkedMe.wallet.private_identity_address ??
                 me.wallet.private_identity_address,
@@ -372,16 +376,18 @@ export function WalletAndBalancePanel({
                 >
                   Reconnect
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  data-testid="upgrade-inbox-key"
-                  onClick={() => void upgradeInboxKey()}
-                >
-                  <KeyRound className="h-3.5 w-3.5" aria-hidden />
-                  {busy ? "Upgrading…" : "Upgrade inbox key"}
-                </Button>
+                {me?.wallet?.inbox_key_scheme !== "ready_derived_v1" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    data-testid="upgrade-inbox-key"
+                    onClick={() => void upgradeInboxKey()}
+                  >
+                    <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                    {busy ? "Upgrading…" : "Upgrade inbox key"}
+                  </Button>
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
@@ -512,6 +518,8 @@ export function WalletAndBalancePanel({
                     (mode === "mainnet" ? "SN_MAIN" : "SN_SEPOLIA"),
                   key_version:
                     linkedMe.wallet.key_version ?? me?.wallet?.key_version ?? 1,
+                  inbox_key_scheme:
+                    linkedMe.wallet.inbox_key_scheme ?? "ready_derived_v1",
                   private_identity_address:
                     linkedMe.wallet.private_identity_address ??
                     me?.wallet?.private_identity_address,

@@ -100,6 +100,7 @@ export type MeResponse = {
     chain_id: string;
     inbox_pubkey: string;
     key_version: number;
+    inbox_key_scheme?: "legacy_random" | "ready_derived_v1";
     private_identity_address?: string | null;
     privacy_pool_address?: string | null;
     private_identity_verified_at?: string | null;

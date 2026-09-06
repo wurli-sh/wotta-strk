@@ -137,6 +137,10 @@ export function PrivacyVaultProvider({ children }: { children: ReactNode }) {
     if (warnedRef.current === warningKey) return;
     warnedRef.current = warningKey;
     const options = { id: toastId, duration: 8_000 };
+    if (inboxLinkStatus === "upgrade_required") {
+      toast.warning(warning, { ...options, duration: 15_000 });
+      return;
+    }
     if (
       ["wrong_wallet", "network_mismatch"].includes(
         inboxLinkStatus,

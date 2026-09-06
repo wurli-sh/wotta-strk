@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wotta Ready-derived inbox audit</title>
+  <style>
+    body{margin:0;background:#f5f7fb;color:#171a21;font:15px/1.55 system-ui,sans-serif}.wrap{max-width:920px;margin:48px auto;padding:0 20px}h1{font-size:32px;margin:0 0 8px}h2{font-size:18px;margin-top:28px}.muted{color:#667085}.card{background:#fff;border:1px solid #dfe3eb;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 10px 30px #1d293912}.ok{color:#067647}.warn{color:#b54708}code{background:#eef2f7;border-radius:6px;padding:2px 6px}li{margin:8px 0}
+  </style>
+</head>
+<body><main class="wrap">
+  <p class="muted">Implementation audit · 2026-09-06</p>
+  <h1>Ready-derived inbox key flow</h1>
+  <p>The reviewed flow now distinguishes legacy device keys from <code>ready_derived_v1</code>, permits an explicit upgrade with live claims, and retains any recoverable old key locally.</p>
+  <section class="card"><h2>Root causes fixed</h2><ul>
+    <li><strong>Scheme ambiguity:</strong> rotation count was incorrectly being used as a proxy for key origin. A dedicated binding scheme now drives the legacy upgrade warning.</li>
+    <li><strong>Old-note orphaning:</strong> upgrade replaced the vault's only inbox secret. The encrypted vault now keeps prior secrets in a local keyring and claim discovery tries each key.</li>
+    <li><strong>Unsafe unlink:</strong> the unlink route did not enforce the live-claim guard. It now fails closed, while explicit key upgrade remains available.</li>
+    <li><strong>Reconnect upgrade:</strong> reconnecting with a matching legacy browser secret auto-upgrades to Ready-derived (old secret stays in the local keyring). Already-derived matches refresh without re-rotating.</li>
+  </ul></section>
+  <section class="card"><h2>Resulting state machine</h2><ul>
+    <li><span class="ok">New user:</span> Ready signature → chain-separated derived X25519 key → binding marked <code>ready_derived_v1</code>.</li>
+    <li><span class="warn">Legacy user:</span> upgrade toast remains until reconnect/Account upgrade; reconnect with the matching browser secret auto-upgrades (also allowed with live claims).</li>
+    <li><span class="ok">Post-upgrade:</span> new notes use the derived key; old notes remain claimable when this browser retained their legacy secret.</li>
+    <li><span class="ok">Unlocked claim:</span> client navigation reuses the provider vault and cached Ready connection; no second Wotta inbox unlock is requested. Ready may still request the transaction signature required to claim.</li>
+  </ul></section>
+  <section class="card"><h2>Verification</h2><p class="ok">Shared: 20 passed · Web: 130 passed · API: 75 passed · Web/API TypeScript: passed · diff check: clean.</p></section>
+</main></body></html>

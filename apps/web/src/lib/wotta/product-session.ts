@@ -51,8 +51,9 @@ export type ProductApiConfig = {
 };
 
 export type PrivacyVault = {
-  state: { inboxSecretKey?: string };
+  state: { inboxSecretKey?: string; previousInboxSecretKeys?: string[] };
   setInboxSecretKey(inboxSecretKey: string): Promise<void>;
+  rotateInboxSecretKey?(inboxSecretKey: string): Promise<void>;
 };
 
 export type ProductSession = WottaProductSession;
@@ -312,6 +313,7 @@ export class WottaProductSession {
         inbox_pubkey: string;
         chain_id?: string;
         key_version?: number;
+        inbox_key_scheme?: "legacy_random" | "ready_derived_v1";
         private_identity_address?: string | null;
         privacy_pool_address?: string | null;
       } | null;
@@ -380,10 +382,26 @@ export class WottaProductSession {
         // Persist only after the server accepts the new pubkey — otherwise a
         // blocked rotate desyncs this browser from live notes.
         await this.linkWalletBinding(account, derived.publicKey, true);
-        await vault.setInboxSecretKey(derived.secretKey);
+        if (vault.rotateInboxSecretKey) {
+          await vault.rotateInboxSecretKey(derived.secretKey);
+        } else {
+          await vault.setInboxSecretKey(derived.secretKey);
+        }
       } else if (localMatches && reconnect) {
-        // Keep the legacy matching secret; never auto-upgrade to derived.
-        await this.linkWalletBinding(account, published, false);
+        const derived = await deriveInboxKeyPair(account, chainId);
+        if (derived.publicKey === published) {
+          // Already Ready-derived — refresh binding metadata without rotating.
+          await this.linkWalletBinding(account, derived.publicKey, false);
+        } else {
+          // Legacy browser secret matches published — auto-upgrade to
+          // Ready-derived and retain the old secret in the local keyring.
+          await this.linkWalletBinding(account, derived.publicKey, true);
+          if (vault.rotateInboxSecretKey) {
+            await vault.rotateInboxSecretKey(derived.secretKey);
+          } else {
+            await vault.setInboxSecretKey(derived.secretKey);
+          }
+        }
       } else {
         const derived = await deriveInboxKeyPair(account, chainId);
         if (derived.publicKey !== published) {
@@ -410,6 +428,7 @@ export class WottaProductSession {
     account: WalletAccountV6,
     inboxPublicKey: string,
     rotateInboxKey: boolean,
+    inboxKeyScheme: "legacy_random" | "ready_derived_v1" = "ready_derived_v1",
   ) {
     await ensureReadyChain(account, this.config.network);
     const challenge = await this.request<{ typedData: TypedData }>(
@@ -425,6 +444,7 @@ export class WottaProductSession {
         challenge: JSON.stringify(challenge.typedData),
         signature,
         inboxPublicKey,
+        inboxKeyScheme,
         rotateInboxKey,
       }),
     });
@@ -921,8 +941,11 @@ export class WottaProductSession {
   }
 
   async loadClaim(vault: PrivacyVault, noteId?: string) {
-    const inboxSecretKey = vault.state.inboxSecretKey;
-    if (!inboxSecretKey) throw new Error("This browser has no Wotta inbox key");
+    const inboxSecretKeys = [
+      vault.state.inboxSecretKey,
+      ...(vault.state.previousInboxSecretKeys ?? []),
+    ].filter((secret): secret is string => Boolean(secret));
+    if (inboxSecretKeys.length === 0) throw new Error("This browser has no Wotta inbox key");
     await this.request("/v1/session/sync", { method: "POST" });
     const [routes, inbox] = await Promise.all([
       this.request<RouteManifest>("/v1/routes"),
@@ -968,15 +991,25 @@ export class WottaProductSession {
       }
       let payload: ClaimEnvelope;
       try {
-        payload = decryptEnvelope<ClaimEnvelope>(
-          {
-            algorithm: note.algorithm,
-            ciphertext: note.ciphertext,
-            nonce: note.nonce,
-            ephemeralPublicKey: note.sender_public_key,
-          },
-          inboxSecretKey,
-        );
+        let opened: ClaimEnvelope | undefined;
+        for (const secret of inboxSecretKeys) {
+          try {
+            opened = decryptEnvelope<ClaimEnvelope>(
+              {
+                algorithm: note.algorithm,
+                ciphertext: note.ciphertext,
+                nonce: note.nonce,
+                ephemeralPublicKey: note.sender_public_key,
+              },
+              secret,
+            );
+            break;
+          } catch {
+            // Notes created before an upgrade remain sealed to a retained key.
+          }
+        }
+        if (!opened) throw new Error("inbox_key_unavailable");
+        payload = opened;
       } catch {
         if (noteId) {
           targetFailure =

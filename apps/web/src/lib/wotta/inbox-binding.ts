@@ -9,11 +9,13 @@ export type InboxLinkStatus =
   | "valid"
   | "wrong_wallet"
   | "key_mismatch"
+  | "upgrade_required"
   | "network_mismatch";
 
 type InboxBinding = {
   address: string;
   inbox_pubkey: string;
+  inbox_key_scheme?: "legacy_random" | "ready_derived_v1";
 } | null;
 
 /** Passive validation: this never opens Ready or asks the wallet to switch chains. */
@@ -25,6 +27,9 @@ export function validateInboxBinding(
   if (!binding) return "unlinked";
   if (connectedAddress && BigInt(connectedAddress) !== BigInt(binding.address)) {
     return "wrong_wallet";
+  }
+  if (binding.inbox_key_scheme !== "ready_derived_v1") {
+    return "upgrade_required";
   }
   if (!inboxSecretKey) return "locked";
   try {
@@ -49,6 +54,8 @@ export function inboxLinkWarning(mode: NetworkMode, status: InboxLinkStatus): st
       return `The connected Ready account does not match your ${network} inbox link.`;
     case "key_mismatch":
       return `${network} inbox key does not match the active link. Do not receive new payments on this browser until you upgrade from Account (older claimable notes stay sealed to the previous key).`;
+    case "upgrade_required":
+      return `Upgrade this ${network} inbox from its browser-only key to a recoverable Ready-derived key before receiving new payments.`;
     default:
       return null;
   }
