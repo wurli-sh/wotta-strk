@@ -84,6 +84,7 @@ const APP_MESSAGES: Record<string, string> = {
   vesu_anonymizer_balance_malformed: "The Vesu route returned an invalid token balance — earning is paused for safety",
   vesu_manifest_mismatch: "Vesu Earn configuration is incomplete or changed — earning is paused",
   vesu_market_unavailable: "Live Vesu market stats are unavailable — try again later",
+  private_submit_in_flight: "A private transaction is already open in Ready — finish or reject it first",
   unsupported_vesu_deposit_amount: "Enter exactly 0.1 or 1 USDC for the Mainnet beta",
   invalid_vesu_share_amount: "Refresh your private vUSDC balance and try again",
   mainnet_rpc_not_configured: "Mainnet Starknet RPC is not configured on the API",

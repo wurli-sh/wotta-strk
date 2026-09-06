@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Eye,
   ExternalLink,
@@ -47,6 +47,7 @@ import { fetchVesuMarket, type VesuMarketStats } from "@/lib/vesu/market";
 import { rememberApySnapshot } from "@/lib/vesu/market-snapshot";
 import { readVesuPosition } from "@/lib/vesu/position";
 import { recordDeposit, recordRedeem } from "@/lib/vesu/ledger";
+import { claimEarnTxHandled, getEarnWriteGate } from "@/lib/vesu/earn-write-gate";
 import { assertVesuRuntime } from "@/lib/vesu/runtime";
 import { verifyVesuEarnTransaction } from "@/lib/vesu/verify-receipt";
 
@@ -137,6 +138,7 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
   const [marketError, setMarketError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<EarnPhase>("idle");
+  const writeGate = useRef(getEarnWriteGate()).current;
   const amount = denominationBaseUnits(denom);
   const reduceMotion = useReducedMotion();
   const revealed = readyAddress !== null && usdc !== null;
@@ -166,8 +168,24 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
     };
   }, [config.poolAddress, config.underlyingAddress, mode]);
 
+  async function loadPrivatePosition(): Promise<void> {
+    const connected = await connectReady("mainnet");
+    if (!sameFelt(connected.address, linkedAddress)) {
+      throw new Error("Connect the Ready account linked to this Wotta profile");
+    }
+    const [privateUsdc, position] = await Promise.all([
+      readMainnetPrivateBalance(connected.account),
+      readVesuPosition(connected.account),
+    ]);
+    setReadyAddress(connected.address);
+    setUsdc(privateUsdc);
+    setShares(position.shares);
+    setAssets(position.assets);
+  }
+
   async function refresh() {
     if (mode !== "mainnet" || !linkedAddress) return;
+    if (!writeGate.tryBegin()) return;
     void fetchVesuMarket({ force: true })
       .then((value) => {
         setPreviousApy(
@@ -187,27 +205,16 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
     setBusy(true);
     setPhase("revealing");
     try {
-      const connected = await connectReady("mainnet");
       operation.assertActive();
-      if (!sameFelt(connected.address, linkedAddress))
-        throw new Error(
-          "Connect the Ready account linked to this Wotta profile",
-        );
-      const [privateUsdc, position] = await Promise.all([
-        readMainnetPrivateBalance(connected.account),
-        readVesuPosition(connected.account),
-      ]);
+      await loadPrivatePosition();
       operation.assertActive();
-      setReadyAddress(connected.address);
-      setUsdc(privateUsdc);
-      setShares(position.shares);
-      setAssets(position.assets);
     } catch (error) {
       toast.error(
         userFacingError(error, "Could not load your private Vesu position"),
       );
     } finally {
       operation.finish();
+      writeGate.end();
       setBusy(false);
       setPhase("idle");
     }
@@ -225,6 +232,7 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
       )
     )
       return;
+    if (!writeGate.tryBegin()) return;
     const operation = beginNetworkOperation(mode, {
       blocksNetworkSwitch: true,
     });
@@ -255,23 +263,36 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
           `vesu_receipt_verification_failed:${verification.problems.join("|")}`,
         );
       }
-      recordDeposit(connected.address, config.vTokenAddress, amount);
-      toast.success("Private USDC supplied to Vesu", {
-        action: {
-          label: "Explorer",
-          onClick: () =>
-            window.open(
-              `https://starkscan.co/tx/${hash}?network=mainnet`,
-              "_blank",
-            ),
-        },
-      });
-      window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
-      await refresh();
+      if (claimEarnTxHandled(hash)) {
+        recordDeposit(connected.address, config.vTokenAddress, amount);
+        toast.success("Private USDC supplied to Vesu", {
+          action: {
+            label: "Explorer",
+            onClick: () =>
+              window.open(
+                `https://starkscan.co/tx/${hash}?network=mainnet`,
+                "_blank",
+              ),
+          },
+        });
+        window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
+      }
+      // Free the CTA before balance reload so a lingering Ready dialog cannot
+      // freeze the button on "Unlocking private balance…".
+      setBusy(false);
+      setPhase("idle");
+      try {
+        await loadPrivatePosition();
+      } catch (error) {
+        toast.error(
+          userFacingError(error, "Could not refresh your private Vesu position"),
+        );
+      }
     } catch (error) {
       toast.error(userFacingError(error, "Could not start earning"));
     } finally {
       operation.finish();
+      writeGate.end();
       setBusy(false);
       setPhase("idle");
     }
@@ -288,6 +309,7 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
       )
     )
       return;
+    if (!writeGate.tryBegin()) return;
     const operation = beginNetworkOperation(mode, {
       blocksNetworkSwitch: true,
     });
@@ -327,28 +349,39 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
           `vesu_receipt_verification_failed:${verification.problems.join("|")}`,
         );
       }
-      recordRedeem(
-        connected.address,
-        config.vTokenAddress,
-        freshShares,
-        freshShares - redeemShares,
-      );
-      toast.success("Private vUSDC redeemed to private USDC", {
-        action: {
-          label: "Explorer",
-          onClick: () =>
-            window.open(
-              `https://starkscan.co/tx/${hash}?network=mainnet`,
-              "_blank",
-            ),
-        },
-      });
-      window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
-      await refresh();
+      if (claimEarnTxHandled(hash)) {
+        recordRedeem(
+          connected.address,
+          config.vTokenAddress,
+          freshShares,
+          freshShares - redeemShares,
+        );
+        toast.success("Private vUSDC redeemed to private USDC", {
+          action: {
+            label: "Explorer",
+            onClick: () =>
+              window.open(
+                `https://starkscan.co/tx/${hash}?network=mainnet`,
+                "_blank",
+              ),
+          },
+        });
+        window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
+      }
+      setBusy(false);
+      setPhase("idle");
+      try {
+        await loadPrivatePosition();
+      } catch (error) {
+        toast.error(
+          userFacingError(error, "Could not refresh your private Vesu position"),
+        );
+      }
     } catch (error) {
       toast.error(userFacingError(error, "Could not withdraw from Vesu"));
     } finally {
       operation.finish();
+      writeGate.end();
       setBusy(false);
       setPhase("idle");
     }
