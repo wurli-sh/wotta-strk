@@ -9,6 +9,39 @@ const READY_BALANCE_TIMEOUT_MS = 30_000;
 // reserve inside the pool so an exact-denomination transfer can pay the fee.
 export const MAINNET_USDC_PRIVACY_FEE_RESERVE = 250_000n;
 
+type Strk20SubmitRuntime = {
+  version: number;
+  inFlight: { key: string; promise: Promise<string> } | null;
+};
+
+declare global {
+  var __wottaStrk20SubmitRuntime: Strk20SubmitRuntime | undefined;
+}
+
+const STRK20_SUBMIT_RUNTIME_VERSION = 1;
+
+function strk20SubmitRuntime(): Strk20SubmitRuntime {
+  const existing = globalThis.__wottaStrk20SubmitRuntime;
+  if (existing?.version === STRK20_SUBMIT_RUNTIME_VERSION) return existing;
+  return (globalThis.__wottaStrk20SubmitRuntime = {
+    version: STRK20_SUBMIT_RUNTIME_VERSION,
+    inFlight: null,
+  });
+}
+
+/** Stable fingerprint so a double-clicked Yield shares one Ready prompt. */
+export function fingerprintStrk20Actions(actions: STRK20_ACTION[]): string {
+  return JSON.stringify(actions);
+}
+
+/** Test helper — clears tab-scoped STRK20 submit coalescing state. */
+export function resetStrk20SubmitForTests(): void {
+  globalThis.__wottaStrk20SubmitRuntime = {
+    version: STRK20_SUBMIT_RUNTIME_VERSION,
+    inFlight: null,
+  };
+}
+
 export type MainnetPrivacyAction = "shield" | "transfer" | "withdraw";
 
 export type MainnetPrivacyConfig = {
@@ -205,26 +238,45 @@ export async function submitMainnetStrk20Actions(
   signal?: AbortSignal,
 ): Promise<string> {
   signal?.throwIfAborted();
-  await assertMainnetPrivacyRuntime(account);
-  signal?.throwIfAborted();
-  // Do not call strk20PrepareInvoke before invoke: Ready currently shows a
-  // second, identical approval UI for simulate=true prepare, which caused
-  // duplicate pops and false INSUFFICIENT_PRIVATE_BALANCE on the spare prompt.
-  // Pool targeting stays enforced by assertMainnetPrivacyRuntime above.
-  let result;
-  try {
-    result = await account.strk20InvokeTransaction(actions);
-  } catch (error) {
-    // Wallet API 0.10.3 deliberately exposes no registration RPC. Registration
-    // belongs to Ready, so Wotta must explain the wallet-side setup instead of
-    // leaking the raw numeric NOT_REGISTERED wallet error.
-    if (notRegistered(error)) throw mainnetPrivacyRegistrationRequired();
-    throw error;
+  const runtime = strk20SubmitRuntime();
+  const key = fingerprintStrk20Actions(actions);
+  // Coalesce duplicate in-flight invokes (double click / remount). A second
+  // wallet_strk20InvokeTransaction call opens another Ready confirmation and
+  // can deposit twice for one Yield press.
+  if (runtime.inFlight) {
+    if (runtime.inFlight.key === key) return runtime.inFlight.promise;
+    throw new Error("private_submit_in_flight");
   }
-  const receipt = await account.provider.waitForTransaction(result.transaction_hash);
-  if (!receipt.isSuccess()) throw new Error("Mainnet private transaction reverted");
-  signal?.throwIfAborted();
-  return String(result.transaction_hash);
+
+  const promise = (async () => {
+    await assertMainnetPrivacyRuntime(account);
+    signal?.throwIfAborted();
+    // Do not call strk20PrepareInvoke before invoke: Ready currently shows a
+    // second, identical approval UI for simulate=true prepare, which caused
+    // duplicate pops and false INSUFFICIENT_PRIVATE_BALANCE on the spare prompt.
+    // Pool targeting stays enforced by assertMainnetPrivacyRuntime above.
+    let result;
+    try {
+      result = await account.strk20InvokeTransaction(actions);
+    } catch (error) {
+      // Wallet API 0.10.3 deliberately exposes no registration RPC. Registration
+      // belongs to Ready, so Wotta must explain the wallet-side setup instead of
+      // leaking the raw numeric NOT_REGISTERED wallet error.
+      if (notRegistered(error)) throw mainnetPrivacyRegistrationRequired();
+      throw error;
+    }
+    const receipt = await account.provider.waitForTransaction(result.transaction_hash);
+    if (!receipt.isSuccess()) throw new Error("Mainnet private transaction reverted");
+    signal?.throwIfAborted();
+    return String(result.transaction_hash);
+  })();
+
+  runtime.inFlight = { key, promise };
+  try {
+    return await promise;
+  } finally {
+    if (runtime.inFlight?.promise === promise) runtime.inFlight = null;
+  }
 }
 
 const submitMainnetPrivacyActions = submitMainnetStrk20Actions;

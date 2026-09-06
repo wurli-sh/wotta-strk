@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { constants, type WalletAccountV6 } from "starknet";
 import {
   MAINNET_USDC_AMOUNT,
@@ -9,11 +9,15 @@ import {
   mainnetShieldedTransferActions,
   mainnetPrivacyConfig,
   readMainnetPrivateBalance,
+  resetStrk20SubmitForTests,
   submitMainnetPrivacyAction,
   submitMainnetShieldedTransfer,
 } from "./mainnet-privacy";
 
 describe("Ready-managed mainnet privacy", () => {
+  beforeEach(() => {
+    resetStrk20SubmitForTests();
+  });
   afterEach(() => vi.useRealTimers());
 
   it("pins the live pool, demo amount, and selected-amount allowlist", () => {
@@ -140,6 +144,35 @@ describe("Ready-managed mainnet privacy", () => {
       submitMainnetPrivacyAction(account, "transfer", "0x123", undefined, 100_000_000n),
     ).resolves.toBe("0xabc");
     expect(calls).toEqual([{ amount: "0x5f5e100" }]);
+  });
+
+  it("coalesces duplicate in-flight STRK20 invokes into one Ready prompt", async () => {
+    resetStrk20SubmitForTests();
+    const config = mainnetPrivacyConfig();
+    let invokes = 0;
+    let release!: (value: { transaction_hash: string }) => void;
+    const account = {
+      provider: {
+        getChainId: async () => constants.StarknetChainId.SN_MAIN,
+        getClassHashAt: async () => config.poolClassHash,
+        waitForTransaction: async (hash: string) => ({ hash, isSuccess: () => true }),
+      },
+      strk20InvokeTransaction: async () => {
+        invokes += 1;
+        return await new Promise<{ transaction_hash: string }>((resolve) => {
+          release = resolve;
+        });
+      },
+    } as unknown as WalletAccountV6;
+
+    const first = submitMainnetPrivacyAction(account, "transfer", "0x123", undefined, 100_000_000n);
+    // Let assertMainnetPrivacyRuntime finish and park on the wallet invoke.
+    for (let i = 0; i < 10 && invokes === 0; i += 1) await Promise.resolve();
+    expect(invokes).toBe(1);
+    const second = submitMainnetPrivacyAction(account, "transfer", "0x123", undefined, 100_000_000n);
+    release({ transaction_hash: "0xcoalesced" });
+    await expect(Promise.all([first, second])).resolves.toEqual(["0xcoalesced", "0xcoalesced"]);
+    expect(invokes).toBe(1);
   });
 
   it("rejects a finalized but reverted private claim transaction", async () => {
