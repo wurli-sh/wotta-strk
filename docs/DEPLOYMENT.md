@@ -53,7 +53,7 @@ Required by Mainnet Render API (force-admit, mirrors local):
 - dedicated `STARKNET_RELAYER_ADDRESS` / `STARKNET_RELAYER_PRIVATE_KEY` (Mainnet relayer, not Sepolia)
 - `CIRCLE_IRIS_BASE_URL=https://iris-api.circle.com`
 
-Existing Render services do not receive env updates from `pnpm deploy:env` — set these in the Render dashboard (or Blueprint sync) if the service still has fail-closed values.
+Existing Render services do not receive env updates from `pnpm deploy:env` (create-only + optional redeploy). Update admission/RPC/secrets via the Render dashboard or the Render REST API (`PUT /v1/services/{id}/env-vars/{key}`), then redeploy. Blueprint defaults in `render.yaml` already open Mainnet like local force-admit.
 
 Verified Mainnet contracts (source of truth: `deployments/mainnet.json` — no `ROUTER_*` / `ESCROW_*` env vars):
 
@@ -100,6 +100,10 @@ Required by Vercel:
 - `PRIVACY_PROVER_UPSTREAM`, `PRIVACY_DISCOVERY_UPSTREAM`
 - server-only Sepolia privacy submitter: `STARKNET_RPC_URL`, `STARKNET_DEPLOYER_ADDRESS`, `STARKNET_DEPLOYER_PRIVATE_KEY`
 
+`pnpm deploy:env` writes Vercel vars with `vercel env add … --value …` (and `--no-sensitive` for `NEXT_PUBLIC_*`). **Do not rely on stdin** — in agent/non-interactive mode stdin is ignored and empty strings get stored. After syncing, confirm with `vercel env pull` that public origins are non-empty, then `vercel --prod` so Next bakes them into the client bundle.
+
+Docker and Vercel installs need [`pnpmfile.cjs`](../pnpmfile.cjs) (referenced from [`.npmrc`](../.npmrc)). The Dockerfile copies both before `pnpm install --frozen-lockfile`; a missing pnpmfile causes `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`.
+
 Optional origin overrides before sync:
 
 ```bash
@@ -138,12 +142,12 @@ curl -fsS https://wotta.vercel.app
 Expected API health:
 
 - Testnet: `chainId=SN_SEPOLIA`, `workers.indexer=true`, `workers.relayer=true`
-- Mainnet: `chainId=SN_MAIN`, both worker flags true
+- Mainnet: `chainId=SN_MAIN`, both worker flags true; `/v1/routes` enables `base`, `solana`, and `starknet-private`
 
 Browser smoke test:
 
 1. Sign in and switch Testnet/Mainnet from the shared account dropdown.
-2. Confirm Send, Inbox, Claim, Account, and Balance use the same shell and clear network-scoped state.
+2. Confirm Send, Inbox, Claim, Account, and Earn use the same shell and clear network-scoped state.
 3. Testnet: create a quote/intent and confirm Inbox/Claim data stays Sepolia-scoped.
-4. Mainnet: deposit the smallest approved fixed denomination, confirm encrypted inbox delivery, and claim through Ready/STRK20; confirm Base/Solana CCTP quotes are available.
+4. Mainnet: deposit the smallest approved fixed denomination, confirm encrypted inbox delivery, and claim through Ready/STRK20; confirm Base/Solana CCTP quotes are available; confirm Account → Earn deposit/redeem with `vesuEarn.status=verified`.
 5. Confirm no Sepolia identity or inbox data appears while on Mainnet.

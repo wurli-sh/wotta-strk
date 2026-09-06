@@ -43,6 +43,7 @@ Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
 | Resource | Value |
 | -------- | ----- |
 | Frontend | [wotta.vercel.app](https://wotta.vercel.app) — `/` · `/send` · `/inbox` · `/account` · `/claim` |
+| Testnet API | [wotta-api-testnet.onrender.com](https://wotta-api-testnet.onrender.com) |
 | Mainnet API | [wotta-api-mainnet.onrender.com](https://wotta-api-mainnet.onrender.com) |
 | Settlement network | Starknet Mainnet (`SN_MAIN`) |
 | Explorer | [Voyager](https://voyager.online) · [Starkscan](https://starkscan.co) |
@@ -56,10 +57,10 @@ Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
 
 Deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [evidence](evidence/README.md)
 
-Mainnet pins the live STRK20 pool for Ready wallet-managed private actions,
-verified 0.1 / 1 USDC CCTP escrows (Base and Solana domains admitted on the
-router), and a live Vesu Earn anonymizer with deposit+redeem smoke above.
-`vesuEarn.status` is **`verified`** — see
+Hosted Mainnet API matches local force-admit: private send + Base/Solana CCTP
+admitted, indexer and relayer on (`MAINNET_FORCE_ADMIT=true`). Mainnet pins the
+live STRK20 pool, verified 0.1 / 1 USDC CCTP escrows, and a live Vesu Earn
+anonymizer. `vesuEarn.status` is **`verified`** — see
 [`GO-NO-GO`](evidence/cfdce498920dc89271f898091a529bea191ebc7b5901323d2e667d9cc7e3ce00/vesu-earn/GO-NO-GO.md).
 
 ---
@@ -210,8 +211,8 @@ for full integration · Ready wallet for private flows
 | `pnpm test:contracts` | Runs Cairo contract tests |
 | `pnpm check:vesu-anonymizer-source` | Rebuilds pinned RC.2 Vesu anonymizer and compares Sierra + CASM hashes to `mainnet.json` (needs exactly Scarb 2.17.0) |
 | `pnpm check:vesu-earn` | Vesu Earn admission gate; prints `admit verified` when source parity + smoke pass |
-| `pnpm deploy:env` | Syncs Vercel variables; creates missing Render services (existing Render env remains Blueprint/dashboard-managed) |
-| `pnpm deploy:env -- --render-only --render-deploy` | Explicitly deploys the current Git commit to the existing Mainnet Render service |
+| `pnpm deploy:env` | Syncs Vercel production env from `.env` (uses `--value`; required in non-interactive CLIs); creates missing Render services |
+| `pnpm deploy:env -- --render-only --render-deploy` | Redeploys the current Git commit on the Mainnet Render service (existing Render env is dashboard/API-managed) |
 | `pnpm deploy:check-mainnet` | Fails if the hosted Mainnet API does not match the verified local router, escrows, or manifest hash |
 | `pnpm check` | Runs lint, typecheck, tests, and build |
 
@@ -221,17 +222,26 @@ Copy [`.env.example`](.env.example) to `.env`, then follow [`docs/DEPLOYMENT.md`
 
 ## Environment & Deployment
 
-The hosted topology is a Vercel web app and a Mainnet Render API service, with
-Supabase and RPC providers.
+Hosted topology: **Vercel** web + **two Render** Docker APIs (Testnet + Mainnet),
+Supabase, and RPC providers. Mainnet admission mirrors local
+`MAINNET_FORCE_ADMIT` (private + Base/Solana + workers).
 
 ```bash
 pnpm deploy:env -- --dry-run \
   --web-origin https://wotta.vercel.app \
+  --testnet-api-origin https://wotta-api-testnet.onrender.com \
   --mainnet-api-origin https://wotta-api-mainnet.onrender.com
+
+pnpm deploy:env
+git push origin main
+pnpm deploy:env -- --render-only --render-deploy
+vercel --prod --yes --scope wurli-shs-projects
+pnpm deploy:check-mainnet
 ```
 
-See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full setup, production
-environment synchronization, and operational verification.
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for env checklists, Vercel/Render
+pitfalls (`vercel env add` must use `--value` in agent/non-interactive mode;
+Docker/Vercel need `pnpmfile.cjs`), and live verification.
 
 ---
 
@@ -243,7 +253,9 @@ environment synchronization, and operational verification.
 - **Claim and refund safety** — commitments, expiry, denomination, and one-time claim checks are enforced on chain.
 - **CCTP validation** — settlement accepts CCTP V2 messages only after required finality and fee checks.
 - **Relayer limits** — it can sponsor a valid Mainnet settlement but has no privilege to redirect recipient funds.
-- **Not production-ready** — this is unaudited hackathon software; live route evidence and operational safeguards remain required.
+- **Not production-ready** — this is unaudited hackathon software. Hosted Mainnet
+  currently uses `MAINNET_FORCE_ADMIT` like local; tighten to evidence-only
+  admission before any stronger production claim.
 
 More detail: [`docs/phase1-3-send-flow.md`](docs/phase1-3-send-flow.md) · [`docs/third-party-privacy-sdk.md`](docs/third-party-privacy-sdk.md) · [`docs/runbooks/vesu-earn-smoke.md`](docs/runbooks/vesu-earn-smoke.md) · [`docs/SECURITY.md`](docs/SECURITY.md)
 

@@ -59,5 +59,6 @@ Rules:
 
 - Sepolia / testnet path: use `pnpm check:phase1:sepolia` (and phase 2 sepolia) for pre-deploy confidence.
 - Mainnet contracts are live (`deployments/mainnet.json`); router is unpaused with Base/Solana domains admitted on-chain (see `docs/ROUTE_REVIEW_2026-09-05.md`).
-- Mainnet `evidence/<hash>/` is still empty for committed admission summaries — Base has a verified on-chain claim observation in that review, but no redacted `cctp-base-mainnet/summary.json` is checked in yet. Starknet-native and Solana completed live flows remain unverified.
-- Before enabling hosted `CCTP_ADMITTED_ROUTES` / `STARKNET_PRIVATE_ADMITTED`: materialize the summaries above from real flows, then redeploy the API.
+- Vesu Earn: `vesuEarn.status=verified` under manifest `cfdce498…` with smoke evidence in `evidence/cfdce498…/vesu-earn/`.
+- Hosted Mainnet API currently uses `MAINNET_FORCE_ADMIT` (mirrors local) so private + Base/Solana routes and workers are on without waiting for full Phase 1/3 summary files. Prefer materializing `cctp-*-mainnet/summary.json` and `starknet-private-mainnet/summary.json` before dropping force-admit.
+- Before switching off force-admit: materialize the CCTP / private summaries above from real flows, then set `MAINNET_FORCE_ADMIT=false` and keep `STARKNET_PRIVATE_ADMITTED` / `CCTP_ADMITTED_ROUTES` only when evidence gates pass.
