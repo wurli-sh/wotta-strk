@@ -91,7 +91,7 @@ export function HandlesPanelSkeleton() {
   );
 }
 
-/** Full Wallet tab card skeleton — wallet address + private balance. */
+/** Full Wallet tab card skeleton — linked Ready address + actions. */
 export function WalletPanelSkeleton() {
   return (
     <section
@@ -109,12 +109,6 @@ export function WalletPanelSkeleton() {
         <div className="flex flex-wrap gap-2">
           <Skeleton className="radius-control h-9 w-28" />
           <Skeleton className="radius-control h-9 w-24" />
-        </div>
-        <div className="border-t border-border/70 pt-5">
-          <Skeleton className="h-3 w-28" />
-          <Skeleton className="mt-3 h-10 w-32" />
-          <Skeleton className="mt-3 h-3 w-44 max-w-full" />
-          <Skeleton className="radius-control mt-4 h-10 w-36" />
         </div>
       </div>
     </section>
