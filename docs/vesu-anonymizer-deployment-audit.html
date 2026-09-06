@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wotta · Vesu anonymizer deployment audit</title>
+  <style>
+    :root{color-scheme:light;--ink:#171a21;--muted:#657087;--line:#dbe1eb;--blue:#2f61d5;--green:#08735f;--amber:#8b5a00;--bg:#f5f7fb}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,sans-serif}.wrap{max-width:940px;margin:48px auto;padding:0 22px}header,.card{background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 14px 36px #23345b12}header{padding:30px}.eyebrow{color:var(--blue);font-weight:750;letter-spacing:.08em;text-transform:uppercase;font-size:12px}h1{font-size:34px;line-height:1.12;margin:8px 0}h2{font-size:19px;margin:0 0 12px}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}.card{padding:22px}.pill{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:750}.pass{background:#e5f7f1;color:var(--green)}.hold{background:#fff3d7;color:var(--amber)}code{overflow-wrap:anywhere;color:#233c78}ul{padding-left:20px;margin-bottom:0}@media(max-width:680px){.grid{grid-template-columns:1fr}h1{font-size:28px}}
+  </style>
+</head>
+<body><main class="wrap">
+  <header><div class="eyebrow">Mainnet deployment review · 2026-09-06</div><h1>Vesu lending anonymizer</h1><p class="muted">Pinned RC.2 source, deterministic deployment, live runtime checks, and admission posture.</p><span class="pill pass">Contract deployed</span> <span class="pill hold">Earn admission held</span></header>
+  <section class="grid">
+    <article class="card"><h2>Live deployment</h2><p><b>Address</b><br><code>0x04ee621484a3dfda3976b5fd37749e50727a7697296a46fbd0fd81c4d42dfe38</code></p><p><b>Declare / deploy blocks</b><br>14,463,674 / 14,463,683</p></article>
+    <article class="card"><h2>Reproducibility</h2><p>Scarb 2.17.0 rebuilt the pinned commit and matched both manifest hashes.</p><p><b>Sierra</b><br><code>0x05932298…311e2f</code><br><b>CASM</b><br><code>0x048bb3d8…25ccd</code></p></article>
+    <article class="card"><h2>Checks passed</h2><ul><li>7/7 Cairo contract tests</li><li>36/36 Vesu TypeScript tests</li><li>Live Vesu pool/factory/vToken tuple</li><li>STRK20 v2.0, fee, decimals and denylist</li><li>Deployed class equals pinned Sierra</li></ul></article>
+    <article class="card"><h2>Remaining gates</h2><ul><li>Independent review disposition</li><li>Ready 0.1-USDC deposit</li><li>Private vUSDC discovery</li><li>Exact-share redeem and USDC rediscovery</li><li>Live receipt/residue evidence</li></ul></article>
+    <article class="card"><h2>Audit note</h2><p>The contract is generic and stateless. Address allowlisting belongs in Wotta runtime/action construction. Directly donated token residue is not protected custody; transaction-block residue checks therefore remain mandatory.</p></article>
+    <article class="card"><h2>Release decision</h2><p><b>Keep <code>vesuEarn.status = pending</code>.</b> Deployment success is not an Earn success proof. The machine gate remains deliberately red until review and interactive smoke evidence are present.</p></article>
+  </section>
+</main></body></html>

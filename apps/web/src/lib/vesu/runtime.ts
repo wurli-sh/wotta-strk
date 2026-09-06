@@ -103,9 +103,14 @@ function encodeShortString(value: string): string {
  * Fail-fast drift check after Ready connection and before any Earn write.
  * TODO(vesu-smoke): add Ready deposit/redeem simulation once the anonymizer is live.
  */
-export async function assertVesuRuntime(account: WalletAccountV6): Promise<void> {
+export async function assertVesuRuntime(
+  account: WalletAccountV6,
+  options: { allowPendingSmoke?: boolean } = {},
+): Promise<void> {
   const config = loadVesuEarn();
-  if (config.status === "pending") throw new Error("vesu_earn_pending");
+  if (config.status === "pending" && options.allowPendingSmoke !== true) {
+    throw new Error("vesu_earn_pending");
+  }
   await ensureReadyChain(account, "mainnet");
   await assertVesuRuntimeWithConfig(account, config);
 }

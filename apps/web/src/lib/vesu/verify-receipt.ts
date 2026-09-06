@@ -142,9 +142,13 @@ export function verifyVesuEarnReceipt(
   const privacyInvokeOnly = invokeSelector === "privacy_invoke";
   if (invoke && !privacyInvokeOnly) problems.push(`expected privacy_invoke but observed ${invokeSelector ?? "unknown selector"}`);
 
+  // Ready may emit extra pool Withdrawals in the same invoke (e.g. private
+  // fee/gas notes). Only the earn path's Withdrawal to the anonymizer counts.
   const withdrawal = unique(
-    matching(events, pool, SELECTORS.withdrawal),
-    "pool Withdrawal event",
+    matching(events, pool, SELECTORS.withdrawal).filter(
+      (event) => sameFelt(event.keys[1], anonymizer) && sameFelt(event.keys[2], inToken),
+    ),
+    "pool Withdrawal event to the anonymizer",
     problems,
   );
   const withdrawnToken = withdrawal?.keys[2];

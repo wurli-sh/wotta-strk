@@ -46,7 +46,9 @@
     "check:phase3": "node --experimental-strip-types scripts/gates/phase3-check.ts",
     "check:phase4": "node --experimental-strip-types scripts/gates/phase4-check.ts",
     "check:vesu-anonymizer-source": "node --experimental-strip-types scripts/verify-anonymizer-source.ts",
-    "check:vesu-earn": "node --experimental-strip-types scripts/gates/vesu-earn-check.ts",
+    "deploy:vesu-anonymizer": "node --env-file=.env --experimental-strip-types scripts/deploy-vesu-anonymizer.ts",
+    "evidence:vesu-smoke": "node --env-file=.env --experimental-strip-types scripts/record-vesu-smoke.ts",
+    "check:vesu-earn": "node --env-file=.env --experimental-strip-types scripts/gates/vesu-earn-check.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {

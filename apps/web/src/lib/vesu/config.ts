@@ -66,10 +66,21 @@ type DepositGate = {
   amount?: bigint;
 };
 
-export function canDeposit(input: DepositGate, config = loadVesuEarn()): boolean {
+export type VesuWritePolicy = {
+  /** Local, wallet-allowlisted RC smoke only; never enable in production. */
+  allowPendingSmoke?: boolean;
+};
+
+export function canDeposit(
+  input: DepositGate,
+  config = loadVesuEarn(),
+  policy: VesuWritePolicy = {},
+): boolean {
   const privacyAllowlist = mainnetDeployment.walletManagedPrivacy.allowedActionAmounts.map(BigInt);
+  const admitted = config.status === "verified"
+    || (config.status === "pending" && policy.allowPendingSmoke === true && input.amount === 100_000n);
   return input.mode === "mainnet"
-    && config.status === "verified"
+    && admitted
     && hasLiveVesuAddresses(config)
     && sameFelt(input.readyAddress, input.linkedAddress)
     && input.amount !== undefined
@@ -78,9 +89,16 @@ export function canDeposit(input: DepositGate, config = loadVesuEarn()): boolean
     && privacyAllowlist.includes(input.amount);
 }
 
-export function canWithdraw(input: Omit<DepositGate, "amount"> & { privateShares: bigint }, config = loadVesuEarn()): boolean {
+export function canWithdraw(
+  input: Omit<DepositGate, "amount"> & { privateShares: bigint },
+  config = loadVesuEarn(),
+  policy: VesuWritePolicy = {},
+): boolean {
+  const admitted = config.status === "verified"
+    || config.status === "withdraw_only"
+    || (config.status === "pending" && policy.allowPendingSmoke === true);
   return input.mode === "mainnet"
-    && (config.status === "verified" || config.status === "withdraw_only")
+    && admitted
     && hasLiveVesuAddresses(config)
     && sameFelt(input.readyAddress, input.linkedAddress)
     && input.privateShares > 0n;

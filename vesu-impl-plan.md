@@ -21,7 +21,7 @@ The proposal is internally sound only when implementation and release are treate
 | Vesu API browser access | Pass at audit time | `/markets` returned `Access-Control-Allow-Origin: *`; it remains display-only and non-authoritative. |
 | Privacy audit coverage | Blocked | The published OpenZeppelin scope lists `packages/privacy/src` only; it does not cover `packages/vesu_lending_anonymizer`. Independent review remains mandatory. |
 | Fork + Ready vUSDC discovery/spend | Blocked | No recorded proof yet for the exact Wotta Mainnet action shape and Ready Wallet API 0.10.3. |
-| Anonymizer declaration/deployment/smoke | Blocked | No Mainnet address or transaction evidence exists. `vesuEarn.status` must remain `pending`. |
+| Anonymizer declaration/deployment | Pass | RC.2 is live at `0x04ee621484a3dfda3976b5fd37749e50727a7697296a46fbd0fd81c4d42dfe38`; declaration `0x07b67b81b6353cc6eeb4549087dfa817bbaabd7a89f51113064176693f1ded09` (block 14,463,674), deployment `0x025c316fbfd36298b1faccb2441e10d00aafd774318de38425179f2cc1d47caf` (block 14,463,683). Ready smoke remains blocked. |
 
 Locked product decisions after audit:
 
@@ -118,7 +118,7 @@ The upstream `VesuLendingAnonymizer` is called by the privacy pool through `priv
 - approves the calling privacy pool to collect that output; and
 - returns one `OpenNoteDeposit(note_id, out_token, out_amount)`.
 
-The upstream compatibility table lists `0x3751128dc3ebd36215f982766f14aaca8f78793e4b0f42a73e49372a8e24aae` as the **RC.0 class hash**, not a deployed anonymizer address and not the RC.2 artifact Wotta uses. RC.2 commit `9bfeb8dd35565a2915a0617dff3f649bd5bb891a` reproducibly builds Sierra class hash `0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f` and CASM hash `0x048bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd`. Declaration/deployment automation is not implemented yet; the eventual deploy path must consume these exact artifacts and must never paste either class hash into the runtime address field.
+The upstream compatibility table lists `0x3751128dc3ebd36215f982766f14aaca8f78793e4b0f42a73e49372a8e24aae` as the **RC.0 class hash**, not a deployed anonymizer address and not the RC.2 artifact Wotta uses. RC.2 commit `9bfeb8dd35565a2915a0617dff3f649bd5bb891a` reproducibly builds Sierra class hash `0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f` and CASM hash `0x048bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd`. `pnpm deploy:vesu-anonymizer` consumes only those artifacts, is estimate-only by default, uses deterministic/resumable deployment, and records accepted Mainnet receipts without changing admission status.
 
 The anonymizer calldata serializes its `u256 amount` as low/high felts:
 
@@ -189,7 +189,7 @@ This flow preserves the proceeds as a private note; it does not make the Vesu in
 
 ## 5. Deployment manifest and fail-closed admission
 
-Seed a `vesuEarn` object in `deployments/mainnet.json` as `pending` so every consumer has one typed, fail-closed source of truth. Deployment scripts fill the anonymizer address/receipt fields, and only the evidence-backed admission step may change status to `verified`:
+`deployments/mainnet.json` keeps Vesu Earn `pending` as the typed, fail-closed source of truth. Deployment filled the address/receipt fields; only the evidence-backed admission step may change status to `verified`:
 
 ```json
 {
@@ -206,9 +206,11 @@ Seed a `vesuEarn` object in `deployments/mainnet.json` as `pending` so every con
   "vTokenAddress": "0x00387...4e65",
   "vTokenClassHash": "<observed and pinned>",
   "vTokenDecimals": 18,
-  "anonymizerAddress": "UNDEPLOYED",
-  "anonymizerClassHash": "<reproduced Sierra class hash>",
-  "anonymizerCompiledClassHash": "PENDING",
+  "anonymizerAddress": "0x04ee621484a3dfda3976b5fd37749e50727a7697296a46fbd0fd81c4d42dfe38",
+  "anonymizerClassHash": "0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f",
+  "anonymizerCompiledClassHash": "0x048bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd",
+  "anonymizerDeclareTxHash": "0x07b67b81b6353cc6eeb4549087dfa817bbaabd7a89f51113064176693f1ded09",
+  "anonymizerDeployTxHash": "0x025c316fbfd36298b1faccb2441e10d00aafd774318de38425179f2cc1d47caf",
   "privacyPoolAddress": "0x040337...812a",
   "allowedDepositAmounts": ["100000", "1000000"],
   "verifiedAtBlock": "<block>",
@@ -231,7 +233,7 @@ Extend deployment verification/preflight to fail unless all of these hold onchai
 - a simulated Ready action targets only the pinned privacy pool; and
 - successful tiny deposit plus redeem transaction hashes are captured in evidence.
 
-Runtime deposit must fail closed unless `vesuEarn.status === "verified"`. Runtime redeem is allowed only for `verified` or `withdraw_only`, with a live deployed anonymizer and a positive private vUSDC balance. The Account tab may explain a pending state and perform safe reads, but must not offer a write action.
+Runtime deposit must fail closed unless `vesuEarn.status === "verified"`. Runtime redeem is allowed only for `verified` or `withdraw_only`, with a live deployed anonymizer and a positive private vUSDC balance. The sole exception is a development-build smoke path restricted to the exact Ready address in `NEXT_PUBLIC_VESU_EARN_SMOKE_WALLET`; while pending it permits only the 0.1-USDC deposit and redemption needed to collect admission evidence. Production builds ignore this override.
 
 ## 6. Frontend implementation
 
@@ -363,7 +365,7 @@ Refactor `submitMainnetPrivacyActions` carefully. It currently has valuable inva
 
 ## 9. Security and product release gates
 
-### Source and admission assurance layer (implemented; deployment remains blocked)
+### Source and admission assurance layer (implemented; deployment complete, admission blocked)
 
 Run these before declare/deploy and before flipping `vesuEarn.status`. They are **not** included in default `pnpm check`; `pnpm check:vesu-earn` is expected to fail until evidence exists.
 
@@ -371,23 +373,25 @@ Run these before declare/deploy and before flipping `vesuEarn.status`. They are 
 | --- | --- |
 | Unit: `apps/web/src/lib/vesu/verify-receipt.ts` | Reconstruct deposit/redeem from pool events (Limen-style); fixture tests offline |
 | `pnpm check:vesu-anonymizer-source` | Vendor RC.2 commit → exact Scarb build → Sierra + CASM hashes vs pins and `mainnet.json` |
+| `pnpm deploy:vesu-anonymizer` | Estimate-only by default; exact-artifact, fee-capped, resumable SN_MAIN declare/deploy |
 | `assertVesuRuntime` | Live Vesu + STRK20 pool version/fee/denylist/USDC decimals preflight |
+| `pnpm evidence:vesu-smoke` | Reconstruct both live receipts and materialize redacted Ready discovery evidence |
 | `pnpm check:vesu-earn` | Machine admission gate; only this may print `admit verified` |
 
-Evidence tree: `evidence/<manifestHash>/vesu-earn/` (`REVIEW.md`, `smoke.json`, `anonymizer-source-parity.json`, `GO-NO-GO.md`).
+Evidence tree: `evidence/<manifestHash>/vesu-earn/` (`deployment.json`, `REVIEW.md`, `smoke.json`, `anonymizer-source-parity.json`, `GO-NO-GO.md`).
 
 Current audit status: source reproduction, runtime drift checks, offline mechanism
-verification, and the fail-closed admission script are in place. A Wotta
-declaration/deployment command, independent review, and live Ready smoke evidence
-are not in place. Therefore the artefact is reproducible, but the route is not
-deployment-complete or yield-ready.
+verification, fail-closed admission, declaration, deployment, and live class/tuple
+validation are complete. Independent review and the interactive Ready deposit /
+vUSDC discovery / redeem smoke are not complete. Therefore the contract is live,
+but the route intentionally remains `pending` and is not yield-ready.
 
 Do not enable Mainnet writes until all gates pass:
 
 - [ ] Review the exact Vesu V2 deployed class/commit against its published V2 audits.
 - [ ] Independently review/audit the Vesu lending anonymizer. The published OpenZeppelin Starknet Privacy audit scoped `packages/privacy/src`; it did **not** list `packages/vesu_lending_anonymizer`. Flip `REVIEW.md` `status:` to `accepted` when done.
 - [x] Pin the anonymizer source commit and reproducible Sierra/CASM class hashes (`scripts/vesu-anonymizer-pins.ts` + `check:vesu-anonymizer-source`).
-- [ ] Declare/deploy the anonymizer and record address, class hash, tx hash, deployer, and block.
+- [x] Declare/deploy the anonymizer and record address, class hash, tx hash, deployer, and block.
 - [ ] Confirm the Mainnet privacy pool permits and correctly executes this invoke flow through Ready Wallet API 0.10.3.
 - [ ] Confirm Ready can discover and spend the selected private vUSDC token.
 - [ ] Confirm Vesu Prime's pool/vToken tuple onchain and in Vesu's current curated frontend.
@@ -468,8 +472,7 @@ Remaining blockers are evidence, not product ambiguity:
 1. independent review of the exact RC.2 anonymizer source and compiled artifacts;
 2. fork proof against the exact Wotta action shape and pinned deployed Vesu classes;
 3. Ready 0.10.3 proof for private vUSDC creation, discovery, and spend;
-4. Mainnet declaration/deployment with Sierra/CASM and receipt evidence; and
-5. a 0.1-USDC deposit/redeem smoke before changing `vesuEarn.status` from `pending`.
+4. a 0.1-USDC deposit/redeem smoke before changing `vesuEarn.status` from `pending`.
 
 ## 13. Sources
 

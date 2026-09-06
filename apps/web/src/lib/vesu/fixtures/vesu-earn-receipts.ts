@@ -43,6 +43,8 @@ type BuildArgs = {
     | "wrong_vesu_actor"
     | "vesu_output_mismatch"
     | "duplicate_open_note"
+    | "duplicate_anonymizer_withdrawal"
+    | "aux_withdrawal"
     | "amount_mismatch"
     | "malformed_amount"
     | "reverted";
@@ -68,6 +70,8 @@ export function buildVesuEarnFixtureReceipt(args: BuildArgs): VesuEarnReceiptLik
   let vesuOutAmount = outAmount;
   let includeVesuAction = true;
   let duplicateOpenNote = false;
+  let duplicateAnonymizerWithdrawal = false;
+  let includeAuxWithdrawal = false;
   let execution_status = args.execution_status ?? "SUCCEEDED";
 
   switch (args.mutate) {
@@ -93,6 +97,14 @@ export function buildVesuEarnFixtureReceipt(args: BuildArgs): VesuEarnReceiptLik
     case "duplicate_open_note":
       duplicateOpenNote = true;
       break;
+    case "duplicate_anonymizer_withdrawal":
+      duplicateAnonymizerWithdrawal = true;
+      break;
+    case "aux_withdrawal":
+      // Ready often withdraws a separate private note for fees/gas in the same
+      // STRK20 invoke. That must not fail Vesu earn receipt verification.
+      includeAuxWithdrawal = true;
+      break;
     case "amount_mismatch":
       withdrawAmount = inAmount - 1n;
       break;
@@ -103,12 +115,13 @@ export function buildVesuEarnFixtureReceipt(args: BuildArgs): VesuEarnReceiptLik
       break;
   }
 
+  const earnWithdrawal = {
+    from_address: addresses.privacyPoolAddress,
+    keys: [SELECTORS.withdrawal, felt(toAddr), felt(withdrawToken)],
+    data: ["0x0", "0x0", "0x0", felt(withdrawAmount)],
+  };
   const events: NonNullable<VesuEarnReceiptLike["events"]> = [
-    {
-      from_address: addresses.privacyPoolAddress,
-      keys: [SELECTORS.withdrawal, felt(toAddr), felt(withdrawToken)],
-      data: ["0x0", "0x0", "0x0", felt(withdrawAmount)],
-    },
+    earnWithdrawal,
     {
       from_address: addresses.privacyPoolAddress,
       keys: [
@@ -119,6 +132,20 @@ export function buildVesuEarnFixtureReceipt(args: BuildArgs): VesuEarnReceiptLik
       data: [],
     },
   ];
+  if (duplicateAnonymizerWithdrawal) {
+    events.push({ ...earnWithdrawal, keys: [...earnWithdrawal.keys], data: [...earnWithdrawal.data] });
+  }
+  if (includeAuxWithdrawal) {
+    events.push({
+      from_address: addresses.privacyPoolAddress,
+      keys: [
+        SELECTORS.withdrawal,
+        "0x127021a1b5a52d3174c2ab077c2b043c80369250d29428cee956d76ee51584f",
+        felt(addresses.underlyingAddress),
+      ],
+      data: ["0x0", "0x0", "0x0", "0x340ab"],
+    });
+  }
 
   if (includeVesuAction) {
     const assets = operation === "deposit" ? inAmount : vesuOutAmount;
@@ -147,7 +174,10 @@ export function buildVesuEarnFixtureReceipt(args: BuildArgs): VesuEarnReceiptLik
     if (duplicateOpenNote) events.push({ ...event, keys: [...event.keys], data: [...event.data] });
   }
 
-  if (args.mutate === "malformed_amount") events[0]!.data[3] = "not-a-felt";
+  if (args.mutate === "malformed_amount") {
+    const withdrawal = events.find((event) => event.keys[0] === SELECTORS.withdrawal);
+    if (withdrawal) withdrawal.data[3] = "not-a-felt";
+  }
 
   return {
     execution_status,

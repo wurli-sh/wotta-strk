@@ -165,6 +165,40 @@ describe("verifyVesuEarnReceipt", () => {
     expect(result.problems).toContain("expected exactly one pool OpenNoteDeposited event; observed 2");
   });
 
+  it("ignores Ready auxiliary Withdrawals (fees/gas) in the same STRK20 invoke", () => {
+    const amount = 100_000n;
+    const receipt = buildVesuEarnFixtureReceipt({
+      addresses,
+      operation: "deposit",
+      inAmount: amount,
+      outAmount: 99_000n,
+      mutate: "aux_withdrawal",
+    });
+    const result = verifyVesuEarnReceipt(
+      receipt,
+      fixtureExpected(addresses, "deposit", amount),
+      "0xaux",
+    );
+    expect(result.ok).toBe(true);
+    expect(result.checks.privateSourced).toBe(true);
+    expect(result.observed.withdrawnFromPool).toBe("100000");
+  });
+
+  it("still rejects duplicate anonymizer Withdrawals for the input token", () => {
+    const receipt = buildVesuEarnFixtureReceipt({
+      addresses,
+      operation: "deposit",
+      inAmount: 100_000n,
+      outAmount: 99_000n,
+      mutate: "duplicate_anonymizer_withdrawal",
+    });
+    const result = verifyVesuEarnReceipt(receipt, fixtureExpected(addresses, "deposit", 100_000n));
+    expect(result.ok).toBe(false);
+    expect(result.problems).toContain(
+      "expected exactly one pool Withdrawal event to the anonymizer; observed 2",
+    );
+  });
+
   it("returns a failed result for malformed receipt felts", () => {
     const receipt = buildVesuEarnFixtureReceipt({
       addresses,

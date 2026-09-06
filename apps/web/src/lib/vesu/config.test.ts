@@ -11,6 +11,26 @@ describe("Vesu admission", () => {
     expect(canWithdraw({ mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", privateShares: 1n })).toBe(false);
   });
 
+  it("allows only the 0.1 USDC operator smoke while pending", () => {
+    const config = live("pending");
+    const policy = { allowPendingSmoke: true };
+    expect(canDeposit(
+      { mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", amount: 100_000n },
+      config,
+      policy,
+    )).toBe(true);
+    expect(canDeposit(
+      { mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", amount: 1_000_000n },
+      config,
+      policy,
+    )).toBe(false);
+    expect(canWithdraw(
+      { mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", privateShares: 1n },
+      config,
+      policy,
+    )).toBe(true);
+  });
+
   it("requires mainnet, the linked Ready address, and the intersected amount allowlist", () => {
     const config = live("verified");
     expect(canDeposit({ mode: "mainnet", readyAddress: "0x1", linkedAddress: "0x01", amount: 100_000n }, config)).toBe(true);

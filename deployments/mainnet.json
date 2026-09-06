@@ -3,8 +3,8 @@
   "chainId": "SN_MAIN",
   "network": "mainnet",
   "rpcUrlEnv": "STARKNET_MAINNET_RPC_URL",
-  "manifestHash": "77bfe6b6ff46b22457e51ea5f473baefaaefbf4e33ef0c415f68910a8794ebb3",
-  "generatedAt": "2026-09-06T12:04:28.000Z",
+  "manifestHash": "735988a34ffb258f1526d36b1ae8e7f201a9cc207f1174807eccb49f1ed4294c",
+  "generatedAt": "2026-09-06T17:00:46.318Z",
   "verified": true,
   "verificationNotes": "Mainnet router and approved pools passed on-chain declaration, deployment, receipt, and binding verification. Router is unpaused with Base (6) and Solana (5) admitted; Ethereum/Arbitrum/Stellar remain denied. API route enablement stays evidence-gated / operator-controlled.",
   "usdc": "0x033068F6539f8e6e6b131e6B2B814e6c34A5224bC66947c47DaB9dFeE93b35fb",
@@ -44,17 +44,20 @@
     "vTokenAddress": "0x00387e8ddbb1ab36ca08874d9abc702ef4872ad600dcf76b7f240b71d7bc4e65",
     "vTokenClassHash": "0x041b16e0ca0565a58d1379ffc3c7eab7459b382ba8f8208b3b87d18d2aed4f78",
     "vTokenDecimals": 18,
-    "anonymizerAddress": "UNDEPLOYED",
+    "anonymizerAddress": "0x4ee621484a3dfda3976b5fd37749e50727a7697296a46fbd0fd81c4d42dfe38",
     "anonymizerClassHash": "0x05932298db5e32106f6f5814db6f3c378472d9c0d8f0d8370c87f6f1fd311e2f",
     "anonymizerCompiledClassHash": "0x048bb3d8ac192bf1adca19a34fba73bc8478ccfa8875575776c2debea1225ccd",
-    "anonymizerDeclareTxHash": "PENDING",
-    "anonymizerDeployTxHash": "PENDING",
-    "anonymizerDeclaredBlock": "PENDING",
-    "anonymizerDeployedBlock": "PENDING",
+    "anonymizerDeclareTxHash": "0x7b67b81b6353cc6eeb4549087dfa817bbaabd7a89f51113064176693f1ded09",
+    "anonymizerDeployTxHash": "0x25c316fbfd36298b1faccb2441e10d00aafd774318de38425179f2cc1d47caf",
+    "anonymizerDeclaredBlock": 14463674,
+    "anonymizerDeployedBlock": 14463683,
     "privacyPoolAddress": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
-    "allowedDepositAmounts": ["100000", "1000000"],
+    "allowedDepositAmounts": [
+      "100000",
+      "1000000"
+    ],
     "verifiedAtBlock": "PENDING",
-    "verificationNotes": "Fail closed. Prime/USDC/vUSDC/factory and observed class hashes were verified over SN_MAIN on 2026-09-05. RC.2 Sierra and CASM hashes were reproduced locally; independent review, deployment, Ready vUSDC discovery/spend proof, and deposit/redeem smoke evidence remain required."
+    "verificationNotes": "RC.2 anonymizer deployed; independent review and Ready deposit/redeem smoke remain required."
   },
   "deployer": {
     "address": "0x0595756A13979DF8C8f7845739603db143294d8016311fC3eC219321c0D44a7c",
