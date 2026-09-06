@@ -1,14 +1,14 @@
 # Wotta production deployment
 
-Wotta production is one Vercel web app backed by two fail-closed Render API services:
+Wotta production is one Vercel web app backed by two Render API services:
 
 | Component | Origin | Network/processes |
 | --- | --- | --- |
 | Web | `https://wotta.vercel.app` | Shared UI and Testnet/Mainnet selector |
 | Testnet API | `https://wotta-api-testnet.onrender.com` | `SN_SEPOLIA`, API + indexer + relayer |
-| Mainnet API | `https://wotta-api-mainnet.onrender.com` | `SN_MAIN`, all payment routes disabled until their individual gates pass |
+| Mainnet API | `https://wotta-api-mainnet.onrender.com` | `SN_MAIN`, API + indexer + relayer; private + Base/Solana admitted |
 
-The Mainnet service starts with indexer/relayer and all admissions disabled. Starknet-native send uses Wotta escrow → encrypted inbox → Ready/STRK20 claim, and requires the indexer plus `STARKNET_PRIVATE_ADMITTED=true` only after retained live evidence. Base/Solana additionally require the paired relayer and their independent evidence gates.
+Hosted Mainnet matches local force-admit (`MAINNET_FORCE_ADMIT=true`): `STARKNET_PRIVATE_ADMITTED=true`, `CCTP_ADMITTED_ROUTES=base,solana`, and both workers on. That bypasses phase-evidence gates the same way local `:8788` does when `MAINNET_FORCE_ADMIT=true`. Starknet-native send uses Wotta escrow → encrypted inbox → Ready/STRK20 claim. Base/Solana CCTP need the relayer plus `BASE_MAINNET_RPC_URL` / `SOLANA_MAINNET_RPC_URL` / `STARKNET_FALLBACK_RPC_URL`.
 
 The Vercel project Root Directory must be `apps/web`, Framework Preset `Next.js`, and “Include source files outside of the Root Directory” enabled. Build/install/output settings stay on their framework defaults so paths remain relative to `apps/web`.
 
@@ -43,13 +43,17 @@ Required by the Testnet Render API/workers:
 - `CCTP_ADMITTED_ROUTES=ethereum,arbitrum,base,solana,stellar`
 - `RUN_INDEXER=true`, `RUN_RELAYER=true`
 
-Required by Mainnet Render API:
+Required by Mainnet Render API (force-admit, mirrors local):
 
-- `STARKNET_RPC_URL=<mainnet RPC>`
-- `STARKNET_NETWORK=mainnet`
-- initial closed state: `RUN_INDEXER=false`, `RUN_RELAYER=false`, `STARKNET_PRIVATE_ADMITTED=false`, `CCTP_ADMITTED_ROUTES=`
-- Starknet escrow pilot only after its gate: `RUN_INDEXER=true`, `RUN_RELAYER=false`, `STARKNET_PRIVATE_ADMITTED=true`
-- CCTP pilot only after Phase 2/3 gates: `RUN_INDEXER=true`, `RUN_RELAYER=true`, route-specific `CCTP_ADMITTED_ROUTES`, dedicated relayer credentials, and independent fallback RPCs
+- `STARKNET_RPC_URL=<mainnet RPC>`, `STARKNET_NETWORK=mainnet`
+- `MAINNET_FORCE_ADMIT=true`, `STARKNET_PRIVATE_ADMITTED=true`
+- `CCTP_ADMITTED_ROUTES=base,solana`
+- `RUN_INDEXER=true`, `RUN_RELAYER=true`
+- `STARKNET_FALLBACK_RPC_URL`, `BASE_MAINNET_RPC_URL`, `SOLANA_MAINNET_RPC_URL`
+- dedicated `STARKNET_RELAYER_ADDRESS` / `STARKNET_RELAYER_PRIVATE_KEY` (Mainnet relayer, not Sepolia)
+- `CIRCLE_IRIS_BASE_URL=https://iris-api.circle.com`
+
+Existing Render services do not receive env updates from `pnpm deploy:env` — set these in the Render dashboard (or Blueprint sync) if the service still has fail-closed values.
 
 Verified Mainnet contracts (source of truth: `deployments/mainnet.json` — no `ROUTER_*` / `ESCROW_*` env vars):
 
@@ -61,12 +65,12 @@ Verified Mainnet contracts (source of truth: `deployments/mainnet.json` — no `
 
 Approved dens are `100000` / `1000000` only. On-chain router posture (2026-09-05): **unpaused** with Base domain **6** and Solana domain **5** admitted; Ethereum / Arbitrum / Stellar remain denied. Indexer must watch only verified approved pools (never `UNDEPLOYED` 10/50/100 placeholders).
 
-API / worker activation (separate from on-chain admission; still operator-controlled):
+API / worker activation:
 
-1. Code merged with fail-closed hosted Mainnet defaults (`render.yaml`: workers and `CCTP_ADMITTED_ROUTES` off until release).
+1. Code merged with force-admit Mainnet defaults in `render.yaml` / `pnpm deploy:env` (matches local `MAINNET_FORCE_ADMIT`).
 2. Deploy API serving current `deployments/mainnet.json`; confirm `pnpm deploy:check-mainnet` passes (manifest/router/escrows align).
-3. Retain Phase 1 + `starknet-private-mainnet` evidence → `RUN_INDEXER=true` + `STARKNET_PRIVATE_ADMITTED=true`.
-4. Per CCTP rail: relayer + source RPC + Iris production → set `CCTP_ADMITTED_ROUTES` → retain route evidence under `evidence/<manifestHash>/` → `pnpm check:phase3` → public exposure. On-chain Base/Solana admission + unpause is already live via `pnpm admit:mainnet-router`.
+3. Confirm Render dashboard env matches force-admit (CLI cannot patch existing service env), then redeploy.
+4. Optional later tightening: drop `MAINNET_FORCE_ADMIT`, retain Phase 1/3 evidence under `evidence/<manifestHash>/`, and re-gate with `pnpm check:phase1` / `pnpm check:phase3`. On-chain Base/Solana admission + unpause is already live via `pnpm admit:mainnet-router`.
 
 Mainnet contract declaration/deployment uses only `STARKNET_MAINNET_RPC_URL`, `STARKNET_MAINNET_DEPLOYER_ADDRESS`, and `STARKNET_MAINNET_DEPLOYER_PRIVATE_KEY`. An Argent X 5.16.3 deployer with a guardian additionally requires `STARKNET_MAINNET_DEPLOYER_GUARDIAN_PRIVATE_KEY`; the scripts verify it matches the on-chain guardian and compose the required owner-plus-guardian signature. Pilot policy keeps `authority.owner` identical to the deployer: `pnpm contracts:sync-manifest` (also the first step of `pnpm contracts:preflight`) writes both from `.env` and rehashes `deployments/mainnet.json`. Declare/deploy scripts re-sync the same way before gating. The preflight rejects reuse of the Sepolia deployer, estimates both declarations with bounded fees, and requires the balance to cover both bounds. `STARKNET_MAINNET_RELAYER_ADDRESS` / `STARKNET_MAINNET_RELAYER_PRIVATE_KEY` are required only when the mainnet CCTP relayer is enabled.
 
@@ -134,12 +138,12 @@ curl -fsS https://wotta.vercel.app
 Expected API health:
 
 - Testnet: `chainId=SN_SEPOLIA`, `workers.indexer=true`, `workers.relayer=true`
-- Mainnet: `chainId=SN_MAIN`, both worker flags false
+- Mainnet: `chainId=SN_MAIN`, both worker flags true
 
 Browser smoke test:
 
 1. Sign in and switch Testnet/Mainnet from the shared account dropdown.
 2. Confirm Send, Inbox, Claim, Account, and Balance use the same shell and clear network-scoped state.
 3. Testnet: create a quote/intent and confirm Inbox/Claim data stays Sepolia-scoped.
-4. Mainnet: while closed, confirm Starknet Send/Inbox/Claim report the verified-escrow gate. After approved activation, deposit the smallest approved fixed denomination, confirm encrypted inbox delivery, and claim through Ready/STRK20.
-5. Confirm CCTP routes are unavailable on Mainnet and no Sepolia identity or inbox data appears.
+4. Mainnet: deposit the smallest approved fixed denomination, confirm encrypted inbox delivery, and claim through Ready/STRK20; confirm Base/Solana CCTP quotes are available.
+5. Confirm no Sepolia identity or inbox data appears while on Mainnet.

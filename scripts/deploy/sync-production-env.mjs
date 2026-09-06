@@ -42,25 +42,27 @@ const testnetApi = required({
   STARKNET_RELAYER_ADDRESS: env.STARKNET_RELAYER_ADDRESS || env.STARKNET_DEPLOYER_ADDRESS,
   STARKNET_RELAYER_PRIVATE_KEY: env.STARKNET_RELAYER_PRIVATE_KEY || env.STARKNET_DEPLOYER_PRIVATE_KEY,
 });
-const mainnetApi = {
+// Match local force-admit (`scripts/local-mainnet-api-env.ts`): private + Base/Solana + workers.
+const mainnetApi = required({
   ...commonApi,
   API_ORIGIN: mainnetApiOrigin,
   STARKNET_NETWORK: "mainnet",
   STARKNET_RPC_URL: pick("STARKNET_MAINNET_RPC_URL"),
   DEPLOYMENT_MANIFEST_PATH: "/app/deployments/mainnet.json",
-  RUN_INDEXER: "false",
-  RUN_RELAYER: "false",
+  MAINNET_FORCE_ADMIT: "true",
+  STARKNET_PRIVATE_ADMITTED: "true",
+  CCTP_ADMITTED_ROUTES: "base,solana",
+  RUN_INDEXER: "true",
+  RUN_RELAYER: "true",
   CIRCLE_IRIS_BASE_URL: "https://iris-api.circle.com",
-  CCTP_ADMITTED_ROUTES: "",
-  STARKNET_PRIVATE_ADMITTED: "false",
+  BASE_MAINNET_RPC_URL: pick("BASE_MAINNET_RPC_URL"),
+  SOLANA_MAINNET_RPC_URL: pick("SOLANA_MAINNET_RPC_URL"),
+  STARKNET_FALLBACK_RPC_URL: pick("STARKNET_FALLBACK_RPC_URL"),
+  STARKNET_RELAYER_ADDRESS: pick("STARKNET_MAINNET_RELAYER_ADDRESS", "STARKNET_RELAYER_ADDRESS"),
+  STARKNET_RELAYER_PRIVATE_KEY: pick("STARKNET_MAINNET_RELAYER_PRIVATE_KEY", "STARKNET_RELAYER_PRIVATE_KEY"),
   PILOT_PAUSED_ROUTES: env.PILOT_PAUSED_ROUTES || "",
   ...(pickOptional("PILOT_MAX_USDC_PER_TX") ? { PILOT_MAX_USDC_PER_TX: pickOptional("PILOT_MAX_USDC_PER_TX") } : {}),
-  ...(pickOptional("BASE_MAINNET_RPC_URL") ? { BASE_MAINNET_RPC_URL: pickOptional("BASE_MAINNET_RPC_URL") } : {}),
-  ...(pickOptional("SOLANA_MAINNET_RPC_URL") ? { SOLANA_MAINNET_RPC_URL: pickOptional("SOLANA_MAINNET_RPC_URL") } : {}),
-  ...(pickOptional("STARKNET_FALLBACK_RPC_URL") ? { STARKNET_FALLBACK_RPC_URL: pickOptional("STARKNET_FALLBACK_RPC_URL") } : {}),
-  ...(pickOptional("STARKNET_MAINNET_RELAYER_ADDRESS") ? { STARKNET_RELAYER_ADDRESS: pickOptional("STARKNET_MAINNET_RELAYER_ADDRESS") } : {}),
-  ...(pickOptional("STARKNET_MAINNET_RELAYER_PRIVATE_KEY") ? { STARKNET_RELAYER_PRIVATE_KEY: pickOptional("STARKNET_MAINNET_RELAYER_PRIVATE_KEY") } : {}),
-};
+});
 
 const web = required({
   NEXT_PUBLIC_APP_ORIGIN: webOrigin,
@@ -103,7 +105,7 @@ function syncRender() {
   const testnet = createRenderServiceIfMissing(services, "wotta-api-testnet", testnetApi);
   const mainnet = createRenderServiceIfMissing(services, "wotta-api-mainnet", mainnetApi);
   if (renderDeploy) deployExistingRenderService(mainnet, "wotta-api-mainnet");
-  console.log("Render environment variables for existing services are managed by the Blueprint/dashboard. This command can explicitly redeploy the current Git commit, but never changes route admission flags.");
+  console.log("Render environment variables for existing services are managed by the Blueprint/dashboard. This command can explicitly redeploy the current Git commit, but never updates existing env vars — set Mainnet force-admit flags in the dashboard if they still differ.");
 }
 
 function createRenderServiceIfMissing(services, name, values) {
