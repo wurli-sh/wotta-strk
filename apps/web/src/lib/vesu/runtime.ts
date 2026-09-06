@@ -108,18 +108,19 @@ export async function assertVesuRuntime(
   options: { allowPendingSmoke?: boolean } = {},
 ): Promise<void> {
   const config = loadVesuEarn();
-  if (config.status === "pending" && options.allowPendingSmoke !== true) {
-    throw new Error("vesu_earn_pending");
-  }
   await ensureReadyChain(account, "mainnet");
-  await assertVesuRuntimeWithConfig(account, config);
+  await assertVesuRuntimeWithConfig(account, config, options);
 }
 
-/** Testable core: assumes admission status already allows writes. */
+/** Testable core. Pending status fails closed unless `allowPendingSmoke` is set. */
 export async function assertVesuRuntimeWithConfig(
   account: WalletAccountV6,
   config: VesuEarnConfig,
+  options: { allowPendingSmoke?: boolean } = {},
 ): Promise<void> {
+  if (config.status === "pending" && options.allowPendingSmoke !== true) {
+    throw new Error("vesu_earn_pending");
+  }
   const anonymizerLive = hasLiveVesuAddresses(config);
   if (!anonymizerLive) throw new Error("vesu_manifest_mismatch:anonymizer_not_live");
 
