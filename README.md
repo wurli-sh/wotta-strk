@@ -1,6 +1,6 @@
 <img src="docs/assets/banner.png" width="100%" alt="Wotta — send from any chain, claim private on Starknet, earn on Vesu" />
 
-[Live demo](https://wotta.vercel.app) · [Demo video](https://youtu.be/KqIuun51blI)
+[Live demo](https://wotta.vercel.app) · [Demo video](https://youtu.be/XTQVdcPE76s) · [Super launch video](https://youtu.be/EoCdWV32Yy4)
 
 ## Problem
 
@@ -17,22 +17,23 @@ job, not yours.
 
 Wotta lets anyone send USDC to an `@handle` or email. Sign in with **Google or X**,
 link a **Ready** wallet, and resolve recipients through the API. Wotta creates a
-signed claim, transports USDC from supported source chains with Circle CCTP V2,
-and delivers an encrypted inbox note. Claims settle privately on **Starknet
+claim commitment in the browser, signs the recipient descriptor and exact-net
+quote, transports USDC from supported source chains with Circle CCTP V2, and
+delivers an encrypted inbox note. Claims settle privately on **Starknet
 Mainnet** into a Ready private balance — then put that USDC to work on **Vesu
 Earn**. Live-pool private send / balance runs through the Ready-managed STRK20
 pool.
 
 ### Mainnet STRK20 evidence
 
-Private sends through the live STRK20 pool (Wallet One → Wallet One’s linked X
-handle). Each tx succeeded on Starknet Mainnet and touched the pool:
+Claim → yield → redeem through the live STRK20 pool. Each tx succeeded on Starknet
+Mainnet and touched the pool:
 
-| Tx | Voyager |
-| -- | ------- |
-| 1 | [0x05865c…fa4eb6](https://voyager.online/tx/0x05865c9b8592d5da05f5f031624476c6d681fd72b7da49eb0697adb2dafa4eb6) |
-| 2 | [0x022b04…ff4dee](https://voyager.online/tx/0x022b049c23b35cc5b515a2e607004b1800a8a853007fe6cf4a84a6c74cff4dee) |
-| 3 | [0x0191ca…4d9efb](https://voyager.online/tx/0x0191caf99580ca2f043e05b92fd96defb188492f5d3c32e5f485f685164d9efb) |
+| Tx | Role | Voyager |
+| -- | ---- | ------- |
+| 1 | Claim | [0x039175…209b86](https://voyager.online/tx/0x039175568da9522eb3f25867bf6d836ef02e9173cb52fe774e7f3caca2209b86) |
+| 2 | Yield | [0x069f98…9cbd32](https://voyager.online/tx/0x069f98e913567d0645c12012064d2228a99b52d949b38decb81bc3c0c59cbd32) |
+| 3 | Redeem | [0x051421…b0d1fd](https://voyager.online/tx/0x051421173311ac72fb25cb19e97b82058484ff1fe53b3e3a5b7ee844aeb0d1fd) |
 
 Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
 
@@ -57,11 +58,13 @@ Also listed in [`strk20.json`](strk20.json) for the Private Sprint hub.
 
 Deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [evidence](evidence/README.md)
 
-Hosted Mainnet API matches local force-admit: private send + Base/Solana CCTP
-admitted, indexer and relayer on (`MAINNET_FORCE_ADMIT=true`). Mainnet pins the
-live STRK20 pool, verified 0.1 / 1 USDC CCTP escrows, and a live Vesu Earn
+The checked-in Mainnet configuration force-admits private send and Base/Solana
+CCTP with indexer and relayer enabled (`MAINNET_FORCE_ADMIT=true`). It pins the
+live STRK20 pool, verified 0.1 / 1 USDC CCTP escrows, and a Vesu Earn
 anonymizer. `vesuEarn.status` is **`verified`** — see
 [`GO-NO-GO`](evidence/cfdce498920dc89271f898091a529bea191ebc7b5901323d2e667d9cc7e3ce00/vesu-earn/GO-NO-GO.md).
+Before a release, run `pnpm deploy:check-mainnet` to confirm the hosted API is
+serving this manifest.
 
 ---
 
@@ -273,5 +276,3 @@ production software.
 - **Honest privacy** — keep labeling what Wotta shields vs what stays public (source burns, timing, escrow funding).
 - **Real use cases** — validate pay-a-handle → claim → earn with community feedback before chasing a long feature list.
 - **Review readiness** — threat model, runbooks, and an audit brief before any production claims.
-
-

@@ -1,9 +1,15 @@
 {
   "transactions": [
-    "0x05865c9b8592d5da05f5f031624476c6d681fd72b7da49eb0697adb2dafa4eb6",
-    "0x022b049c23b35cc5b515a2e607004b1800a8a853007fe6cf4a84a6c74cff4dee",
-    "0x0191caf99580ca2f043e05b92fd96defb188492f5d3c32e5f485f685164d9efb"
+    "0x039175568da9522eb3f25867bf6d836ef02e9173cb52fe774e7f3caca2209b86",
+    "0x069f98e913567d0645c12012064d2228a99b52d949b38decb81bc3c0c59cbd32",
+    "0x051421173311ac72fb25cb19e97b82058484ff1fe53b3e3a5b7ee844aeb0d1fd"
+  ],
+  "contracts": [
+    "0x24a2c1a79b97794ed4d143ff0f6f5b05b3569832c85957aa10bc7c3dcc000fd",
+    "0x656a3300531b45f559e51120b0cb9bcea8c6c4e626ebef6c46c184da08c0a06",
+    "0x41a7424a3779e15d68f7a1da96b7cf95a196563bcfc3ff81eeb8735c4368f0c",
+    "0x4ee621484a3dfda3976b5fd37749e50727a7697296a46fbd0fd81c4d42dfe38"
   ],
   "demo_url": "https://wotta.vercel.app",
-  "demo_video": "https://youtu.be/KqIuun51blI"
+  "demo_video": "https://youtu.be/XTQVdcPE76s"
 }
