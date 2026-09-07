@@ -8,10 +8,11 @@ const mocks = vi.hoisted(() => ({
   supportedWalletApi: vi.fn(),
   switchStarknetChain: vi.fn(),
   wallet: { name: "Ready" },
+  createStore: vi.fn(),
 }));
 
 vi.mock("@starknet-io/get-starknet-discovery", () => ({
-  createStore: () => ({ getWallets: () => [mocks.wallet] }),
+  createStore: mocks.createStore,
 }));
 
 vi.mock("starknet", async (importOriginal) => {
@@ -42,8 +43,10 @@ function account(chainId: string, address = "0x123") {
 }
 
 beforeEach(() => {
-  clearReadyConnections();
   vi.clearAllMocks();
+  mocks.createStore.mockReturnValue({ getWallets: () => [mocks.wallet] });
+  globalThis.__wottaReadyRuntime = undefined;
+  clearReadyConnections();
   vi.stubEnv(
     "NEXT_PUBLIC_STARKNET_MAINNET_RPC_URL",
     "https://mainnet.rpc.example",
@@ -73,6 +76,15 @@ describe("Ready account activation", () => {
 });
 
 describe("Ready connection lifecycle", () => {
+  it("uses one wallet discovery store across repeated checks and reconnects", async () => {
+    await connectReady("mainnet");
+    await connectReady("mainnet");
+    await connectReady("mainnet", { forceReconnect: true });
+
+    expect(mocks.createStore).toHaveBeenCalledTimes(1);
+    expect(mocks.createStore).toHaveBeenCalledWith({ eip1193Adapters: [] });
+  });
+
   it("reuses the Ready connection for repeated actions on one network", async () => {
     const first = await connectReady("mainnet");
     const second = await connectReady("mainnet");

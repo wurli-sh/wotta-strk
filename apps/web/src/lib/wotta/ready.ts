@@ -34,6 +34,7 @@ export type ConnectedReady = {
 
 type ReadyRuntime = {
   version: number;
+  walletStore: ReturnType<typeof createStore>;
   connections: Partial<Record<NetworkMode, ConnectedReady>>;
   inFlight: Partial<Record<NetworkMode, Promise<ConnectedReady>>>;
   generation: number;
@@ -45,13 +46,17 @@ declare global {
 }
 
 const READY_CONNECT_TIMEOUT_MS = 30_000;
-const READY_RUNTIME_VERSION = 2;
+const READY_RUNTIME_VERSION = 4;
 
 function readyRuntime(): ReadyRuntime {
   const existing = globalThis.__wottaReadyRuntime;
   if (existing?.version === READY_RUNTIME_VERSION) return existing;
   return (globalThis.__wottaReadyRuntime = {
     version: READY_RUNTIME_VERSION,
+    // Ready is a Starknet Wallet Standard wallet. EIP-1193 discovery is for
+    // Ethereum providers (for example MetaMask) and must not bridge a second
+    // provider into this Starknet-only connection.
+    walletStore: createStore({ eip1193Adapters: [] }),
     connections: {},
     inFlight: {},
     generation: 0,
@@ -93,7 +98,8 @@ export function activationFeeToken(mode: NetworkMode): string {
 }
 
 function findReadyWallet() {
-  return createStore()
+  return readyRuntime()
+    .walletStore
     .getWallets()
     .find((candidate) => /ready/i.test(candidate.name));
 }
