@@ -1,6 +1,7 @@
 import { type STRK20_ACTION, type WalletAccountV6 } from "starknet";
 import mainnetDeployment from "../../../../../deployments/mainnet.json" with { type: "json" };
-import { ensureReadyChain } from "./ready.ts";
+import { clearReadyConnections, ensureReadyChain } from "./ready.ts";
+import { toWalletApiFelt } from "./wallet-api.ts";
 
 export const MAINNET_USDC_AMOUNT = 100_000n;
 const READY_BALANCE_TIMEOUT_MS = 30_000;
@@ -12,13 +13,16 @@ export const MAINNET_USDC_PRIVACY_FEE_RESERVE = 250_000n;
 type Strk20SubmitRuntime = {
   version: number;
   inFlight: { key: string; promise: Promise<string> } | null;
+  completed: Map<string, { transactionHash: string; completedAt: number }>;
+  traceSequence: number;
 };
 
 declare global {
   var __wottaStrk20SubmitRuntime: Strk20SubmitRuntime | undefined;
 }
 
-const STRK20_SUBMIT_RUNTIME_VERSION = 1;
+const STRK20_SUBMIT_RUNTIME_VERSION = 3;
+const STRK20_REPLAY_WINDOW_MS = 30_000;
 
 function strk20SubmitRuntime(): Strk20SubmitRuntime {
   const existing = globalThis.__wottaStrk20SubmitRuntime;
@@ -26,6 +30,8 @@ function strk20SubmitRuntime(): Strk20SubmitRuntime {
   return (globalThis.__wottaStrk20SubmitRuntime = {
     version: STRK20_SUBMIT_RUNTIME_VERSION,
     inFlight: null,
+    completed: new Map(),
+    traceSequence: 0,
   });
 }
 
@@ -39,7 +45,41 @@ export function resetStrk20SubmitForTests(): void {
   globalThis.__wottaStrk20SubmitRuntime = {
     version: STRK20_SUBMIT_RUNTIME_VERSION,
     inFlight: null,
+    completed: new Map(),
+    traceSequence: 0,
   };
+}
+
+type Strk20TraceEvent =
+  | "submit_enter"
+  | "dedup_completed"
+  | "dedup_in_flight"
+  | "wallet_request"
+  | "wallet_resolved"
+  | "receipt_success"
+  | "wallet_rejected";
+
+function traceStrk20Submit(
+  event: Strk20TraceEvent,
+  requestId: string,
+  actions: STRK20_ACTION[],
+  transactionHash?: string,
+): void {
+  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") return;
+  const detail = {
+    event,
+    requestId,
+    actionTypes: actions.map((action) => action.type),
+    ...(transactionHash ? { transactionHash } : {}),
+  };
+  // Keep a browser copy even if the development trace route is unavailable.
+  console.info("[wotta:strk20]", detail);
+  void fetch("/api/strk20-trace", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(detail),
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 export type MainnetPrivacyAction = "shield" | "transfer" | "withdraw";
@@ -92,7 +132,7 @@ export function mainnetActions(
     type: action === "transfer" ? "transfer" : "withdraw",
     token: config.usdc,
     amount: feltAmount(amount),
-    recipient,
+    recipient: toWalletApiFelt(recipient),
   }];
 }
 
@@ -137,12 +177,22 @@ export function buildEscrowClaimActions(
   escrow: string,
   claimSecret: string,
 ): STRK20_ACTION[] {
+  const walletRecipient = toWalletApiFelt(recipient);
   return [
-    { type: "transfer", token: usdc, amount: "OPEN", recipient },
+    { type: "transfer", token: usdc, amount: "OPEN", recipient: walletRecipient },
     {
       type: "invoke",
-      contract: escrow,
-      calldata: ["0x2", "0x0", "0x0", "0x0", "0x0", claimSecret, "${openNoteIds[0]}", "0x0"],
+      contract: toWalletApiFelt(escrow),
+      calldata: [
+        "0x2",
+        "0x0",
+        "0x0",
+        "0x0",
+        "0x0",
+        toWalletApiFelt(claimSecret),
+        "${openNoteIds[0]}",
+        "0x0",
+      ],
     },
   ];
 }
@@ -153,6 +203,12 @@ function sameFelt(left: string, right: string): boolean {
 
 function notRegistered(error: unknown): boolean {
   return (error instanceof Error ? error.message : String(error)).includes("NOT_REGISTERED");
+}
+
+function balanceReadTimedOut(error: unknown): boolean {
+  return (error instanceof Error ? error.message : String(error)).includes(
+    "balance_check_unresponsive",
+  );
 }
 
 function mainnetPrivacyRegistrationRequired(): Error {
@@ -203,6 +259,10 @@ export async function readMainnetPrivateTokenBalance(
       options?.timeoutMs ?? READY_BALANCE_TIMEOUT_MS,
     );
   } catch (error) {
+    // A hanging balance request usually means Ready reloaded while Wotta still
+    // held the old wallet provider. Drop that provider so the next Reveal makes
+    // a fresh Wallet API connection instead of retrying the dead session.
+    if (balanceReadTimedOut(error)) clearReadyConnections();
     // The Wallet API has no dapp registration method. Until the user enables
     // Shielded tokens in Ready, an unregistered account has no private balance.
     if (notRegistered(error)) return 0n;
@@ -236,15 +296,38 @@ export async function submitMainnetStrk20Actions(
   account: WalletAccountV6,
   actions: STRK20_ACTION[],
   signal?: AbortSignal,
+  onSubmitted?: (transactionHash: string) => void,
 ): Promise<string> {
   signal?.throwIfAborted();
   const runtime = strk20SubmitRuntime();
-  const key = fingerprintStrk20Actions(actions);
+  const requestId = `req-${Date.now().toString(36)}-${++runtime.traceSequence}`;
+  traceStrk20Submit("submit_enter", requestId, actions);
+  const accountKey = typeof account.address === "string"
+    ? account.address.toLowerCase()
+    : "unknown-account";
+  const key = `${accountKey}:${fingerprintStrk20Actions(actions)}`;
+  const now = Date.now();
+  for (const [completedKey, completed] of runtime.completed) {
+    if (now - completed.completedAt >= STRK20_REPLAY_WINDOW_MS) {
+      runtime.completed.delete(completedKey);
+    }
+  }
+  // React/event replays can arrive just after the original promise settles.
+  // Keep a short receipt-backed idempotency window so the same action cannot be
+  // broadcast again after it already succeeded and spent its private note.
+  const completed = runtime.completed.get(key);
+  if (completed) {
+    traceStrk20Submit("dedup_completed", requestId, actions, completed.transactionHash);
+    return completed.transactionHash;
+  }
   // Coalesce duplicate in-flight invokes (double click / remount). A second
   // wallet_strk20InvokeTransaction call opens another Ready confirmation and
   // can deposit twice for one Yield press.
   if (runtime.inFlight) {
-    if (runtime.inFlight.key === key) return runtime.inFlight.promise;
+    if (runtime.inFlight.key === key) {
+      traceStrk20Submit("dedup_in_flight", requestId, actions);
+      return runtime.inFlight.promise;
+    }
     throw new Error("private_submit_in_flight");
   }
 
@@ -257,18 +340,33 @@ export async function submitMainnetStrk20Actions(
     // Pool targeting stays enforced by assertMainnetPrivacyRuntime above.
     let result;
     try {
+      traceStrk20Submit("wallet_request", requestId, actions);
       result = await account.strk20InvokeTransaction(actions);
+      traceStrk20Submit(
+        "wallet_resolved",
+        requestId,
+        actions,
+        String(result.transaction_hash),
+      );
     } catch (error) {
+      traceStrk20Submit("wallet_rejected", requestId, actions);
       // Wallet API 0.10.3 deliberately exposes no registration RPC. Registration
       // belongs to Ready, so Wotta must explain the wallet-side setup instead of
       // leaking the raw numeric NOT_REGISTERED wallet error.
       if (notRegistered(error)) throw mainnetPrivacyRegistrationRequired();
       throw error;
     }
+    onSubmitted?.(String(result.transaction_hash));
     const receipt = await account.provider.waitForTransaction(result.transaction_hash);
     if (!receipt.isSuccess()) throw new Error("Mainnet private transaction reverted");
     signal?.throwIfAborted();
-    return String(result.transaction_hash);
+    const transactionHash = String(result.transaction_hash);
+    traceStrk20Submit("receipt_success", requestId, actions, transactionHash);
+    runtime.completed.set(key, {
+      transactionHash,
+      completedAt: Date.now(),
+    });
+    return transactionHash;
   })();
 
   runtime.inFlight = { key, promise };
@@ -313,10 +411,12 @@ export async function submitMainnetEscrowClaim(
   account: WalletAccountV6,
   input: { escrow: { address: string; classHash: string; denomination: bigint }; claimSecret: string },
   signal?: AbortSignal,
+  onSubmitted?: (transactionHash: string) => void,
 ): Promise<string> {
   return submitMainnetPrivacyActions(
     account,
     mainnetEscrowClaimActions({ ...input, recipient: account.address }),
     signal,
+    onSubmitted,
   );
 }

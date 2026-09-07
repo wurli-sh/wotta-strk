@@ -12,6 +12,7 @@ import {
   resetStrk20SubmitForTests,
   submitMainnetPrivacyAction,
   submitMainnetShieldedTransfer,
+  submitMainnetStrk20Actions,
 } from "./mainnet-privacy";
 
 describe("Ready-managed mainnet privacy", () => {
@@ -36,17 +37,27 @@ describe("Ready-managed mainnet privacy", () => {
     expect(mainnetActions("shield")[0]).toMatchObject({ type: "deposit", amount: "0x186a0" });
     expect(mainnetActions("transfer", recipient)[0]).toMatchObject({ type: "transfer", amount: "0x186a0", recipient });
     expect(mainnetActions("withdraw", recipient)[0]).toMatchObject({ type: "withdraw", amount: "0x186a0", recipient });
+    expect(mainnetActions("transfer", "0x00123")[0]).toMatchObject({ recipient: "0x123" });
   });
 
   it("builds escrow claim as an OPEN note followed by the existing claim invoke", () => {
-    expect(buildEscrowClaimActions("0x1", "0x2", "0x3", "0x4")).toEqual([
-      { type: "transfer", token: "0x1", amount: "OPEN", recipient: "0x2" },
+    expect(buildEscrowClaimActions("0x01", "0x02", "0x03", "0x04")).toEqual([
+      { type: "transfer", token: "0x01", amount: "OPEN", recipient: "0x2" },
       {
         type: "invoke",
         contract: "0x3",
         calldata: ["0x2", "0x0", "0x0", "0x0", "0x0", "0x4", "${openNoteIds[0]}", "0x0"],
       },
     ]);
+  });
+
+  it("canonicalizes every non-token felt in a claim payload", () => {
+    const actions = buildEscrowClaimActions("0x0001", "0x0002", "0x0003", "0x0004");
+    expect(actions[0]).toMatchObject({ token: "0x0001", recipient: "0x2" });
+    expect(actions[1]).toMatchObject({
+      contract: "0x3",
+      calldata: ["0x2", "0x0", "0x0", "0x0", "0x0", "0x4", "${openNoteIds[0]}", "0x0"],
+    });
   });
 
   it("rejects an escrow claim that is not one of the verified mainnet pools", () => {
@@ -146,6 +157,35 @@ describe("Ready-managed mainnet privacy", () => {
     expect(calls).toEqual([{ amount: "0x5f5e100" }]);
   });
 
+  it("reports submission after Ready accepts and before confirmation completes", async () => {
+    const config = mainnetPrivacyConfig();
+    let confirm!: () => void;
+    const events: string[] = [];
+    const account = {
+      provider: {
+        getChainId: async () => constants.StarknetChainId.SN_MAIN,
+        getClassHashAt: async () => config.poolClassHash,
+        waitForTransaction: async () => {
+          events.push("waiting");
+          await new Promise<void>((resolve) => { confirm = resolve; });
+          return { isSuccess: () => true };
+        },
+      },
+      strk20InvokeTransaction: async () => ({ transaction_hash: "0xabc" }),
+    } as unknown as WalletAccountV6;
+
+    const submitted = submitMainnetStrk20Actions(
+      account,
+      mainnetActions("shield"),
+      undefined,
+      () => events.push("submitted"),
+    );
+    for (let index = 0; index < 10 && !confirm; index += 1) await Promise.resolve();
+    expect(events).toEqual(["submitted", "waiting"]);
+    confirm();
+    await expect(submitted).resolves.toBe("0xabc");
+  });
+
   it("coalesces duplicate in-flight STRK20 invokes into one Ready prompt", async () => {
     resetStrk20SubmitForTests();
     const config = mainnetPrivacyConfig();
@@ -172,6 +212,29 @@ describe("Ready-managed mainnet privacy", () => {
     const second = submitMainnetPrivacyAction(account, "transfer", "0x123", undefined, 100_000_000n);
     release({ transaction_hash: "0xcoalesced" });
     await expect(Promise.all([first, second])).resolves.toEqual(["0xcoalesced", "0xcoalesced"]);
+    expect(invokes).toBe(1);
+  });
+
+  it("does not resubmit the same action when a replay arrives after success", async () => {
+    resetStrk20SubmitForTests();
+    const config = mainnetPrivacyConfig();
+    let invokes = 0;
+    const account = {
+      provider: {
+        getChainId: async () => constants.StarknetChainId.SN_MAIN,
+        getClassHashAt: async () => config.poolClassHash,
+        waitForTransaction: async () => ({ isSuccess: () => true }),
+      },
+      strk20InvokeTransaction: async () => {
+        invokes += 1;
+        return { transaction_hash: "0xalready-succeeded" };
+      },
+    } as unknown as WalletAccountV6;
+
+    const actions = mainnetActions("shield");
+    await expect(submitMainnetStrk20Actions(account, actions)).resolves.toBe("0xalready-succeeded");
+    // This models a delayed React/event replay after the first receipt resolved.
+    await expect(submitMainnetStrk20Actions(account, actions)).resolves.toBe("0xalready-succeeded");
     expect(invokes).toBe(1);
   });
 
