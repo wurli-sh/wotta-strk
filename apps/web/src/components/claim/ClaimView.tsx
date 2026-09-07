@@ -80,6 +80,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
   const { mode } = useNetworkMode();
   const { vault, unlocking, unlock, sessionReady } = usePrivacyVault();
   const confettiRef = useRef<ConfettiRef>(null);
+  const claimInFlight = useRef(false);
   const [claim, setClaim] = useState<ClaimRow | null>(null);
   const [success, setSuccess] = useState<ClaimSuccess | null>(null);
   const [loading, setLoading] = useState(false);
@@ -174,10 +175,12 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
   }
 
   async function runClaim() {
+    if (claimInFlight.current) return;
     if (!claim || !vault?.state.inboxSecretKey) {
       toast.error(TOAST.unlockInboxFirst);
       return;
     }
+    claimInFlight.current = true;
     const operation = beginNetworkOperation(mode, { blocksNetworkSwitch: true });
     setBusy(true);
     setError(null);
@@ -185,7 +188,15 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       setPhase("connecting");
       const connected = await connectReady(mode);
       const hash = mode === "mainnet"
-        ? await submitMainnetEscrowClaim(connected.account, claim, operation.signal)
+        ? await (async () => {
+            setPhase("signing_message");
+            return submitMainnetEscrowClaim(
+              connected.account,
+              claim,
+              operation.signal,
+              () => setPhase("confirming"),
+            );
+          })()
         : await (async () => {
             const baseConfig = directPrivacyConfig();
             if (!vault.state.identityAddress) {
@@ -237,6 +248,7 @@ export function ClaimView({ embedded = false, noteId = null }: Props) {
       toast.error(message);
     } finally {
       operation.finish();
+      claimInFlight.current = false;
       setBusy(false);
     }
   }
