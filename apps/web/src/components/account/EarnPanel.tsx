@@ -141,7 +141,9 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
   const writeGate = useRef(getEarnWriteGate()).current;
   const amount = denominationBaseUnits(denom);
   const reduceMotion = useReducedMotion();
-  const revealed = readyAddress !== null && usdc !== null;
+  const revealed = readyAddress !== null && (tab === "deposit"
+    ? usdc !== null
+    : shares !== null && assets !== null);
 
   useEffect(() => {
     let active = true;
@@ -168,17 +170,17 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
     };
   }, [config.poolAddress, config.underlyingAddress, mode]);
 
-  async function loadPrivatePosition(): Promise<void> {
+  async function loadPrivatePosition(scope: EarnTab): Promise<void> {
     const connected = await connectReady("mainnet");
     if (!sameFelt(connected.address, linkedAddress)) {
       throw new Error("Connect the Ready account linked to this Wotta profile");
     }
-    const [privateUsdc, position] = await Promise.all([
-      readMainnetPrivateBalance(connected.account),
-      readVesuPosition(connected.account),
-    ]);
     setReadyAddress(connected.address);
-    setUsdc(privateUsdc);
+    if (scope === "deposit") {
+      setUsdc(await readMainnetPrivateBalance(connected.account));
+      return;
+    }
+    const position = await readVesuPosition(connected.account);
     setShares(position.shares);
     setAssets(position.assets);
   }
@@ -204,9 +206,10 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
     });
     setBusy(true);
     setPhase("revealing");
+    const revealTab = tab;
     try {
       operation.assertActive();
-      await loadPrivatePosition();
+      await loadPrivatePosition(revealTab);
       operation.assertActive();
     } catch (error) {
       toast.error(
@@ -247,11 +250,11 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
       await assertVesuRuntime(connected.account, writePolicy);
       setPhase("authorizing");
       const actions = buildVesuDepositActions(connected.address, amount);
-      setPhase("supplying");
       const hash = await submitMainnetStrk20Actions(
         connected.account,
         actions,
         operation.signal,
+        () => setPhase("supplying"),
       );
       const verification = await verifyVesuEarnTransaction(
         connected.account.provider,
@@ -276,17 +279,10 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
           },
         });
         window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
-      }
-      // Free the CTA before balance reload so a lingering Ready dialog cannot
-      // freeze the button on "Unlocking private balance…".
-      setBusy(false);
-      setPhase("idle");
-      try {
-        await loadPrivatePosition();
-      } catch (error) {
-        toast.error(
-          userFacingError(error, "Could not refresh your private Vesu position"),
-        );
+        setUsdc((current) => current === null ? null : current > amount ? current - amount : 0n);
+        // Deposit changes the other tab too, but do not reveal or silently reload it.
+        setShares(null);
+        setAssets(null);
       }
     } catch (error) {
       toast.error(userFacingError(error, "Could not start earning"));
@@ -322,7 +318,6 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
           "Connect the Ready account linked to this Wotta profile",
         );
       await assertVesuRuntime(connected.account, writePolicy);
-      setPhase("authorizing");
       const freshShares = await readMainnetPrivateTokenBalance(
         connected.account,
         config.vTokenAddress,
@@ -333,11 +328,12 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
           : (freshShares * BigInt(redeemPercent)) / 100n;
       if (redeemShares <= 0n)
         throw new Error("No private vUSDC is available to withdraw");
-      setPhase("redeeming");
+      setPhase("authorizing");
       const hash = await submitMainnetStrk20Actions(
         connected.account,
         buildVesuRedeemActions(connected.address, redeemShares, freshShares),
         operation.signal,
+        () => setPhase("redeeming"),
       );
       const verification = await verifyVesuEarnTransaction(
         connected.account.provider,
@@ -367,15 +363,16 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
           },
         });
         window.dispatchEvent(new CustomEvent("wotta:private-balance-invalidate"));
-      }
-      setBusy(false);
-      setPhase("idle");
-      try {
-        await loadPrivatePosition();
-      } catch (error) {
-        toast.error(
-          userFacingError(error, "Could not refresh your private Vesu position"),
-        );
+        const remainingShares = freshShares - redeemShares;
+        setShares(remainingShares);
+        setAssets((current) => {
+          if (remainingShares === 0n) return 0n;
+          return current === null || freshShares === 0n
+            ? null
+            : (current * remainingShares) / freshShares;
+        });
+        // Redeem changes private USDC, but keep the Deposit tab masked until asked.
+        setUsdc(null);
       }
     } catch (error) {
       toast.error(userFacingError(error, "Could not withdraw from Vesu"));
@@ -433,7 +430,9 @@ export function EarnPanel({ me }: { me: MeResponse | null }) {
           layoutId="earn-actions"
           ariaLabel="Earn action"
           value={tab}
-          onValueChange={setTab}
+          onValueChange={(next) => {
+            if (!busy) setTab(next);
+          }}
           items={EARN_TABS}
           className="border-border bg-card shadow-soft"
           itemClassName="min-h-9 px-3.5 py-2 text-xs capitalize"
