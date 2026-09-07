@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { splitU256, toWalletApiFelt, vesuDepositActions, vesuRedeemActions } from "./actions";
+import { splitU256, vesuDepositActions, vesuRedeemActions } from "./actions";
 import { loadVesuEarn, type VesuEarnConfig } from "./config";
+import { toWalletApiFelt } from "@/lib/wotta/wallet-api";
 
 /** Wallet API 0.10.3 FELT pattern from starknet-types. */
 const WALLET_API_FELT = /^0x(0|[a-fA-F1-9]{1}[a-fA-F0-9]{0,62})$/;
@@ -39,7 +40,7 @@ describe("Vesu STRK20 actions", () => {
     });
     expect(actions[1]).toMatchObject({
       token: config.vTokenAddress,
-      recipient: "0x0123",
+      recipient: "0x123",
       amount: "OPEN",
     });
     // Invoke calldata must be Wallet-API FELT-safe or Ready returns INVALID_REQUEST_PAYLOAD.

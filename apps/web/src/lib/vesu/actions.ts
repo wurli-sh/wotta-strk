@@ -1,5 +1,6 @@
 import type { STRK20_ACTION } from "starknet";
 import { hasLiveVesuAddresses, loadVesuEarn, sameFelt, type VesuEarnConfig } from "./config";
+import { toWalletApiFelt } from "@/lib/wotta/wallet-api";
 
 const U128 = 1n << 128n;
 
@@ -13,17 +14,6 @@ const U128 = 1n << 128n;
  * to canonical felts can make Ready report INSUFFICIENT_PRIVATE_BALANCE even
  * when Wotta's balance read (felt-equal) still shows funds.
  */
-export function toWalletApiFelt(value: string | bigint): `0x${string}` {
-  let n: bigint;
-  try {
-    n = typeof value === "bigint" ? value : BigInt(value);
-  } catch {
-    throw new Error("invalid_felt");
-  }
-  if (n < 0n) throw new Error("invalid_felt");
-  return `0x${n.toString(16)}`;
-}
-
 export function splitU256(value: bigint): [`0x${string}`, `0x${string}`] {
   if (value < 0n || value >= (1n << 256n)) throw new Error("invalid_u256");
   return [toWalletApiFelt(value % U128), toWalletApiFelt(value / U128)];
@@ -72,7 +62,7 @@ export function vesuDepositActions(
       type: "transfer",
       token: config.vTokenAddress,
       amount: "OPEN",
-      recipient: readyAddress,
+      recipient: toWalletApiFelt(readyAddress),
     },
     {
       type: "invoke",
@@ -122,7 +112,7 @@ export function vesuRedeemActions(
       type: "transfer",
       token: config.underlyingAddress,
       amount: "OPEN",
-      recipient: readyAddress,
+      recipient: toWalletApiFelt(readyAddress),
     },
     {
       type: "invoke",
