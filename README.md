@@ -66,6 +66,25 @@ anonymizer. `vesuEarn.status` is **`verified`** — see
 Before a release, run `pnpm deploy:check-mainnet` to confirm the hosted API is
 serving this manifest.
 
+### Testnet (Starknet Sepolia)
+
+Switch the UI to **Testnet** on [wotta.vercel.app](https://wotta.vercel.app) — it talks to
+[wotta-api-testnet.onrender.com](https://wotta-api-testnet.onrender.com)
+(`SN_SEPOLIA`). Manifest: [`deployments/sepolia.json`](deployments/sepolia.json).
+
+| Available now | Notes |
+| ------------- | ----- |
+| OAuth + handle/email send | Same product surface as Mainnet |
+| Ready on Sepolia | Link wallet, inbox unlock, private claim |
+| Starknet private send | Direct-privacy escrow → encrypted note → Ready/STRK20 claim |
+| CCTP pay-in | Ethereum / Arbitrum / Base / Solana / Stellar → Sepolia escrows (Circle Iris sandbox) |
+| Denominations | 1 / 10 / 50 / 100 test USDC (no 0.1 on Sepolia) |
+| Indexer + relayer | On for escrow settle / claim indexing |
+
+**Not on Testnet:** Vesu Earn (Mainnet-only), Mainnet STRK20 live pool, and Mainnet
+0.1 / 1 USDC CCTP escrows. Sepolia uses its own test USDC, STRK20 pool, router, and
+escrows — see `deployments/sepolia.json`.
+
 ---
 
 ## Workspace
